@@ -14,7 +14,6 @@
 -export([terminate/2]).
 -export([code_change/3]).
 
--define(TIMEOUT, 5000).
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini">>).
 
