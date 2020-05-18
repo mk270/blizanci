@@ -35,16 +35,16 @@ init([]) -> {ok, undefined}.
 %% API.
 -spec start_link(pid(), any(), any(), [any()]) -> {ok, pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
-	proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
+    proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
 
 %% gen_server.
 
 -spec init(pid(), any(), any(), [any()]) -> {ok, pid()}.
 init(Ref, Socket, Transport, Opts) ->
-	Self_ref = make_ref(),
-	ok = proc_lib:init_ack({ok, self()}),
-	ok = ranch:accept_ack(Ref),
-	ok = Transport:setopts(Socket, [{active, once}]),
+    Self_ref = make_ref(),
+    ok = proc_lib:init_ack({ok, self()}),
+    ok = ranch:accept_ack(Ref),
+    ok = Transport:setopts(Socket, [{active, once}]),
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     State = #state{
                socket=Socket,
@@ -54,25 +54,25 @@ init(Ref, Socket, Transport, Opts) ->
                docroot=proplists:get_value(docroot, Opts),
                mimetypes=proplists:get_value(mimetypes, Opts),
                my_ref=Self_ref},
-	gen_server:enter_loop(?MODULE, [], State).
+    gen_server:enter_loop(?MODULE, [], State).
 
 
 handle_info({tcp_closed, _Socket}, State) ->
-	{stop, normal, State};
+    {stop, normal, State};
 
 handle_info({tcp_error, _, Reason}, State) ->
-	{stop, Reason, State};
+    {stop, Reason, State};
 
 handle_info(timeout, State) ->
-	{stop, normal, State};
+    {stop, normal, State};
 
 handle_info({notification, Msg}, State) ->
-	Transport = State#state.transport,
-	Transport:send(State#state.socket, Msg),
-	{noreply, State};
+    Transport = State#state.transport,
+    Transport:send(State#state.socket, Msg),
+    {noreply, State};
 
 handle_info(quit, State) ->
-	{stop, normal, State};
+    {stop, normal, State};
 
 handle_info({ssl, Socket, Payload}, State) ->
     {sslsocket, {gen_tcp, Port, tls_connection, Pid1}, Pids} = Socket,
@@ -102,20 +102,20 @@ handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
 handle_info(Msg, State) ->
-	io:format("got unrecognised msg: ~p~n", [Msg]),
-	{noreply, State}.
+    io:format("got unrecognised msg: ~p~n", [Msg]),
+    {noreply, State}.
 
 handle_call(_Request, _From, State) ->
-	{reply, ok, State}.
+    {reply, ok, State}.
 
 handle_cast(_Msg, State) ->
-	{noreply, State}.
+    {noreply, State}.
 
 terminate(_Reason, _State) ->
-	ok.
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
-	{ok, State}.
+    {ok, State}.
 
 %% Internal.
 
