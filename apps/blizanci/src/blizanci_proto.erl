@@ -138,28 +138,23 @@ handle_line(Cmd, Host, Docroot) ->
         {match, [_All, Proto, Host, Path]} ->
             handle_file(Path, Docroot);
         {match, [_All, Proto, _Host, _Path]} ->
-            format_response(59, <<"text/plain">>,
-                            <<"Host not recognised\r\n">>);
+            invalid_request(<<"Host not recognised">>);
         {match, [_All, _Proto, _Host, _Path]} ->
-            format_response(59, <<"text/plain">>,
-                            <<"Protocol not recognised\r\n">>);
+            invalid_request(<<"Protocol not recognised">>);
         _ ->
-            format_response(59, <<"text/plain">>,
-                            <<"Request not understood\r\n">>)
+            invalid_request(<<"Request not understood">>)
     end.
 
 handle_file(Path, Docroot) ->
     case string:split(Path, "..") of
         [_] -> serve_file(Path, Docroot);
-        [_, _] -> format_response(59, <<"text/plain">>,
-                                  <<"Illegal filename">>)
+        [_, _] -> invalid_request(<<"Illegal filename">>)
     end.
 
 serve_file(Path, Docroot) ->
     Full = filename:join(Docroot, Path),
     case filelib:is_regular(Full) of
-        false -> format_response(59, <<"text/plain">>,
-                                  <<"Illegal file">>);
+        false -> invalid_request(<<"Illegal file">>);
         true -> {file, format_headers(20, mime_type(Full)), Full}
     end.
 
@@ -173,3 +168,6 @@ format_headers(Code, MimeType) ->
 format_response(Code, MimeType, Data) ->
     Headers = format_headers(Code, MimeType),
     {ok, [Headers, Data]}.
+
+invalid_request(Msg) ->
+    format_response(59, <<"text/plain">>, Msg).
