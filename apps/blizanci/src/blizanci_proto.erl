@@ -75,8 +75,6 @@ handle_info(quit, State) ->
     {stop, normal, State};
 
 handle_info({ssl, Socket, Payload}, State) ->
-    {sslsocket, {gen_tcp, Port, tls_connection, Pid1}, Pids} = Socket,
-
     {Buffer, Response} = handle_request(Payload, State),
     NewState = State#state{buffer=Buffer},
     Transport = State#state.transport,
@@ -119,7 +117,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Internal.
 
-handle_request(Payload, State=#state{buffer=Buffer,
+handle_request(Payload, #state{buffer=Buffer,
                                      hostname=Hostname,
                                      docroot=Docroot}) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
@@ -143,10 +141,10 @@ handle_line(Cmd, Host, Docroot) ->
     case Match of
         {match, [_All, Proto, Host, Path]} ->
             handle_file(Path, Docroot);
-        {match, [_All, Proto, _Host, Path]} ->
+        {match, [_All, Proto, _Host, _Path]} ->
             format_response(59, <<"text/plain">>,
                             <<"Host not recognised\r\n">>);
-        {match, [_All, _Proto, _Host, Path]} ->
+        {match, [_All, _Proto, _Host, _Path]} ->
             format_response(59, <<"text/plain">>,
                             <<"Protocol not recognised\r\n">>);
         _ ->
@@ -169,7 +167,7 @@ serve_file(Path, Docroot) ->
         true -> {file, format_headers(20, mime_type(Full)), Full}
     end.
 
-mime_type(Path) ->
+mime_type(_Path) ->
     <<"text/gemini">>. % for the time being
 
 format_headers(Code, MimeType) ->
