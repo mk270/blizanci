@@ -57,12 +57,10 @@ init(Ref, Socket, Transport, Opts) ->
                docroot=proplists:get_value(docroot, Opts),
                mimetypes=proplists:get_value(mimetypes, Opts),
                my_ref=Self_ref},
-    lager:info("init() state: ~p", [State]),
 	gen_server:enter_loop(?MODULE, [], State).
 
 
 handle_info({tcp_closed, _Socket}, State) ->
-    lager:info("Socket hung up."),
 	{stop, normal, State};
 
 handle_info({tcp_error, _, Reason}, State) ->
@@ -98,13 +96,12 @@ handle_info({ssl, Socket, Payload}, State) ->
                  Transport:sendfile(Socket, Filename),
                  Transport:close(Socket),
                  ok;                 
-             _ -> lager:info("match fallthrough: ~p", [Response]),
+             _ -> lager:warning("match fallthrough: ~p", [Response]),
                   ok
          end,
     {noreply, NewState};
 
 handle_info({ssl_closed, _SocketInfo}, State) ->
-    lager:info("hangup"),
     {stop, normal, State};
 
 handle_info(Msg, State) ->
