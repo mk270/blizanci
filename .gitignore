@@ -17,3 +17,6 @@ _build
 *.iml
 rebar3.crashdump
 *~
+*.pem
+config/sys.config
+config/vm.args
