@@ -23,8 +23,7 @@
          buffer,
          hostname,
          docroot,
-         mimetypes,
-         my_ref}).
+         mimetypes}).
 
 %%% FIXME: This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
@@ -40,7 +39,6 @@ start_link(Ref, Socket, Transport, Opts) ->
 
 -spec init(pid(), any(), any(), [any()]) -> {ok, pid()}.
 init(Ref, Socket, Transport, Opts) ->
-    Self_ref = make_ref(),
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, once}]),
@@ -51,8 +49,7 @@ init(Ref, Socket, Transport, Opts) ->
                buffer=?EMPTY_BUF,
                hostname=Hostname,
                docroot=proplists:get_value(docroot, Opts),
-               mimetypes=proplists:get_value(mimetypes, Opts),
-               my_ref=Self_ref},
+               mimetypes=proplists:get_value(mimetypes, Opts)},
     gen_server:enter_loop(?MODULE, [], State).
 
 
