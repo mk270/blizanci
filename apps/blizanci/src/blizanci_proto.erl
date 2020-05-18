@@ -80,7 +80,7 @@ handle_info(quit, State) ->
 handle_info({ssl, Socket, Payload}, State) ->
     {sslsocket, {gen_tcp, Port, tls_connection, Pid1}, Pids} = Socket,
 
-    {Buffer, Response} = handle_request(Payload, State#state.buffer),
+    {Buffer, Response} = handle_request(Payload, State),
     NewState = State#state{buffer=Buffer},
     Transport = State#state.transport,
     ok = case Response of
@@ -122,29 +122,30 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Internal.
 	
-handle_request(Payload, Buffer) ->
+handle_request(Payload, State=#state{buffer=Buffer,
+                                     hostname=Hostname,
+                                     docroot=Docroot}) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
     case binary:split(AllInput, <<"\r\n">>) of
         [_] ->
             {AllInput, none};
         [Line, Rest] ->
-            R = handle_line(Line),
+            R = handle_line(Line, Hostname, Docroot),
             {Rest, R};
         _ ->
             lager:warning("Shouldn't get here"),
             {<<>>, hangup}
     end.
 
-handle_line(<<"quit">>) -> hangup;
-handle_line(Cmd) ->
+handle_line(<<"quit">>, _Hostname, _Docroot) -> hangup;
+handle_line(Cmd, Host, Docroot) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
     Proto = ?PROTO,
-    {ok, HostVal} = application:get_env(blizanci, hostname),
-    Host = erlang:list_to_binary(HostVal),
+
     case Match of
         {match, [_All, Proto, Host, Path]} ->
-            handle_file(Path);
+            handle_file(Path, Docroot);
         {match, [_All, Proto, _Host, Path]} ->
             format_response(59, <<"text/plain">>,
                             <<"Host not recognised\r\n">>);
@@ -156,15 +157,14 @@ handle_line(Cmd) ->
                             <<"Request not understood\r\n">>)
     end.
 
-handle_file(Path) ->
+handle_file(Path, Docroot) ->
     case string:split(Path, "..") of
-        [_] -> serve_file(Path);
+        [_] -> serve_file(Path, Docroot);
         [_, _] -> format_response(59, <<"text/plain">>,
                                   <<"Illegal filename">>)
     end.
 
-serve_file(Path) ->               
-    {ok, Docroot} = application:get_env(blizanci, docroot),
+serve_file(Path, Docroot) ->
     Full = filename:join(Docroot, Path),
     case filelib:is_regular(Full) of
         false -> format_response(59, <<"text/plain">>,
