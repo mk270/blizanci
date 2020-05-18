@@ -180,5 +180,5 @@ format_headers(Code, MimeType) ->
     [Status, <<" ">>, MimeType, <<"\r\n">>].
 
 format_response(Code, MimeType, Data) ->
-    Status = list_to_binary(integer_to_list(Code)),
-    {ok, [Status, <<" ">>, MimeType, <<"\r\n">>, Data]}.
+    Headers = format_headers(Code, MimeType),
+    {ok, [Headers, Data]}.
