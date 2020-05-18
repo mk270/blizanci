@@ -21,7 +21,14 @@
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini">>).
 
--record(state, {socket, transport, buffer, lobby_pid, my_ref}).
+-record(state,
+        {socket,
+         transport,
+         buffer,
+         hostname,
+         docroot,
+         mimetypes,
+         my_ref}).
 
 %%% FIXME: This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
@@ -36,14 +43,22 @@ start_link(Ref, Socket, Transport, Opts) ->
 %% gen_server.
 
 -spec init(pid(), any(), any(), [any()]) -> {ok, pid()}.
-init(Ref, Socket, Transport, _Opts = []) ->
+init(Ref, Socket, Transport, Opts) ->
 	Self_ref = make_ref(),
 	ok = proc_lib:init_ack({ok, self()}),
 	ok = ranch:accept_ack(Ref),
 	ok = Transport:setopts(Socket, [{active, once}]),
-	gen_server:enter_loop(?MODULE, [],
-		#state{socket=Socket, transport=Transport, buffer=?EMPTY_BUF,
-			  my_ref=Self_ref}).
+    Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
+    State = #state{
+               socket=Socket,
+               transport=Transport,
+               buffer=?EMPTY_BUF,
+               hostname=Hostname,
+               docroot=proplists:get_value(docroot, Opts),
+               mimetypes=proplists:get_value(mimetypes, Opts),
+               my_ref=Self_ref},
+    lager:info("init() state: ~p", [State]),
+	gen_server:enter_loop(?MODULE, [], State).
 
 
 handle_info({tcp_closed, _Socket}, State) ->
