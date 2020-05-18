@@ -1,3 +1,10 @@
+%%%
+%%% Not yet implemented:
+%%%
+%%%   * MIME type inference
+%%%   * correct handling of abbreviated requests
+%%%
+
 -module(blizanci_proto).
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
