@@ -15,7 +15,6 @@ start(_StartType, _StartArgs) ->
 
     {ok, Cert} = application:get_env(certfile),
     {ok, Key} = application:get_env(keyfile),
-    lager:info("~p ~p", [Cert, Key]),
     SSL_Opts =
         [{port, 1965},
          {certfile, Cert},
