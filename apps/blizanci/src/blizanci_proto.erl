@@ -1,6 +1,3 @@
-
-%% Feel free to use, reuse and abuse the code in this file.
-
 -module(blizanci_proto).
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
@@ -95,7 +92,7 @@ handle_info({ssl, Socket, Payload}, State) ->
                  Transport:send(Socket, Header),
                  Transport:sendfile(Socket, Filename),
                  Transport:close(Socket),
-                 ok;                 
+                 ok;
              _ -> lager:warning("match fallthrough: ~p", [Response]),
                   ok
          end,
@@ -121,7 +118,7 @@ code_change(_OldVsn, State, _Extra) ->
 	{ok, State}.
 
 %% Internal.
-	
+
 handle_request(Payload, State=#state{buffer=Buffer,
                                      hostname=Hostname,
                                      docroot=Docroot}) ->
