@@ -158,7 +158,7 @@ serve_file(Path, Docroot) ->
             Headers = format_headers(20, mime_type(Full)),
             {file, Headers, Full};
         false ->
-            format_response(51, <<"text/plain">>, <<"File not found">>);
+            format_response(51, <<"text/plain">>, <<"File not found">>)
     end.
 
 mime_type(_Path) ->
