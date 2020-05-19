@@ -122,8 +122,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal.
 
 handle_request(Payload, #state{buffer=Buffer,
-                                     hostname=Hostname,
-                                     docroot=Docroot}) ->
+                               hostname=Hostname,
+                               docroot=Docroot}) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
     case binary:split(AllInput, <<"\r\n">>) of
         [_] ->
