@@ -28,9 +28,7 @@ start(_StartType, _StartArgs) ->
          {mimetypes, Mimes}],
     {ok, _} = ranch:start_listener(blizanci_service_clear,
                                    ranch_ssl, SSL_Opts,
-                                   blizanci_proto, Proto_Opts
-                                  ),
-    blizanci_sup:start_link().
+                                   blizanci_proto, Proto_Opts).
 
 stop(_State) ->
     ok.
