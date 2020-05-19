@@ -69,14 +69,6 @@ handle_info({tcp_error, _, Reason}, State) ->
 handle_info(timeout, State) ->
     {stop, normal, State};
 
-handle_info({notification, Msg}, State) ->
-    Transport = State#state.transport,
-    Transport:send(State#state.socket, Msg),
-    {noreply, State};
-
-handle_info(quit, State) ->
-    {stop, normal, State};
-
 handle_info({ssl, Socket, Payload}, State) ->
     {Buffer, Response} = handle_request(Payload, State),
     NewState = State#state{buffer=Buffer},
@@ -105,7 +97,7 @@ handle_info({ssl_closed, _SocketInfo}, State) ->
 
 handle_info(Msg, State) ->
     io:format("got unrecognised msg: ~p~n", [Msg]),
-    {noreply, State}.
+    {stop, normal, State}.
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
