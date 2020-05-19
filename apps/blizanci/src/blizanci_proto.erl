@@ -3,7 +3,6 @@
 %%%
 %%%   * MIME type inference
 %%%   * correct handling of abbreviated requests
-%%%   * file not found has wrong error code
 %%%
 
 -module(blizanci_proto).
@@ -163,8 +162,11 @@ handle_file(Path, Docroot) ->
 serve_file(Path, Docroot) ->
     Full = filename:join(Docroot, Path),
     case filelib:is_regular(Full) of
-        false -> invalid_request(<<"Illegal file">>);
-        true -> {file, format_headers(20, mime_type(Full)), Full}
+        true ->
+            Headers = format_headers(20, mime_type(Full)),
+            {file, Headers, Full};
+        false ->
+            format_response(51, <<"text/plain">>, <<"File not found">>);
     end.
 
 mime_type(_Path) ->
