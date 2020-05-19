@@ -81,6 +81,7 @@ handle_info({ssl, Socket, Payload}, State) ->
     {Buffer, Response} = handle_request(Payload, State),
     NewState = State#state{buffer=Buffer},
     Transport = State#state.transport,
+    ok = Transport:setopts(Socket, [{active, once}]),
     ok = case Response of
              none -> ok;
              hangup ->
