@@ -1,5 +1,5 @@
 {application, blizanci,
- [{description, "An OTP application"},
+ [{description, "A Gemini protocol server"},
   {vsn, "0.1.0"},
   {registered, []},
   {mod, {blizanci_app, []}},
