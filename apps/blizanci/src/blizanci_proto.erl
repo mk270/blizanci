@@ -3,6 +3,7 @@
 %%%
 %%%   * MIME type inference
 %%%   * correct handling of abbreviated requests
+%%%   * file not found has wrong error code
 %%%
 
 -module(blizanci_proto).
