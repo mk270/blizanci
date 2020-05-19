@@ -136,7 +136,6 @@ handle_request(Payload, #state{buffer=Buffer,
             {<<>>, hangup}
     end.
 
-handle_line(<<"quit">>, _Hostname, _Docroot) -> hangup;
 handle_line(Cmd, Host, Docroot) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
