@@ -77,7 +77,8 @@ handle_info({ssl, Socket, Payload}, State) ->
     ok = case Response of
              none -> ok;
              hangup ->
-                 Transport:close(Socket);
+                 Transport:close(Socket),
+                 ok;
              {ok, Msg} ->
                  Transport:send(Socket, Msg),
                  Transport:close(Socket),
