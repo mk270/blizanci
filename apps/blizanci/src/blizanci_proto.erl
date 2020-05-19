@@ -29,8 +29,7 @@
          transport,
          buffer,
          hostname,
-         docroot,
-         mimetypes}).
+         docroot}).
 
 %%% FIXME: This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
@@ -55,8 +54,7 @@ init(Ref, Socket, Transport, Opts) ->
                transport=Transport,
                buffer=?EMPTY_BUF,
                hostname=Hostname,
-               docroot=proplists:get_value(docroot, Opts),
-               mimetypes=proplists:get_value(mimetypes, Opts)},
+               docroot=proplists:get_value(docroot, Opts)},
     gen_server:enter_loop(?MODULE, [], State).
 
 
@@ -161,8 +159,15 @@ serve_file(Path, Docroot) ->
             format_response(51, <<"text/plain">>, <<"File not found">>)
     end.
 
-mime_type(_Path) ->
-    <<"text/gemini">>. % for the time being
+mime_type(Path) ->
+    case binary_to_list(filename:extension(Path)) of
+        [] -> <<"text/gemini">>;
+        [_Dot|Rest] -> Key = erlang:list_to_binary(Rest),
+                      case blizanci_mimetypes:lookup(Key) of
+                          notfound -> <<"application/octet-stream">>;
+                          {ok, Result} -> Result
+                      end
+    end.                             
 
 format_headers(Code, MimeType) ->
     Status = list_to_binary(integer_to_list(Code)),

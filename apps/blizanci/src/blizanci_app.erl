@@ -12,7 +12,6 @@
 -export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
-    Mimes = blizanci_mimetypes:types(),
     ok = application:ensure_started(ranch),
 
     {ok, Cert} = application:get_env(certfile),
@@ -27,10 +26,13 @@ start(_StartType, _StartArgs) ->
     Proto_Opts =
         [{hostname, Hostname},
          {docroot, Docroot},
-         {mimetypes, Mimes}],
-    {ok, _} = ranch:start_listener(blizanci_service_clear,
-                                   ranch_ssl, SSL_Opts,
-                                   blizanci_proto, Proto_Opts).
+         {mimetypes, []}],
+    {ok, Listener} = ranch:start_listener(blizanci_service_clear,
+                                          ranch_ssl, SSL_Opts,
+                                          blizanci_proto, Proto_Opts),
+    {ok, Pid} = blizanci_sup:start_link(),
+    {ok, Pid, Listener}.
 
-stop(_State) ->
+stop(State) ->
+    ranch:stop_listener(State),
     ok.
