@@ -19,3 +19,7 @@ Run
 
     $ _build/default/rel/blizanci/bin/blizanci start
 
+Trivia
+------
+
+"blizanci" / "близанци" is Serbo-Croatian for "twins" (i.e., Gemini).
