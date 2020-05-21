@@ -30,7 +30,9 @@
          buffer :: binary(),
          hostname :: binary(),
          docroot :: string()}).
+
 -type state() :: #state{}.
+-type gemini_response() :: {'file', iolist(), binary()} | {'ok', iolist()}.
 
 %%% FIXME: This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
@@ -127,8 +129,7 @@ handle_request(Payload, #state{buffer=Buffer,
             {<<>>, hangup}
     end.
 
--spec handle_line(binary(), binary(), string()) ->
-                         {'file', iolist(), binary()} | {'ok', iolist()}.
+-spec handle_line(binary(), binary(), string()) -> gemini_response().
 handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
@@ -145,16 +146,14 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
             invalid_request(<<"Request not understood">>)
     end.
 
--spec handle_file(binary(), string()) ->
-                         {'file', iolist(), binary()} | {'ok', iolist()}.
+-spec handle_file(binary(), string()) -> gemini_response().
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
     case string:split(Path, "..") of
         [_] -> serve_file(Path, Docroot);
         [_, _] -> invalid_request(<<"Illegal filename">>)
     end.
 
--spec serve_file(binary(), string()) ->
-                        {'file', iolist(), binary()} | {'ok', iolist()}.
+-spec serve_file(binary(), string()) -> gemini_response().
 serve_file(Path, Docroot) ->
     Full = filename:join(Docroot, Path),
     case filelib:is_regular(Full) of
