@@ -6,6 +6,7 @@
 %% the terms of the Apache Software Licence v2.0.
 
 -module(blizanci_proto).
+-include_lib("eunit/include/eunit.hrl").
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
 
@@ -188,3 +189,9 @@ format_response(Code, MimeType, Data) ->
 -spec invalid_request(binary()) -> {ok, iolist()}.
 invalid_request(Msg) when is_binary(Msg) ->
     format_response(59, <<"text/plain">>, Msg).
+
+invalid_request_test() ->
+    Result = invalid_request(<<"Garbled request">>),
+    {ok, Data} = Result,
+    ?assertEqual(<<"59 text/plain\r\nGarbled request">>,
+                 iolist_to_binary(Data)).
