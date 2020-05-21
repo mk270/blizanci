@@ -25,11 +25,12 @@
 -define(PROTO, <<"gemini">>).
 
 -record(state,
-        {socket,
-         transport,
-         buffer,
-         hostname,
-         docroot}).
+        {socket :: inet:socket(),
+         transport :: atom(),
+         buffer :: binary(),
+         hostname :: binary(),
+         docroot :: string()}).
+-type state() :: #state{}.
 
 %%% FIXME: This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
@@ -85,9 +86,7 @@ handle_info({ssl, Socket, Payload}, State) ->
                  Transport:send(Socket, Header),
                  Transport:sendfile(Socket, Filename),
                  Transport:close(Socket),
-                 ok;
-             _ -> lager:warning("match fallthrough: ~p", [Response]),
-                  ok
+                 ok
          end,
     {noreply, NewState};
 
@@ -95,7 +94,7 @@ handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
 handle_info(Msg, State) ->
-    io:format("got unrecognised msg: ~p~n", [Msg]),
+    lager:warning("got unrecognised msg: ~p~n", [Msg]),
     {stop, normal, State}.
 
 handle_call(_Request, _From, State) ->
@@ -112,6 +111,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Internal.
 
+-spec handle_request(binary(), state()) -> {binary(), any()}.
 handle_request(Payload, #state{buffer=Buffer,
                                hostname=Hostname,
                                docroot=Docroot}) ->
@@ -127,7 +127,9 @@ handle_request(Payload, #state{buffer=Buffer,
             {<<>>, hangup}
     end.
 
-handle_line(Cmd, Host, Docroot) ->
+-spec handle_line(binary(), binary(), string()) ->
+                         {'file', iolist(), binary()} | {'ok', iolist()}.
+handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
     Proto = ?PROTO,
@@ -143,12 +145,16 @@ handle_line(Cmd, Host, Docroot) ->
             invalid_request(<<"Request not understood">>)
     end.
 
-handle_file(Path, Docroot) ->
+-spec handle_file(binary(), string()) ->
+                         {'file', iolist(), binary()} | {'ok', iolist()}.
+handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
     case string:split(Path, "..") of
         [_] -> serve_file(Path, Docroot);
         [_, _] -> invalid_request(<<"Illegal filename">>)
     end.
 
+-spec serve_file(binary(), string()) ->
+                        {'file', iolist(), binary()} | {'ok', iolist()}.
 serve_file(Path, Docroot) ->
     Full = filename:join(Docroot, Path),
     case filelib:is_regular(Full) of
@@ -159,7 +165,8 @@ serve_file(Path, Docroot) ->
             format_response(51, <<"text/plain">>, <<"File not found">>)
     end.
 
-mime_type(Path) ->
+-spec mime_type(binary()) -> binary().
+mime_type(Path) when is_binary(Path) ->
     case binary_to_list(filename:extension(Path)) of
         [] -> <<"text/gemini">>;
         [_Dot|Rest] -> Key = erlang:list_to_binary(Rest),
@@ -169,13 +176,16 @@ mime_type(Path) ->
                       end
     end.                             
 
-format_headers(Code, MimeType) ->
+-spec format_headers(integer(), binary()) -> iolist().
+format_headers(Code, MimeType) when is_integer(Code), is_binary(MimeType) ->
     Status = list_to_binary(integer_to_list(Code)),
     [Status, <<" ">>, MimeType, <<"\r\n">>].
 
+-spec format_response(integer(), binary(), binary()) -> {ok, iolist()}.
 format_response(Code, MimeType, Data) ->
     Headers = format_headers(Code, MimeType),
     {ok, [Headers, Data]}.
 
-invalid_request(Msg) ->
+-spec invalid_request(binary()) -> {ok, iolist()}.
+invalid_request(Msg) when is_binary(Msg) ->
     format_response(59, <<"text/plain">>, Msg).

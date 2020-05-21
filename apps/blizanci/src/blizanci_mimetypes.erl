@@ -6,6 +6,7 @@
 %% the terms of the Apache Software Licence v2.0.
 
 -module(blizanci_mimetypes).
+-include_lib("eunit/include/eunit.hrl").
 -behaviour(gen_server).
 
 %% API
@@ -25,7 +26,7 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-lookup(MimeType) ->
+lookup(MimeType) when is_binary(MimeType) ->
     gen_server:call(?SERVER, {lookup, MimeType}).
 
 -spec start_link() -> {ok, Pid :: pid()} |
@@ -82,7 +83,7 @@ handle_cast(_Request, State) ->
 handle_info(load, State) ->
     ok = load_data(),
     {noreply, State};
-handle_info(Info, State) ->
+handle_info(_Info, State) ->
     {noreply, State}.
 
 -spec terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
@@ -109,28 +110,50 @@ format_status(_Opt, Status) ->
 load_data() ->
     {ok, ConfigFile} = application:get_env(mime_types_path),
     {ok, Data} = file:read_file(ConfigFile),
+    ok = load_data(Data).
+
+load_data(Data) ->
     Lines = string:split(Data, <<"\n">>, all),
     ets:new(?MODULE, [bag, named_table]),
     Stripped = [ strip_comment(S) || S <- Lines ],
-    [ ok = parse_line(S2) || S2 <- Stripped ],
+    Mappings = [ line_to_mapping(S2) || S2 <- Stripped ],
+    [ ok = store_mapping(M) || M <- Mappings ],
     {ok, Additional} = application:get_env(mime_types),
-    [ store_mapping([V, K]) || {K, V} <- Additional],
+    [ ok = store_mapping([V, K]) || {K, V} <- Additional],
     ok.
 
-strip_comment(S) ->
+strip_comment_test_data() ->
+    [
+     {<<>>, <<"# a comment line">>},
+     {<<"hello">>, <<"hello#there">>},
+     {<<"text/html  html htm">>, <<"text/html  html htm#optional">>}
+    ].
+
+strip_comment(S) when is_binary(S) ->
     Result = string:split(S, <<"#">>, leading),
     [Stripped|_] = Result,
     Stripped.
 
-parse_line(<<>>) -> ok;
+line_to_mapping_test_data() ->
+    [
+     {[], <<"">>},
+     {[<<"text/html">>, <<"html">>, <<"htm">>], <<"text/html html htm">>},
+     {[<<"application/batch-SMTP">>], <<"application/batch-SMTP     ">>}
+    ].
 
-parse_line(Line) ->
-    Words = string:lexemes(Line, " " ++ [$\t]),
-    store_mapping(Words),
-    ok.
+line_to_mapping(Line) when is_binary(Line) ->
+    string:lexemes(Line, " " ++ [$\t]).
 
+store_mapping([]) -> ok; %ignored
 store_mapping([_Key]) -> ok; %ignored
-store_mapping([Key|Values]) -> 
+store_mapping([Key|Values]) ->
     [ ets:insert(?MODULE, [{V, Key}]) || V <- Values],
     ok.
-    
+
+strip_comment_test_() ->
+    [ ?_assertEqual(Expected, strip_comment(Observed)) ||
+        {Expected, Observed} <- strip_comment_test_data() ].
+
+line_to_mapping_test_() ->
+    [ ?_assertEqual(Expected, line_to_mapping(Observed)) ||
+        {Expected, Observed} <- line_to_mapping_test_data() ].
