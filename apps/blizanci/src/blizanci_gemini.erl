@@ -138,25 +138,31 @@ handle_request(Payload, #state{buffer=Buffer,
 -spec handle_line(binary(), binary(), string()) -> gemini_response().
 handle_line(Cmd, _Host, _Docroot) when is_binary(Cmd),
                                      size(Cmd) > 1024 ->
-    format_response(59, <<"text/plain">>, "Request too long");
+    format_response(59, <<"text/plain">>, <<"Request too long">>);
 handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
-    Proto = ?PROTO,
 
     lager:info("req: ~p", [Match]),
     case Match of
-        {match, [_All, Proto, Host, Path]} ->
+        {match, Matches} -> handle_url(Matches, Docroot);
+        nomatch -> invalid_request(<<"Request not understood">>)
+    end.
+
+handle_url(Matches, Docroot) ->
+    Proto = ?PROTO,
+    case Matches of
+        [_All, Proto, Host, Path] ->
             handle_file(Path, Docroot);
-        {match, [_All, <<"gopher">>, _Host, _Path]} ->
-            format_response(53, <<"text/plain">>, "Proxy request refused");
-        {match, [_All, <<"https">>, _Host, _Path]} ->
-            format_response(53, <<"text/plain">>, "Proxy request refused");
-        {match, [_All, <<"http">>, _Host, _Path]} ->
-            format_response(53, <<"text/plain">>, "Proxy request refused");
-        {match, [_All, Proto, _Host, _Path]} ->
-            format_response(53, <<"text/plain">>, "Host not recognised");
-        {match, [_All, _Proto, _Host, _Path]} ->
+        [_All, <<"gopher">>, _Host, _Path] ->
+            format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
+        [_All, <<"https">>, _Host, _Path] ->
+            format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
+        [_All, <<"http">>, _Host, _Path] ->
+            format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
+        [_All, Proto, _Host, _Path] ->
+            format_response(53, <<"text/plain">>, <<"Host not recognised">>);
+        [_All, _Proto, _Host, _Path] ->
             invalid_request(<<"Protocol not recognised">>);
         _ ->
             invalid_request(<<"Request not understood">>)
