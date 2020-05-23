@@ -150,23 +150,20 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
     end.
 
 -spec handle_url([any()], binary(), string()) -> gemini_response().
-handle_url(Matches, Host, Docroot) ->
-    case Matches of
-        [?PROTO, Host, Path] ->
-            handle_file(Path, Docroot);
-        [<<"gopher">>, _Host, _Path] ->
-            format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
-        [<<"https">>, _Host, _Path] ->
-            format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
-        [<<"http">>, _Host, _Path] ->
-            format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
-        [?PROTO, _Host, _Path] ->
-            format_response(53, <<"text/plain">>, <<"Host not recognised">>);
-        [_Proto, _Host, _Path] ->
-            invalid_request(<<"Protocol not recognised">>);
-        _ ->
-            invalid_request(<<"Request not understood">>)
-    end.
+handle_url([?PROTO, Host, Path], Host, Docroot) ->
+    handle_file(Path, Docroot);
+handle_url([<<"gopher">>, _Host, _Path], _Host, _Docroot) ->
+    format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
+handle_url([<<"https">>, _Host, _Path], _Host, _Docroot) ->
+    format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
+handle_url([<<"http">>, _Host, _Path], _Host, _Docroot) ->
+    format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
+handle_url([?PROTO, _Host, _Path], _Host, _Docroot) ->
+    format_response(53, <<"text/plain">>, <<"Host not recognised">>);
+handle_url([_Proto, _Host, _Path], _Host, _Docroot) ->
+    invalid_request(<<"Protocol not recognised">>);
+handle_url(_, _Host, _Docroot) ->
+    invalid_request(<<"Request not understood">>).
 
 -spec handle_file(binary(), string()) -> gemini_response().
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
