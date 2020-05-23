@@ -97,7 +97,6 @@ handle_info({ssl, Socket, Payload}, State) ->
                            Transport:close(Socket),
                            ok;
                        {error, Code, Explanation} ->
-                           lager:info("got error [~p]", [Code]),
                            {ok, Msg} = format_response(Code, <<"text/plain">>,
                                                        Explanation),
                            Transport:send(Socket, Msg),
