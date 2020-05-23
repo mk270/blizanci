@@ -192,16 +192,19 @@ handle_url([?PROTO, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
         _                 -> {error, 53, <<"Host not recognised">>}
     end;
 
-handle_url([<<"gopher://">>, _Host, _Path], _Host, _Port, _Docroot) ->
+handle_url([<<"gopher://">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
+->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([<<"https://">>, _Host, _Path], _Host, _Port, _Docroot) ->
+handle_url([<<"https://">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
+->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([<<"http://">>, _Host, _Path], _Host, _Port, _Docroot) ->
+handle_url([<<"http://">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
+->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([_Proto, _Host, _Path], _Host, _Port, _Docroot) ->
+handle_url([_Proto, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot) ->
     invalid_request(<<"Protocol not recognised">>);
 
 handle_url(_, _Host, _Port, _Docroot) ->
