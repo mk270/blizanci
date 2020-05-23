@@ -152,7 +152,6 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/:]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
 
-    lager:info("req: ~p", [Match]),
     case Match of
         {match, [_All|Matches]} -> handle_url(Matches, Host, Docroot);
         nomatch -> invalid_request(<<"Request not understood">>)
