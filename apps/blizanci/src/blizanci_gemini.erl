@@ -24,19 +24,18 @@
 -export([handle_line/4]). % tmp
 
 -define(EMPTY_BUF, <<>>).
--define(PROTO, <<"gemini">>).
+-define(PROTO, <<"gemini://">>).
 
 -record(state,
         {socket :: inet:socket(),
          transport :: atom(),
          buffer :: binary(),
          hostname :: binary(),
-         port :: integer(),
+         port :: binary(),
          docroot :: string()}).
 
 -type state() :: #state{}.
 -type gemini_response() :: {'file', binary(), binary()}
-                         | {'ok', iolist()}
                          | {'error', integer(), binary()}.
 
 %%% FIXME: This function is never called. We only define it so that
@@ -57,12 +56,13 @@ init(Ref, Socket, Transport, Opts) ->
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, once}]),
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
+    Port = integer_to_binary(proplists:get_value(port, Opts)),
     State = #state{
                socket=Socket,
                transport=Transport,
                buffer=?EMPTY_BUF,
                hostname=Hostname,
-               port=proplists:get_value(port, Opts),
+               port=Port,
                docroot=proplists:get_value(docroot, Opts)},
     gen_server:enter_loop(?MODULE, [], State).
 
@@ -87,10 +87,6 @@ handle_info({ssl, Socket, Payload}, State) ->
         ok -> ok = case Response of
                        none -> ok;
                        hangup ->
-                           Transport:close(Socket),
-                           ok;
-                       {ok, Msg} ->
-                           Transport:send(Socket, Msg),
                            Transport:close(Socket),
                            ok;
                        {file, MimeType, Filename} ->
@@ -147,35 +143,48 @@ handle_request(Payload, #state{buffer=Buffer,
     end.
 
 
--spec handle_line(binary(), binary(), integer(), string()) -> gemini_response().
+-spec handle_line(binary(), binary(), binary(), string())
+                 -> gemini_response().
 handle_line(Cmd, _Host, _Port, _Docroot) when is_binary(Cmd),
                                               size(Cmd) > 1024 ->
     {error, 59, <<"Request too long">>};
 
 handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
-    {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/:]*\)/\(.*\)$"),
+    {ok, Re} = re:compile("^"
+                          ++ "\([a-z0-9]+://\)?"
+                          ++ "\([^/:]+\)"
+                          ++ "\(:[0-9]+\)?"
+                          ++ "/\(.*\)?"
+                          ++ "$"
+                         ),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
 
     case Match of
-        {match, [_All|Matches]} -> handle_url(Matches, Host, Port, Docroot);
-        nomatch -> invalid_request(<<"Request not understood">>)
+        {match, [_All|Matches]} -> 
+            lager:info("Matches: ~p", [Matches]),
+            handle_url(Matches, Host, Port, Docroot);
+        nomatch -> handle_line(Cmd, Host, Port, Docroot)
     end.
 
 
 -spec handle_url([any()], binary(), integer(), string()) -> gemini_response().
-handle_url([?PROTO, ReqHost, Path], Host, _Port, Docroot) ->
-    case ReqHost of
-        Host -> handle_file(Path, Docroot);
+handle_url([?PROTO, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
+    MatchPort = <<":", Port/binary>>,
+    case {ReqHost, ReqPort} of
+        {Host, <<>>} -> handle_file(Path, Docroot);
+        {Host, MatchPort} -> handle_file(Path, Docroot);
+        {_, MatchPort} -> {error, 53, <<"Host not recognised">>};
+        {Host, _} -> {error, 53, <<"Port not recognised">>};
         _ -> {error, 53, <<"Host not recognised">>}
     end;
 
-handle_url([<<"gopher">>, _Host, _Path], _Host, _Port, _Docroot) ->
+handle_url([<<"gopher://">>, _Host, _Path], _Host, _Port, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([<<"https">>, _Host, _Path], _Host, _Port, _Docroot) ->
+handle_url([<<"https://">>, _Host, _Path], _Host, _Port, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([<<"http">>, _Host, _Path], _Host, _Port, _Docroot) ->
+handle_url([<<"http://">>, _Host, _Path], _Host, _Port, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
 
 handle_url([_Proto, _Host, _Path], _Host, _Port, _Docroot) ->
@@ -240,12 +249,15 @@ format_response_test() ->
 handle_line_test_data() ->
     [
      {{file, <<"text/gemini">>, <<"/bin/which">>},
-      <<"gemini://this.host.dev/which">>}
+      <<"gemini://this.host.dev/which">>},
+
+     {{file, <<"text/gemini">>, <<"/bin/which">>},
+      <<"gemini://this.host.dev:1965/which">>}
     ].
 
 handle_line_test_() ->
     [ ?_assertEqual(Expected, handle_line(TestInput,
                                           <<"this.host.dev">>,
-                                          1965,
+                                          <<"1965">>,
                                           "/bin")) ||
         {Expected, TestInput} <- handle_line_test_data() ].
