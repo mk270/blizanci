@@ -171,11 +171,11 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
 handle_url([?PROTO, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
     MatchPort = <<":", Port/binary>>,
     case {ReqHost, ReqPort} of
-        {Host, <<>>} -> handle_file(Path, Docroot);
+        {Host, <<>>}      -> handle_file(Path, Docroot);
         {Host, MatchPort} -> handle_file(Path, Docroot);
-        {_, MatchPort} -> {error, 53, <<"Host not recognised">>};
-        {Host, _} -> {error, 53, <<"Port not recognised">>};
-        _ -> {error, 53, <<"Host not recognised">>}
+        {_,    MatchPort} -> {error, 53, <<"Host not recognised">>};
+        {Host, _}         -> {error, 53, <<"Port not recognised">>};
+        _                 -> {error, 53, <<"Host not recognised">>}
     end;
 
 handle_url([<<"gopher://">>, _Host, _Path], _Host, _Port, _Docroot) ->
