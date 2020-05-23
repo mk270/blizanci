@@ -145,24 +145,24 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
 
     lager:info("req: ~p", [Match]),
     case Match of
-        {match, Matches} -> handle_url(Matches, Host, Docroot);
+        {match, [_All|Matches]} -> handle_url(Matches, Host, Docroot);
         nomatch -> invalid_request(<<"Request not understood">>)
     end.
 
 -spec handle_url([any()], binary(), string()) -> gemini_response().
 handle_url(Matches, Host, Docroot) ->
     case Matches of
-        [_All, ?PROTO, Host, Path] ->
+        [?PROTO, Host, Path] ->
             handle_file(Path, Docroot);
-        [_All, <<"gopher">>, _Host, _Path] ->
+        [<<"gopher">>, _Host, _Path] ->
             format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
-        [_All, <<"https">>, _Host, _Path] ->
+        [<<"https">>, _Host, _Path] ->
             format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
-        [_All, <<"http">>, _Host, _Path] ->
+        [<<"http">>, _Host, _Path] ->
             format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
-        [_All, ?PROTO, _Host, _Path] ->
+        [?PROTO, _Host, _Path] ->
             format_response(53, <<"text/plain">>, <<"Host not recognised">>);
-        [_All, _Proto, _Host, _Path] ->
+        [_Proto, _Host, _Path] ->
             invalid_request(<<"Protocol not recognised">>);
         _ ->
             invalid_request(<<"Request not understood">>)
