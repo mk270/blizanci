@@ -136,6 +136,9 @@ handle_request(Payload, #state{buffer=Buffer,
     end.
 
 -spec handle_line(binary(), binary(), string()) -> gemini_response().
+handle_line(Cmd, _Host, _Docroot) when is_binary(Cmd),
+                                     size(Cmd) > 1024 ->
+    format_response(59, <<"text/plain">>, "Request too long");
 handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
