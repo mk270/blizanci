@@ -160,8 +160,11 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
 
 
 -spec handle_url([any()], binary(), string()) -> gemini_response().
-handle_url([?PROTO, Host, Path], Host, Docroot) ->
-    handle_file(Path, Docroot);
+handle_url([?PROTO, ReqHost, Path], Host, Docroot) ->
+    case ReqHost of
+        Host -> handle_file(Path, Docroot);
+        _ -> {error, 53, <<"Host not recognised">>}
+    end;
 
 handle_url([<<"gopher">>, _Host, _Path], _Host, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
@@ -171,9 +174,6 @@ handle_url([<<"https">>, _Host, _Path], _Host, _Docroot) ->
 
 handle_url([<<"http">>, _Host, _Path], _Host, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
-
-handle_url([?PROTO, _Host, _Path], _Host, _Docroot) ->
-    {error, 53, <<"Host not recognised">>};
 
 handle_url([_Proto, _Host, _Path], _Host, _Docroot) ->
     invalid_request(<<"Protocol not recognised">>);
