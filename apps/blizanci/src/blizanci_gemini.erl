@@ -151,9 +151,8 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
 
 -spec handle_url([any()], binary(), string()) -> gemini_response().
 handle_url(Matches, Host, Docroot) ->
-    Proto = ?PROTO,
     case Matches of
-        [_All, Proto, Host, Path] ->
+        [_All, ?PROTO, Host, Path] ->
             handle_file(Path, Docroot);
         [_All, <<"gopher">>, _Host, _Path] ->
             format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
@@ -161,7 +160,7 @@ handle_url(Matches, Host, Docroot) ->
             format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
         [_All, <<"http">>, _Host, _Path] ->
             format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
-        [_All, Proto, _Host, _Path] ->
+        [_All, ?PROTO, _Host, _Path] ->
             format_response(53, <<"text/plain">>, <<"Host not recognised">>);
         [_All, _Proto, _Host, _Path] ->
             invalid_request(<<"Protocol not recognised">>);
