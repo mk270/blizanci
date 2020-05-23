@@ -21,6 +21,7 @@
 -export([handle_info/2]).
 -export([terminate/2]).
 -export([code_change/3]).
+-export([handle_line/3]). % tmp
 
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini">>).
