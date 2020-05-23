@@ -75,23 +75,28 @@ handle_info({ssl, Socket, Payload}, State) ->
     {Buffer, Response} = handle_request(Payload, State),
     NewState = State#state{buffer=Buffer},
     Transport = State#state.transport,
-    ok = Transport:setopts(Socket, [{active, once}]),
-    ok = case Response of
-             none -> ok;
-             hangup ->
-                 Transport:close(Socket),
-                 ok;
-             {ok, Msg} ->
-                 Transport:send(Socket, Msg),
-                 Transport:close(Socket),
-                 ok;
-             {file, Header, Filename} ->
-                 Transport:send(Socket, Header),
-                 Transport:sendfile(Socket, Filename),
-                 Transport:close(Socket),
-                 ok
-         end,
-    {noreply, NewState};
+
+    case Transport:setopts(Socket, [{active, once}]) of
+        {error, closed} ->
+            lager:info("socket closed somewhat unexpectedly"),
+            {stop, normal, State};
+        ok -> ok = case Response of
+                       none -> ok;
+                       hangup ->
+                           Transport:close(Socket),
+                           ok;
+                       {ok, Msg} ->
+                           Transport:send(Socket, Msg),
+                           Transport:close(Socket),
+                           ok;
+                       {file, Header, Filename} ->
+                           Transport:send(Socket, Header),
+                           Transport:sendfile(Socket, Filename),
+                           Transport:close(Socket),
+                           ok
+                   end,
+              {noreply, NewState}
+    end;
 
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
