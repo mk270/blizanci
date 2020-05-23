@@ -231,3 +231,12 @@ format_response_test() ->
     {ok, Data} = Result,
     ?assertEqual(<<"59 text/plain\r\nGarbled request">>,
                  iolist_to_binary(Data)).
+
+handle_line_test_data() ->
+    [].
+
+handle_line_test() ->
+    Host = <<"this.host.dev">>,
+    Docroot = "/nonexistent",
+    [ ?_assertEqual(Expected, handle_line(TestInput, Host, Docroot)) ||
+        {Expected, TestInput} <- handle_line_test_data() ].
