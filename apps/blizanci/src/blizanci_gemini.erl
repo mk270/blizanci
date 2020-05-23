@@ -145,7 +145,7 @@ handle_request(Payload, #state{buffer=Buffer,
 -spec handle_line(binary(), binary(), string()) -> gemini_response().
 handle_line(Cmd, _Host, _Docroot) when is_binary(Cmd),
                                      size(Cmd) > 1024 ->
-    format_response(59, <<"text/plain">>, <<"Request too long">>);
+    {error, 59, <<"Request too long">>};
 
 handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/:]*\)/\(.*\)$"),
@@ -196,7 +196,7 @@ serve_file(Path, Docroot) ->
             Headers = format_headers(20, mime_type(Full)),
             {file, Headers, Full};
         false ->
-            format_response(51, <<"text/plain">>, <<"File not found">>)
+            {error, 51, <<"File not found">>}
     end.
 
 
