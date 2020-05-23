@@ -21,7 +21,7 @@
 -export([handle_info/2]).
 -export([terminate/2]).
 -export([code_change/3]).
--export([handle_line/3]). % tmp
+-export([handle_line/4]). % tmp
 
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini">>).
@@ -31,6 +31,7 @@
          transport :: atom(),
          buffer :: binary(),
          hostname :: binary(),
+         port :: integer(),
          docroot :: string()}).
 
 -type state() :: #state{}.
@@ -61,6 +62,7 @@ init(Ref, Socket, Transport, Opts) ->
                transport=Transport,
                buffer=?EMPTY_BUF,
                hostname=Hostname,
+               port=proplists:get_value(port, Opts),
                docroot=proplists:get_value(docroot, Opts)},
     gen_server:enter_loop(?MODULE, [], State).
 
@@ -130,13 +132,14 @@ code_change(_OldVsn, State, _Extra) ->
 -spec handle_request(binary(), state()) -> {binary(), any()}.
 handle_request(Payload, #state{buffer=Buffer,
                                hostname=Hostname,
+                               port=Port,
                                docroot=Docroot}) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
     case binary:split(AllInput, <<"\r\n">>) of
         [_] ->
             {AllInput, none};
         [Line, Rest] ->
-            R = handle_line(Line, Hostname, Docroot),
+            R = handle_line(Line, Hostname, Port, Docroot),
             {Rest, R};
         _ ->
             lager:warning("Shouldn't get here"),
@@ -144,41 +147,41 @@ handle_request(Payload, #state{buffer=Buffer,
     end.
 
 
--spec handle_line(binary(), binary(), string()) -> gemini_response().
-handle_line(Cmd, _Host, _Docroot) when is_binary(Cmd),
-                                     size(Cmd) > 1024 ->
+-spec handle_line(binary(), binary(), integer(), string()) -> gemini_response().
+handle_line(Cmd, _Host, _Port, _Docroot) when is_binary(Cmd),
+                                              size(Cmd) > 1024 ->
     {error, 59, <<"Request too long">>};
 
-handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
+handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/:]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
 
     case Match of
-        {match, [_All|Matches]} -> handle_url(Matches, Host, Docroot);
+        {match, [_All|Matches]} -> handle_url(Matches, Host, Port, Docroot);
         nomatch -> invalid_request(<<"Request not understood">>)
     end.
 
 
--spec handle_url([any()], binary(), string()) -> gemini_response().
-handle_url([?PROTO, ReqHost, Path], Host, Docroot) ->
+-spec handle_url([any()], binary(), integer(), string()) -> gemini_response().
+handle_url([?PROTO, ReqHost, Path], Host, _Port, Docroot) ->
     case ReqHost of
         Host -> handle_file(Path, Docroot);
         _ -> {error, 53, <<"Host not recognised">>}
     end;
 
-handle_url([<<"gopher">>, _Host, _Path], _Host, _Docroot) ->
+handle_url([<<"gopher">>, _Host, _Path], _Host, _Port, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([<<"https">>, _Host, _Path], _Host, _Docroot) ->
+handle_url([<<"https">>, _Host, _Path], _Host, _Port, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([<<"http">>, _Host, _Path], _Host, _Docroot) ->
+handle_url([<<"http">>, _Host, _Path], _Host, _Port, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([_Proto, _Host, _Path], _Host, _Docroot) ->
+handle_url([_Proto, _Host, _Path], _Host, _Port, _Docroot) ->
     invalid_request(<<"Protocol not recognised">>);
 
-handle_url(_, _Host, _Docroot) ->
+handle_url(_, _Host, _Port, _Docroot) ->
     invalid_request(<<"Request not understood">>).
 
 
@@ -243,5 +246,6 @@ handle_line_test_data() ->
 handle_line_test_() ->
     [ ?_assertEqual(Expected, handle_line(TestInput,
                                           <<"this.host.dev">>,
+                                          1965,
                                           "/bin")) ||
         {Expected, TestInput} <- handle_line_test_data() ].

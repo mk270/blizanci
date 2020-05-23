@@ -18,15 +18,16 @@ start(_StartType, _StartArgs) ->
     {ok, Key} = application:get_env(keyfile),
     {ok, Hostname} = application:get_env(hostname),
     {ok, Docroot} = application:get_env(docroot),
+    {ok, Port} = application:get_env(port),
     SSL_Opts =
-        [{port, 1965},
+        [{port, Port},
          {certfile, Cert},
          {keyfile, Key}
         ],
     Proto_Opts =
         [{hostname, Hostname},
          {docroot, Docroot},
-         {mimetypes, []}],
+         {port, Port}],
     {ok, Listener} = ranch:start_listener(blizanci_service_ssl,
                                           ranch_ssl, SSL_Opts,
                                           blizanci_gemini, Proto_Opts),
