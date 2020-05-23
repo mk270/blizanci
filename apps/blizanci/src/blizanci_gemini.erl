@@ -5,7 +5,7 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
--module(blizanci_proto).
+-module(blizanci_gemini).
 -include_lib("eunit/include/eunit.hrl").
 -behaviour(gen_server).
 -behaviour(ranch_protocol).

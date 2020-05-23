@@ -27,9 +27,9 @@ start(_StartType, _StartArgs) ->
         [{hostname, Hostname},
          {docroot, Docroot},
          {mimetypes, []}],
-    {ok, Listener} = ranch:start_listener(blizanci_service_clear,
+    {ok, Listener} = ranch:start_listener(blizanci_service_ssl,
                                           ranch_ssl, SSL_Opts,
-                                          blizanci_proto, Proto_Opts),
+                                          blizanci_gemini, Proto_Opts),
     {ok, Pid} = blizanci_sup:start_link(),
     {ok, Pid, Listener}.
 
