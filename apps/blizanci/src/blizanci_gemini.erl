@@ -145,11 +145,11 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
 
     lager:info("req: ~p", [Match]),
     case Match of
-        {match, Matches} -> handle_url(Matches, Docroot);
+        {match, Matches} -> handle_url(Matches, Host, Docroot);
         nomatch -> invalid_request(<<"Request not understood">>)
     end.
 
-handle_url(Matches, Docroot) ->
+handle_url(Matches, Host, Docroot) ->
     Proto = ?PROTO,
     case Matches of
         [_All, Proto, Host, Path] ->
