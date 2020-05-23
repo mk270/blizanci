@@ -195,7 +195,6 @@ serve_file(Path, Docroot) ->
     case filelib:is_regular(Full) of
         true ->
             MimeType = mime_type(Full),
-            %Headers = format_headers(20, mime_type(Full)),
             {file, MimeType, Full};
         false ->
             {error, 51, <<"File not found">>}
@@ -241,8 +240,6 @@ handle_line_test_data() ->
     ].
 
 handle_line_test_() ->
-    %Host = <<"this.host.dev">>,
-    %Docroot = "/bin",
     [ ?_assertEqual(Expected, handle_line(TestInput,
                                           <<"this.host.dev">>,
                                           "/bin")) ||
