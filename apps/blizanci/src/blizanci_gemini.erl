@@ -33,7 +33,8 @@
          docroot :: string()}).
 
 -type state() :: #state{}.
--type gemini_response() :: {'file', iolist(), binary()} | {'ok', iolist()}.
+-type gemini_response() :: {'file', iolist(), binary()}
+                         | {'ok', iolist()}.
 
 %%% FIXME: This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
