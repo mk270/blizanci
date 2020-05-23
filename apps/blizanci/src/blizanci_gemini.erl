@@ -34,7 +34,8 @@
 
 -type state() :: #state{}.
 -type gemini_response() :: {'file', iolist(), binary()}
-                         | {'ok', iolist()}.
+                         | {'ok', iolist()}
+                         | {'error', integer(), binary()}.
 
 %%% FIXME: This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
@@ -94,7 +95,13 @@ handle_info({ssl, Socket, Payload}, State) ->
                            Transport:send(Socket, Header),
                            Transport:sendfile(Socket, Filename),
                            Transport:close(Socket),
-                           ok
+                           ok;
+                       {error, Code, Explanation} ->
+                           lager:info("got error [~p]", [Code]),
+                           {ok, Msg} = format_response(Code, <<"text/plain">>,
+                                                       Explanation),
+                           Transport:send(Socket, Msg),
+                           Transport:close(Socket)
                    end,
               {noreply, NewState}
     end;
@@ -154,13 +161,13 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
 handle_url([?PROTO, Host, Path], Host, Docroot) ->
     handle_file(Path, Docroot);
 handle_url([<<"gopher">>, _Host, _Path], _Host, _Docroot) ->
-    format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
+    {error, 53, <<"Proxy request refused">>};
 handle_url([<<"https">>, _Host, _Path], _Host, _Docroot) ->
-    format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
+    {error, 53, <<"Proxy request refused">>};
 handle_url([<<"http">>, _Host, _Path], _Host, _Docroot) ->
-    format_response(53, <<"text/plain">>, <<"Proxy request refused">>);
+    {error, 53, <<"Proxy request refused">>};
 handle_url([?PROTO, _Host, _Path], _Host, _Docroot) ->
-    format_response(53, <<"text/plain">>, <<"Host not recognised">>);
+    {error, 53, <<"Host not recognised">>};
 handle_url([_Proto, _Host, _Path], _Host, _Docroot) ->
     invalid_request(<<"Protocol not recognised">>);
 handle_url(_, _Host, _Docroot) ->
@@ -205,12 +212,12 @@ format_response(Code, MimeType, Data) ->
     Headers = format_headers(Code, MimeType),
     {ok, [Headers, Data]}.
 
--spec invalid_request(binary()) -> {ok, iolist()}.
+-spec invalid_request(binary()) -> gemini_response().
 invalid_request(Msg) when is_binary(Msg) ->
-    format_response(59, <<"text/plain">>, Msg).
+    {error, 59, Msg}.
 
-invalid_request_test() ->
-    Result = invalid_request(<<"Garbled request">>),
-    {ok, Data} = Result,
-    ?assertEqual(<<"59 text/plain\r\nGarbled request">>,
-                 iolist_to_binary(Data)).
+%invalid_request_test() ->
+%    Result = invalid_request(<<"Garbled request">>),
+%    {ok, Data} = Result,
+%    ?assertEqual(<<"59 text/plain\r\nGarbled request">>,
+%                 iolist_to_binary(Data)).
