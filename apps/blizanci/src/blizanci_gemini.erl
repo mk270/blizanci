@@ -141,11 +141,18 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
     Proto = ?PROTO,
 
+    lager:info("req: ~p", [Match]),
     case Match of
         {match, [_All, Proto, Host, Path]} ->
             handle_file(Path, Docroot);
+        {match, [_All, <<"gopher">>, _Host, _Path]} ->
+            format_response(53, <<"text/plain">>, "Proxy request refused");
+        {match, [_All, <<"https">>, _Host, _Path]} ->
+            format_response(53, <<"text/plain">>, "Proxy request refused");
+        {match, [_All, <<"http">>, _Host, _Path]} ->
+            format_response(53, <<"text/plain">>, "Proxy request refused");
         {match, [_All, Proto, _Host, _Path]} ->
-            invalid_request(<<"Host not recognised">>);
+            format_response(53, <<"text/plain">>, "Host not recognised");
         {match, [_All, _Proto, _Host, _Path]} ->
             invalid_request(<<"Protocol not recognised">>);
         _ ->
