@@ -80,7 +80,6 @@ handle_info({ssl, Socket, Payload}, State) ->
 
     case Transport:setopts(Socket, [{active, once}]) of
         {error, closed} ->
-            lager:info("socket closed somewhat unexpectedly"),
             {stop, normal, State};
         ok -> ok = case Response of
                        none -> ok;
