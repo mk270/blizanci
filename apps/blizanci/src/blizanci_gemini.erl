@@ -142,10 +142,12 @@ handle_request(Payload, #state{buffer=Buffer,
             {<<>>, hangup}
     end.
 
+
 -spec handle_line(binary(), binary(), string()) -> gemini_response().
 handle_line(Cmd, _Host, _Docroot) when is_binary(Cmd),
                                      size(Cmd) > 1024 ->
     format_response(59, <<"text/plain">>, <<"Request too long">>);
+
 handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
@@ -156,21 +158,29 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
         nomatch -> invalid_request(<<"Request not understood">>)
     end.
 
+
 -spec handle_url([any()], binary(), string()) -> gemini_response().
 handle_url([?PROTO, Host, Path], Host, Docroot) ->
     handle_file(Path, Docroot);
+
 handle_url([<<"gopher">>, _Host, _Path], _Host, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
+
 handle_url([<<"https">>, _Host, _Path], _Host, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
+
 handle_url([<<"http">>, _Host, _Path], _Host, _Docroot) ->
     {error, 53, <<"Proxy request refused">>};
+
 handle_url([?PROTO, _Host, _Path], _Host, _Docroot) ->
     {error, 53, <<"Host not recognised">>};
+
 handle_url([_Proto, _Host, _Path], _Host, _Docroot) ->
     invalid_request(<<"Protocol not recognised">>);
+
 handle_url(_, _Host, _Docroot) ->
     invalid_request(<<"Request not understood">>).
+
 
 -spec handle_file(binary(), string()) -> gemini_response().
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
@@ -178,6 +188,7 @@ handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
         [_] -> serve_file(Path, Docroot);
         [_, _] -> invalid_request(<<"Illegal filename">>)
     end.
+
 
 -spec serve_file(binary(), string()) -> gemini_response().
 serve_file(Path, Docroot) ->
@@ -190,6 +201,7 @@ serve_file(Path, Docroot) ->
             format_response(51, <<"text/plain">>, <<"File not found">>)
     end.
 
+
 -spec mime_type(binary()) -> binary().
 mime_type(Path) when is_binary(Path) ->
     case binary_to_list(filename:extension(Path)) of
@@ -200,6 +212,7 @@ mime_type(Path) when is_binary(Path) ->
                           {ok, Result} -> Result
                       end
     end.                             
+
 
 -spec format_headers(integer(), binary()) -> iolist().
 format_headers(Code, MimeType) when is_integer(Code), is_binary(MimeType) ->
