@@ -161,9 +161,23 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
 
     case Match of
         {match, [_All|Matches]} -> 
-            lager:info("Matches: ~p", [Matches]),
+            %lager:info("Matches: ~p", [Matches]),
             handle_url(Matches, Host, Port, Docroot);
-        nomatch -> handle_line(Cmd, Host, Port, Docroot)
+        nomatch -> 
+            {ok, Re2} = re:compile("^"
+                                   ++ "\([a-z0-9]+://\)?"
+                                   ++ "\([^/:]+\)"
+                                   ++ "\(:[0-9]+\)?"
+                                   ++ "$"
+                                  ),
+            Match2 = re:run(Cmd, Re2, [{capture, all, binary}]),
+            case Match2 of 
+                {match, [_All|Matches2]} ->
+                    [Scheme, ReqHost, ReqPort] = Matches2,
+                    handle_url([Scheme, ReqHost, ReqPort, <<"/">>],
+                               Host, Port, Docroot);
+                nomatch -> invalid_request(<<"Request not understood">>)
+            end
     end.
 
 
