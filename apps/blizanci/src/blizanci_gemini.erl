@@ -149,6 +149,7 @@ handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
         nomatch -> invalid_request(<<"Request not understood">>)
     end.
 
+-spec handle_url([any()], binary(), string()) -> gemini_response().
 handle_url(Matches, Host, Docroot) ->
     Proto = ?PROTO,
     case Matches of
