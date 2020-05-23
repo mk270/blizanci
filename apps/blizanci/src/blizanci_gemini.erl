@@ -228,8 +228,8 @@ format_response(Code, MimeType, Data) ->
 invalid_request(Msg) when is_binary(Msg) ->
     {error, 59, Msg}.
 
-%invalid_request_test() ->
-%    Result = invalid_request(<<"Garbled request">>),
-%    {ok, Data} = Result,
-%    ?assertEqual(<<"59 text/plain\r\nGarbled request">>,
-%                 iolist_to_binary(Data)).
+format_response_test() ->
+    Result = format_response(59, <<"text/plain">>, <<"Garbled request">>),
+    {ok, Data} = Result,
+    ?assertEqual(<<"59 text/plain\r\nGarbled request">>,
+                 iolist_to_binary(Data)).
