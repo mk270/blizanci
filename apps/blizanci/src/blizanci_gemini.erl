@@ -149,7 +149,7 @@ handle_line(Cmd, _Host, _Docroot) when is_binary(Cmd),
     format_response(59, <<"text/plain">>, <<"Request too long">>);
 
 handle_line(Cmd, Host, Docroot) when is_binary(Cmd) ->
-    {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/]*\)/\(.*\)$"),
+    {ok, Re} = re:compile("^\([a-z0-9]+\)://\([^/:]*\)/\(.*\)$"),
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
 
     lager:info("req: ~p", [Match]),
