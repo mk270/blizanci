@@ -33,7 +33,7 @@
          docroot :: string()}).
 
 -type state() :: #state{}.
--type gemini_response() :: {'file', iolist(), binary()}
+-type gemini_response() :: {'file', binary(), binary()}
                          | {'ok', iolist()}
                          | {'error', integer(), binary()}.
 
@@ -90,7 +90,8 @@ handle_info({ssl, Socket, Payload}, State) ->
                            Transport:send(Socket, Msg),
                            Transport:close(Socket),
                            ok;
-                       {file, Header, Filename} ->
+                       {file, MimeType, Filename} ->
+                           Header = format_headers(20, MimeType),
                            Transport:send(Socket, Header),
                            Transport:sendfile(Socket, Filename),
                            Transport:close(Socket),
@@ -193,8 +194,9 @@ serve_file(Path, Docroot) ->
     Full = filename:join(Docroot, Path),
     case filelib:is_regular(Full) of
         true ->
-            Headers = format_headers(20, mime_type(Full)),
-            {file, Headers, Full};
+            MimeType = mime_type(Full),
+            %Headers = format_headers(20, mime_type(Full)),
+            {file, MimeType, Full};
         false ->
             {error, 51, <<"File not found">>}
     end.
@@ -233,10 +235,15 @@ format_response_test() ->
                  iolist_to_binary(Data)).
 
 handle_line_test_data() ->
-    [].
+    [
+     {{file, <<"text/gemini">>, <<"/bin/which">>},
+      <<"gemini://this.host.dev/which">>}
+    ].
 
-handle_line_test() ->
-    Host = <<"this.host.dev">>,
-    Docroot = "/nonexistent",
-    [ ?_assertEqual(Expected, handle_line(TestInput, Host, Docroot)) ||
+handle_line_test_() ->
+    %Host = <<"this.host.dev">>,
+    %Docroot = "/bin",
+    [ ?_assertEqual(Expected, handle_line(TestInput,
+                                          <<"this.host.dev">>,
+                                          "/bin")) ||
         {Expected, TestInput} <- handle_line_test_data() ].
