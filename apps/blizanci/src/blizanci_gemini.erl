@@ -150,6 +150,9 @@ activate(Transport, Socket) ->
     Transport:setopts(Socket, [{active, once}]).
 
 
+% Send a response back to the client, generally closing the connection
+% if it is finished. If the client hasn't managed to send a whole request,
+% do nothing.
 -spec respond(atom(), inet:socket(), state(), gemini_response())
              -> 'continue' | 'finished'.
 respond(_Transport, _Socket, _State, none) ->
@@ -204,6 +207,10 @@ handle_request(Payload, #state{buffer=Buffer,
     end.
 
 
+% Take the request line which has been received in full from the client
+% and parse it for a URL. This is slightly messy due to an earlier
+% implementation having misinterpreted an ambiguity in the spec.
+
 -spec handle_line(binary(), server_config())
                  -> gemini_response().
 handle_line(Cmd, _Config) when is_binary(Cmd),
@@ -245,25 +252,24 @@ handle_line(Cmd, Config) when is_binary(Cmd) ->
     end.
 
 
+% Handle a request whose URL has been broken up thus:
+%   [Scheme, Hostname, Port, Path]
+
 -spec handle_url([any()], server_config()) -> gemini_response().
-handle_url([<<"gopher:">>, _ReqHost, _ReqPort, _Path], _Config)
-->
-    {error_code, proxy_refused};
-
-handle_url([<<"https:">>, _ReqHost, _ReqPort, _Path], _Config)
-->
-    {error_code, proxy_refused};
-
-handle_url([<<"http:">>, _ReqHost, _ReqPort, _Path], _Config)
-->
-    {error_code, proxy_refused};
+handle_url([<<"gopher:">>|_], _Config) -> {error_code, proxy_refused};
+handle_url([<<"https:">> |_], _Config) -> {error_code, proxy_refused};
+handle_url([<<"http:">>  |_], _Config) -> {error_code, proxy_refused};
 
 handle_url([?PROTO, ReqHost, ReqPort, Path],
-           #server_config{hostname=Host, port=Port, docroot=Docroot}) ->
+           #server_config{hostname=Host,
+                          port=Port,
+                          docroot=Docroot}) ->
     handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot);
 
 handle_url([?EMPTY_BUF, ReqHost, ReqPort, Path],
-           #server_config{hostname=Host, port=Port, docroot=Docroot}) ->
+           #server_config{hostname=Host,
+                          port=Port,
+                          docroot=Docroot}) ->
     handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot);
 
 handle_url([Proto, ReqHost, ReqPort, Path], _Config) ->
@@ -272,6 +278,11 @@ handle_url([Proto, ReqHost, ReqPort, Path], _Config) ->
 
 handle_url(_, _Config) ->
     {error_code, request_not_understood}.
+
+
+% Handle a request which has been determined to be a Gemini URL, but not
+% necessarily one which should have come to this server (e.g., a proxy
+% request)
 
 -spec handle_gemini_url(binary(), binary(), binary(), binary(), bitstring(),
                         string()) -> gemini_response().
@@ -286,6 +297,9 @@ handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
     end.
 
 
+% Check that the URL requested is actually in UTF8 before interpreting
+% is as a filename.
+
 -spec handle_file(binary(), string()) -> gemini_response().
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
     Recoded = unicode:characters_to_binary(<<Path/binary>>, utf8),
@@ -299,6 +313,10 @@ handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
             end
     end.
 
+
+% If there's a valid file requested, then get its full path, so that
+% it can be sendfile()'d back the client. If it's a directory, redirect
+% to an index file.
 
 -spec serve_file(binary(), string()) -> gemini_response().
 serve_file(Path, Docroot) ->
@@ -315,6 +333,10 @@ serve_file(Path, Docroot) ->
             {error_code, file_not_found}
     end.
 
+
+% Look up the MIME type for a given filename. If the filename doesn't contain
+% a ".", then assume it's text/gemini. If it contains a "." but isn't in
+% the MIME types dataset, then assume it's application/octet-stream.
 
 -spec mime_type(binary()) -> binary().
 mime_type(Path) when is_binary(Path) ->
