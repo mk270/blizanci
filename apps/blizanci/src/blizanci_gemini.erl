@@ -290,20 +290,12 @@ format_headers(Code, MimeType) when is_integer(Code), is_binary(MimeType) ->
     Status = list_to_binary(integer_to_list(Code)),
     [Status, <<" ">>, MimeType, <<"\r\n">>].
 
--spec format_response(integer(), binary(), binary()) -> {ok, iolist()}.
-format_response(Code, MimeType, Data) ->
-    Headers = format_headers(Code, MimeType),
-    {ok, [Headers, Data]}.
-
 -spec invalid_request(binary()) -> gemini_response().
 invalid_request(Msg) when is_binary(Msg) ->
     {error, 59, Msg}.
 
-format_response_test() ->
-    Result = format_response(59, <<"text/plain">>, <<"Garbled request">>),
-    {ok, Data} = Result,
-    ?assertEqual(<<"59 text/plain\r\nGarbled request">>,
-                 iolist_to_binary(Data)).
+
+%% tests
 
 format_error(Code, Explanation) when is_integer(Code),
                                      is_binary(Explanation) ->
