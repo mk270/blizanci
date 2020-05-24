@@ -141,15 +141,22 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal.
 %%
 
+% This ceremony is necessary for telling the Erlang VM to monitor
+% the socket for incoming data, and must be called each time the
+% socket is to be read from.
 -spec activate(atom(), inet:socket()) -> 'ok' | {'error', _}.
 activate(Transport, Socket) ->
     Transport:setopts(Socket, [{active, once}]).
 
+
 -spec respond(atom(), inet:socket(), state(), gemini_response())
              -> 'continue' | 'finished'.
-respond(_Transport, _Socket, _State, none) -> continue;
+respond(_Transport, _Socket, _State, none) -> 
+    % don't hang up where only part of the URL + CRLF has been received
+    continue;
 
-respond(_Transport, _Socket, _State, hangup) -> finished;
+respond(_Transport, _Socket, _State, hangup) ->
+    finished;
 
 respond(Transport, Socket, _State, {file, MimeType, Filename}) ->
     Header = format_headers(20, MimeType),
