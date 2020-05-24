@@ -197,7 +197,7 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
     end.
 
 
--spec handle_url([any()], binary(), integer(), string()) -> gemini_response().
+-spec handle_url([any()], binary(), binary(), string()) -> gemini_response().
 handle_url([<<"gopher:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
     {error, 53, <<"Proxy request refused">>};
@@ -223,7 +223,8 @@ handle_url([Proto, ReqHost, ReqPort, Path], _Host, _Port, _Docroot) ->
 handle_url(_, _Host, _Port, _Docroot) ->
     invalid_request(<<"Request not understood">>).
 
-
+-spec handle_gemini_url(binary(), binary(), binary(), binary(), bitstring(),
+                        string()) -> gemini_response().
 handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
     MatchPort = <<":", Port/binary>>,
     case {ReqHost, ReqPort} of
