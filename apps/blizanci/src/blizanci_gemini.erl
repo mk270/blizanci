@@ -172,11 +172,11 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
                                   ),
             Match2 = re:run(Cmd, Re2, [{capture, all, binary}]),
             case Match2 of 
-                {match, [_All|Matches2]} ->
-                    [Scheme, ReqHost, ReqPort] = Matches2,
+                {match, [_All|[Scheme, ReqHost, ReqPort]]} ->
                     handle_url([Scheme, ReqHost, ReqPort, <<"/">>],
                                Host, Port, Docroot);
-                nomatch -> invalid_request(<<"Request not understood">>)
+                {match, _} -> invalid_request(<<"Request not parsed">>);
+                nomatch -> invalid_request(<<"Request not parsed">>)
             end
     end.
 
