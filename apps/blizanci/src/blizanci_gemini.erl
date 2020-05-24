@@ -169,6 +169,8 @@ handle_request(Payload, #state{buffer=Buffer,
                                docroot=Docroot}) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
     case binary:split(AllInput, <<"\r\n">>) of
+        [S] when size(S) > 4000 ->
+            {<<>>, {error_code, request_too_long}};
         [_] ->
             {AllInput, none};
         [Line, Rest] ->
