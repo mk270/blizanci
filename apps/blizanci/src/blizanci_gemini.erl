@@ -170,10 +170,10 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
     Match = re:run(Cmd, Re, [{capture, all, binary}]),
 
     case Match of
-        {match, [_All|Matches]} -> 
+        {match, [_All|Matches]} ->
             %lager:info("Matches: ~p", [Matches]),
             handle_url(Matches, Host, Port, Docroot);
-        nomatch -> 
+        nomatch ->
             {ok, Re2} = re:compile("^"
                                    ++ "\([a-z0-9]+://\)?"
                                    ++ "\([^/:]+\)"
@@ -181,7 +181,7 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
                                    ++ "$"
                                   ),
             Match2 = re:run(Cmd, Re2, [{capture, all, binary}]),
-            case Match2 of 
+            case Match2 of
                 {match, [_All|[Scheme, ReqHost, ReqPort]]} ->
                     handle_url([Scheme, ReqHost, ReqPort, <<"/">>],
                                Host, Port, Docroot);
@@ -234,7 +234,7 @@ serve_file(Path, Docroot) ->
     Full = filename:join(Docroot, Path),
     % lager:info("Path: ~p", [{Docroot, Path, Full}]),
     case {filelib:is_dir(Full), filelib:is_regular(Full)} of
-        {true, _} -> 
+        {true, _} ->
             Redirect = filename:join(Path, ?INDEX),
             {redirect, Redirect};
         {false, true} ->
@@ -254,7 +254,7 @@ mime_type(Path) when is_binary(Path) ->
                           notfound -> <<"application/octet-stream">>;
                           {ok, Result} -> Result
                       end
-    end.                             
+    end.
 
 
 -spec format_headers(integer(), binary()) -> iolist().
