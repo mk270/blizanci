@@ -162,6 +162,12 @@ respond(Transport, Socket, State, {redirect, Path}) ->
     finished.
 
 
+% Theoretically, a client could send its request very slowly, with
+% parts of the URL arriving piecemeal; it could also send a massive
+% blob of data all at once. We buffer data received from the client
+% in State.buffer, and wait until a CRLF appears. The canonical case
+% is of course that the CRLF appears the first time we ever receive
+% data, rendering the buffer redundant.
 -spec handle_request(binary(), state()) -> {binary(), any()}.
 handle_request(Payload, #state{buffer=Buffer,
                                hostname=Hostname,
