@@ -295,12 +295,13 @@ invalid_request(Msg) when is_binary(Msg) ->
     {error, 59, Msg}.
 
 
-%% tests
-
 format_error(Code, Explanation) when is_integer(Code),
                                      is_binary(Explanation) ->
     Status = list_to_binary(integer_to_list(Code)),
     {ok, [Status, <<" ", Explanation/binary>>]}.
+
+
+%% tests
 
 handle_line_test_data() ->
     [
