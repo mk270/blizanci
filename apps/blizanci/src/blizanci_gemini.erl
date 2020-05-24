@@ -40,6 +40,20 @@
                          | {'error_code', atom()}
                          | {'redirect', binary()}.
 
+-spec error_detail(atom()) -> {integer(), binary()}.
+error_detail(request_too_long)       -> {59, <<"Request too long">>};
+error_detail(request_not_parsed)     -> {59, <<"Request not parsed">>};
+error_detail(proxy_refused)          -> {53, <<"Proxy request refused">>};
+error_detail(host_unrecognised)      -> {53, <<"Host unrecognised">>};
+error_detail(port_unrecognised)      -> {53, <<"Port unrecognised">>};
+error_detail(unrecognised_protocol)  -> {59, <<"Protocol not recognised">>};
+error_detail(request_not_understood) -> {59, <<"Request not understood">>};
+error_detail(bad_unicode)            -> {59, <<"Bad unicode in request">>};
+error_detail(bad_filename)           -> {59, <<"Illegal filename">>};
+error_detail(internal_server_error)  -> {40, <<"Internal server error">>};
+error_detail(file_not_found)         -> {51, <<"File not found">>}.
+
+
 %%% FIXME: This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
 -spec init([]) -> {ok, undefined}.
@@ -296,20 +310,6 @@ format_error(Code) when is_atom(Code) ->
     {GeminiStatus, Explanation} = error_detail(Code),
     Headers = format_headers(GeminiStatus, Explanation),
     {ok, Headers}.
-
-
--spec error_detail(atom()) -> {integer(), binary()}.
-error_detail(request_too_long)       -> {59, <<"Request too long">>};
-error_detail(request_not_parsed)     -> {59, <<"Request not parsed">>};
-error_detail(proxy_refused)          -> {53, <<"Proxy request refused">>};
-error_detail(host_unrecognised)      -> {53, <<"Host unrecognised">>};
-error_detail(port_unrecognised)      -> {53, <<"Port unrecognised">>};
-error_detail(unrecognised_protocol)  -> {59, <<"Protocol not recognised">>};
-error_detail(request_not_understood) -> {59, <<"Request not understood">>};
-error_detail(bad_unicode)            -> {59, <<"Bad unicode in request">>};
-error_detail(bad_filename)           -> {59, <<"Illegal filename">>};
-error_detail(internal_server_error)  -> {40, <<"Internal server error">>};
-error_detail(file_not_found)         -> {51, <<"File not found">>}.
     
 
 %% tests
