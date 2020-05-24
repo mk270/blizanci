@@ -286,9 +286,9 @@ mime_type(Path) when is_binary(Path) ->
 
 
 -spec format_headers(integer(), binary()) -> iolist().
-format_headers(Code, MimeType) when is_integer(Code), is_binary(MimeType) ->
+format_headers(Code, Meta) when is_integer(Code), is_binary(Meta) ->
     Status = list_to_binary(integer_to_list(Code)),
-    [Status, <<" ">>, MimeType, <<"\r\n">>].
+    [Status, <<" ">>, Meta, <<"\r\n">>].
 
 -spec invalid_request(binary()) -> gemini_response().
 invalid_request(Msg) when is_binary(Msg) ->
