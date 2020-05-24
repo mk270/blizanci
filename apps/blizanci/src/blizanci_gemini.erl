@@ -79,7 +79,12 @@ handle_info(timeout, State) ->
     {stop, normal, State};
 
 handle_info({ssl, Socket, Payload}, State) ->
-    {Buffer, Response} = handle_request(Payload, State),
+    {Buffer, Response} = 
+        try handle_request(Payload, State) of
+            Result -> Result
+        catch
+            _ -> {<<"">>, {error, 40, "Internal Server Error"}}
+        end,
     NewState = State#state{buffer=Buffer},
     Transport = State#state.transport,
 
