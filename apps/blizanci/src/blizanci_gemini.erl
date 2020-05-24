@@ -24,7 +24,7 @@
 -export([handle_line/4]). % tmp
 
 -define(EMPTY_BUF, <<>>).
--define(PROTO, <<"gemini://">>).
+-define(PROTO, <<"gemini:">>).
 -define(INDEX, "index.gemini").
 
 -record(state,
@@ -103,8 +103,7 @@ handle_info({ssl, Socket, Payload}, State) ->
                            Transport:close(Socket),
                            ok;
                        {error, Code, Explanation} ->
-                           {ok, Msg} = format_response(Code, <<"text/plain">>,
-                                                       Explanation),
+                           {ok, Msg} = format_error(Code, Explanation),
                            Transport:send(Socket, Msg),
                            Transport:close(Socket);
                        {redirect, Path} ->
@@ -166,7 +165,7 @@ handle_line(Cmd, _Host, _Port, _Docroot) when is_binary(Cmd),
 
 handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^"
-                          ++ "\([a-z0-9]+://\)?"
+                          ++ "\([a-z0-9]+:\)?//"
                           ++ "\([^/:]+\)"
                           ++ "\(:[0-9]+\)?"
                           ++ "/\(.*\)?"
@@ -190,7 +189,9 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
                 {match, [_All|[Scheme, ReqHost, ReqPort]]} ->
                     handle_url([Scheme, ReqHost, ReqPort, <<"/">>],
                                Host, Port, Docroot);
-                {match, _} -> invalid_request(<<"Request not parsed">>);
+                {match, [_All|[Scheme, ReqHost]]} -> 
+                    handle_url([Scheme, ReqHost, Port, <<"">>],
+                               Host, Port, Docroot);
                 nomatch -> invalid_request(<<"Request not parsed">>)
             end
     end.
@@ -207,15 +208,15 @@ handle_url([?PROTO, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
         _                 -> {error, 53, <<"Host not recognised">>}
     end;
 
-handle_url([<<"gopher://">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
+handle_url([<<"gopher:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([<<"https://">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
+handle_url([<<"https:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([<<"http://">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
+handle_url([<<"http:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
     {error, 53, <<"Proxy request refused">>};
 
@@ -281,6 +282,11 @@ format_response_test() ->
     {ok, Data} = Result,
     ?assertEqual(<<"59 text/plain\r\nGarbled request">>,
                  iolist_to_binary(Data)).
+
+format_error(Code, Explanation) when is_integer(Code),
+                                     is_binary(Explanation) ->
+    Status = list_to_binary(integer_to_list(Code)),
+    {ok, [Status, <<" ", Explanation/binary>>]}.
 
 handle_line_test_data() ->
     [
