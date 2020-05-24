@@ -89,15 +89,6 @@ init({Ref, Socket, Transport, Opts}) ->
     gen_server:enter_loop(?MODULE, [], State).
 
 
-handle_info({tcp_closed, _Socket}, State) ->
-    {stop, normal, State};
-
-handle_info({tcp_error, _, Reason}, State) ->
-    {stop, Reason, State};
-
-handle_info(timeout, State) ->
-    {stop, normal, State};
-
 handle_info({ssl, Socket, Payload}, State) ->
     {Buffer, Response} =
         try handle_request(Payload, State) of
@@ -120,11 +111,20 @@ handle_info({ssl, Socket, Payload}, State) ->
             {stop, normal, State}
     end;
 
+handle_info({tcp_closed, _Socket}, State) ->
+    {stop, normal, State};
+
+handle_info({tcp_error, _, Reason}, State) ->
+    {stop, Reason, State};
+
+handle_info(timeout, State) ->
+    {stop, normal, State};
+
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
 handle_info(Msg, State) ->
-    lager:warning("got unrecognised msg: ~p~n", [Msg]),
+    lager:debug("Received unrecognised message: ~p~n", [Msg]),
     {stop, normal, State}.
 
 handle_call(_Request, _From, State) ->
