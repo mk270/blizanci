@@ -91,31 +91,11 @@ handle_info({ssl, Socket, Payload}, State) ->
     case Transport:setopts(Socket, [{active, once}]) of
         {error, closed} ->
             {stop, normal, State};
-        ok -> ok = case Response of
-                       none -> ok;
-                       hangup ->
-                           Transport:close(Socket),
-                           ok;
-                       {file, MimeType, Filename} ->
-                           Header = format_headers(20, MimeType),
-                           Transport:send(Socket, Header),
-                           Transport:sendfile(Socket, Filename),
-                           Transport:close(Socket),
-                           ok;
-                       {error, Code, Explanation} ->
-                           {ok, Msg} = format_error(Code, Explanation),
-                           Transport:send(Socket, Msg),
-                           Transport:close(Socket);
-                       {redirect, Path} ->
-                           Host = State#state.hostname,
-                           Port = State#state.port,
-                           Msg = <<"31 gemini://", Host/binary, ":",
-                                   Port/binary, Path/binary, "\r\n">>,
-                           Transport:send(Socket, Msg),
-                           Transport:close(Socket),
-                           ok
-                   end,
-              {noreply, NewState}
+        ok -> case respond(Transport, Socket, State, Response) of
+                  continue -> {noreply, NewState};
+                  finished -> Transport:close(Socket),
+                              {noreply, NewState}
+              end
     end;
 
 handle_info({ssl_closed, _SocketInfo}, State) ->
@@ -138,6 +118,33 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% Internal.
+
+
+-spec respond(atom(), inet:socket(), state(), gemini_response())
+             -> 'continue' | 'finished'.
+respond(_Transport, _Socket, _State, none) -> continue;
+
+respond(_Transport, _Socket, _State, hangup) -> finished;
+
+respond(Transport, Socket, _State, {file, MimeType, Filename}) -> 
+    Header = format_headers(20, MimeType),
+    Transport:send(Socket, Header),
+    Transport:sendfile(Socket, Filename),
+    finished;
+
+respond(Transport, Socket, _State, {error, Code, Explanation}) -> 
+    {ok, Msg} = format_error(Code, Explanation),
+    Transport:send(Socket, Msg),
+    finished;
+
+respond(Transport, Socket, State, {redirect, Path}) -> 
+    Host = State#state.hostname,
+    Port = State#state.port,
+    Msg = <<"31 gemini://", Host/binary, ":",
+            Port/binary, Path/binary, "\r\n">>,
+    Transport:send(Socket, Msg),
+    finished.
+
 
 -spec handle_request(binary(), state()) -> {binary(), any()}.
 handle_request(Payload, #state{buffer=Buffer,
