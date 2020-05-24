@@ -10,12 +10,9 @@
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
 
-%%
 %% API.
-%%
 -export([start_link/4]).
 
-%% gen_server.
 -export([init/1]).
 -export([handle_call/3]).
 -export([handle_cast/2]).
@@ -24,6 +21,8 @@
 -export([code_change/3]).
 -export([handle_line/2]). % tmp
 
+
+%% types / constants / enums / config
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini:">>).
 -define(INDEX, "index.gemini").
@@ -59,15 +58,14 @@ gemini_status(internal_server_error)  -> {40, <<"Internal server error">>};
 gemini_status(file_not_found)         -> {51, <<"File not found">>}.
 
 
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% API.
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 -spec start_link(pid(), any(), any(), [any()]) -> {ok, pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [{Ref, Socket, Transport, Opts}]).
-
-%% gen_server.
 
 -spec init({pid(), any(), any(), [any()]}) -> {ok, pid()}.
 init({Ref, Socket, Transport, Opts}) ->
@@ -139,9 +137,11 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Internal.
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 % This ceremony is necessary for telling the Erlang VM to monitor
 % the socket for incoming data, and must be called each time the
@@ -357,9 +357,11 @@ format_error(Code) when is_atom(Code) ->
     Headers = format_headers(GeminiStatus, Explanation),
     {ok, Headers}.
 
-%%
-%% tests
-%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 handle_line_test_data() ->
     [
