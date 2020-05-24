@@ -151,7 +151,7 @@ activate(Transport, Socket) ->
 
 -spec respond(atom(), inet:socket(), state(), gemini_response())
              -> 'continue' | 'finished'.
-respond(_Transport, _Socket, _State, none) -> 
+respond(_Transport, _Socket, _State, none) ->
     % don't hang up where only part of the URL + CRLF has been received
     continue;
 
@@ -336,7 +336,7 @@ format_error(Code) when is_atom(Code) ->
     {GeminiStatus, Explanation} = error_detail(Code),
     Headers = format_headers(GeminiStatus, Explanation),
     {ok, Headers}.
-    
+
 %%
 %% tests
 %%
