@@ -28,12 +28,12 @@
 -define(INDEX, "index.gemini").
 
 -record(state,
-        {socket :: inet:socket(),
+        {socket    :: inet:socket(),
          transport :: atom(),
-         buffer :: binary(),
-         hostname :: binary(),
-         port :: binary(),
-         docroot :: string()}).
+         buffer    :: binary(),
+         hostname  :: binary(),
+         port      :: binary(),
+         docroot   :: string()}).
 
 -type state() :: #state{}.
 -type gemini_response() :: {'file', binary(), binary()}
