@@ -70,7 +70,7 @@ start_link(Ref, Socket, Transport, Opts) ->
 init(Ref, Socket, Transport, Opts) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
-    ok = Transport:setopts(Socket, [{active, once}]),
+    ok = activate(Transport, Socket),
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     Port = integer_to_binary(proplists:get_value(port, Opts)),
     State = #state{
@@ -102,7 +102,7 @@ handle_info({ssl, Socket, Payload}, State) ->
     NewState = State#state{buffer=Buffer},
     Transport = State#state.transport,
 
-    case Transport:setopts(Socket, [{active, once}]) of
+    case activate(Transport, Socket) of
         ok -> case respond(Transport, Socket, State, Response) of
                   continue -> {noreply, NewState};
                   finished -> Transport:close(Socket),
@@ -133,8 +133,13 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+%%
 %% Internal.
+%%
 
+-spec activate(atom(), inet:socket()) -> 'ok' | {'error', _}.
+activate(Transport, Socket) ->
+    Transport:setopts(Socket, [{active, once}]).
 
 -spec respond(atom(), inet:socket(), state(), gemini_response())
              -> 'continue' | 'finished'.
