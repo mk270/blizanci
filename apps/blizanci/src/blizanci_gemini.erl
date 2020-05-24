@@ -103,13 +103,15 @@ handle_info({ssl, Socket, Payload}, State) ->
     Transport = State#state.transport,
 
     case Transport:setopts(Socket, [{active, once}]) of
-        {error, closed} ->
-            {stop, normal, State};
         ok -> case respond(Transport, Socket, State, Response) of
                   continue -> {noreply, NewState};
                   finished -> Transport:close(Socket),
                               {noreply, NewState}
-              end
+              end;
+        {error, closed} ->
+            {stop, normal, State};
+        _ ->
+            {stop, normal, State}
     end;
 
 handle_info({ssl_closed, _SocketInfo}, State) ->
