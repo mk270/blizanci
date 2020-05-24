@@ -10,7 +10,9 @@
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
 
+%%
 %% API.
+%%
 -export([start_link/4]).
 
 %% gen_server.
@@ -59,7 +61,9 @@ error_detail(file_not_found)         -> {51, <<"File not found">>}.
 -spec init([]) -> {ok, undefined}.
 init([]) -> {ok, undefined}.
 
+%%
 %% API.
+%%
 -spec start_link(pid(), any(), any(), [any()]) -> {ok, pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
@@ -326,8 +330,9 @@ format_error(Code) when is_atom(Code) ->
     Headers = format_headers(GeminiStatus, Explanation),
     {ok, Headers}.
     
-
+%%
 %% tests
+%%
 
 handle_line_test_data() ->
     [
