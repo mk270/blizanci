@@ -17,7 +17,6 @@
 
 %% gen_server.
 -export([init/1]).
--export([init/4]).
 -export([handle_call/3]).
 -export([handle_cast/2]).
 -export([handle_info/2]).
@@ -60,22 +59,17 @@ gemini_status(internal_server_error)  -> {40, <<"Internal server error">>};
 gemini_status(file_not_found)         -> {51, <<"File not found">>}.
 
 
-%%% FIXME: This function is never called. We only define it so that
-%% we can use the -behaviour(gen_server) attribute.
--spec init([]) -> {ok, undefined}.
-init([]) -> {ok, undefined}.
-
 %%
 %% API.
 %%
 -spec start_link(pid(), any(), any(), [any()]) -> {ok, pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
-    proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
+    proc_lib:start_link(?MODULE, init, [{Ref, Socket, Transport, Opts}]).
 
 %% gen_server.
 
--spec init(pid(), any(), any(), [any()]) -> {ok, pid()}.
-init(Ref, Socket, Transport, Opts) ->
+-spec init({pid(), any(), any(), [any()]}) -> {ok, pid()}.
+init({Ref, Socket, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
     ok = activate(Transport, Socket),
