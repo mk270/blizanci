@@ -199,7 +199,7 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
                 {match, [_All|[Scheme, ReqHost]]} ->
                     handle_url([Scheme, ReqHost, <<":", Port/binary>>, <<"">>],
                                Host, Port, Docroot);
-                nomatch -> invalid_request(<<"Request not parsed">>)
+                nomatch -> {error, 59, <<"Request not parsed">>}
             end
     end.
 
@@ -225,10 +225,10 @@ handle_url([?EMPTY_BUF, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
 
 handle_url([Proto, ReqHost, ReqPort, Path], _Host, _Port, _Docroot) ->
     lager:info("unrec: ~p", [{Proto, ReqHost, ReqPort, Path}]),
-    invalid_request(<<"Protocol not recognised">>);
+    {error, 59, <<"Protocol not recognised">>};
 
 handle_url(_, _Host, _Port, _Docroot) ->
-    invalid_request(<<"Request not understood">>).
+    {error, 59, <<"Request not understood">>}.
 
 -spec handle_gemini_url(binary(), binary(), binary(), binary(), bitstring(),
                         string()) -> gemini_response().
@@ -252,7 +252,7 @@ handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
         _ ->
             case string:split(Path, "..") of
                 [_] -> serve_file(Path, Docroot);
-                [_, _] -> invalid_request(<<"Illegal filename">>)
+                [_, _] -> {error, 59, <<"Illegal filename">>}
             end
     end.
 
@@ -289,11 +289,6 @@ mime_type(Path) when is_binary(Path) ->
 format_headers(Code, Meta) when is_integer(Code), is_binary(Meta) ->
     Status = list_to_binary(integer_to_list(Code)),
     [Status, <<" ">>, Meta, <<"\r\n">>].
-
-
--spec invalid_request(binary()) -> gemini_response().
-invalid_request(Msg) when is_binary(Msg) ->
-    {error, 59, Msg}.
 
 
 -spec format_error(integer(), binary()) -> {'ok', iolist()}.
