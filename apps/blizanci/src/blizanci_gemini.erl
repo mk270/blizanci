@@ -290,11 +290,13 @@ format_headers(Code, Meta) when is_integer(Code), is_binary(Meta) ->
     Status = list_to_binary(integer_to_list(Code)),
     [Status, <<" ">>, Meta, <<"\r\n">>].
 
+
 -spec invalid_request(binary()) -> gemini_response().
 invalid_request(Msg) when is_binary(Msg) ->
     {error, 59, Msg}.
 
 
+-spec format_error(integer(), binary()) -> {'ok', iolist()}.
 format_error(Code, Explanation) when is_integer(Code),
                                      is_binary(Explanation) ->
     Status = list_to_binary(integer_to_list(Code)),
