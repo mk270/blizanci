@@ -55,7 +55,8 @@ gemini_status(request_not_understood) -> {59, <<"Request not understood">>};
 gemini_status(bad_unicode)            -> {59, <<"Bad unicode in request">>};
 gemini_status(bad_filename)           -> {59, <<"Illegal filename">>};
 gemini_status(internal_server_error)  -> {40, <<"Internal server error">>};
-gemini_status(file_not_found)         -> {51, <<"File not found">>}.
+gemini_status(file_not_found)         -> {51, <<"File not found">>};
+gemini_status(permanent_redirect)     -> {31, <<"Moved permanently">>}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -176,10 +177,9 @@ respond(Transport, Socket, _State, {error_code, Code}) ->
 
 respond(Transport, Socket, State, {redirect, Path}) ->
     Config = State#state.config,
-    Host = Config#server_config.hostname,
-    Port = Config#server_config.port,
-    Msg = <<"31 gemini://", Host/binary, ":",
-            Port/binary, Path/binary, "\r\n">>,
+    Meta = construct_local_url(Config, Path),
+    {Code, _} = gemini_status(permanent_redirect),
+    Msg = format_headers(Code, Meta),
     Transport:send(Socket, Msg),
     finished.
 
@@ -356,6 +356,18 @@ format_error(Code) when is_atom(Code) ->
     {GeminiStatus, Explanation} = gemini_status(Code),
     Headers = format_headers(GeminiStatus, Explanation),
     {ok, Headers}.
+
+
+-spec construct_local_url(server_config(), binary()) -> iolist().
+construct_local_url(Config, Path) ->
+    construct_url(?PROTO,
+                  Config#server_config.hostname,
+                  Config#server_config.port,
+                  Path).
+
+-spec construct_url(binary(), binary(), binary(), binary()) -> iolist().
+construct_url(Scheme, Hostname, Port, Path) ->
+    <<Scheme/binary, "//", Hostname/binary, ":", Port/binary, Path/binary>>.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
