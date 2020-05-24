@@ -23,21 +23,25 @@
 -export([handle_info/2]).
 -export([terminate/2]).
 -export([code_change/3]).
--export([handle_line/4]). % tmp
+-export([handle_line/2]). % tmp
 
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini:">>).
 -define(INDEX, "index.gemini").
 -define(TIMEOUT_MS, 10000).
 
+-record(server_config,
+        {hostname  :: binary(),
+        port       :: binary(),
+        docroot    :: string()}).
+-type server_config() :: #server_config{}.
+
 -record(state,
         {transport :: atom(),
          buffer    :: binary(),
-         hostname  :: binary(),
-         port      :: binary(),
-         docroot   :: string()}).
-
+         config    :: server_config()}).
 -type state() :: #state{}.
+
 -type gemini_response() :: {'file', binary(), binary()}
                          | {'error_code', atom()}
                          | {'redirect', binary()}.
@@ -77,12 +81,15 @@ init(Ref, Socket, Transport, Opts) ->
     ok = activate(Transport, Socket),
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     Port = integer_to_binary(proplists:get_value(port, Opts)),
+    Docroot = proplists:get_value(docroot, Opts),
+    Config = #server_config{
+                hostname=Hostname,
+                port=Port,
+                docroot=Docroot},
     State = #state{
                transport=Transport,
                buffer=?EMPTY_BUF,
-               hostname=Hostname,
-               port=Port,
-               docroot=proplists:get_value(docroot, Opts)},
+               config=Config},
     erlang:send_after(?TIMEOUT_MS, self(), timeout),
     gen_server:enter_loop(?MODULE, [], State).
 
@@ -170,8 +177,9 @@ respond(Transport, Socket, _State, {error_code, Code}) ->
     finished;
 
 respond(Transport, Socket, State, {redirect, Path}) ->
-    Host = State#state.hostname,
-    Port = State#state.port,
+    Config = State#state.config,
+    Host = Config#server_config.hostname,
+    Port = Config#server_config.port,
     Msg = <<"31 gemini://", Host/binary, ":",
             Port/binary, Path/binary, "\r\n">>,
     Transport:send(Socket, Msg),
@@ -186,9 +194,7 @@ respond(Transport, Socket, State, {redirect, Path}) ->
 % data, rendering the buffer redundant.
 -spec handle_request(binary(), state()) -> {binary(), any()}.
 handle_request(Payload, #state{buffer=Buffer,
-                               hostname=Hostname,
-                               port=Port,
-                               docroot=Docroot}) ->
+                               config=Config}) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
     case binary:split(AllInput, <<"\r\n">>) of
         [S] when size(S) > 4000 ->
@@ -196,7 +202,7 @@ handle_request(Payload, #state{buffer=Buffer,
         [_] ->
             {AllInput, none};
         [Line, Rest] ->
-            R = handle_line(Line, Hostname, Port, Docroot),
+            R = handle_line(Line, Config),
             {Rest, R};
         _ ->
             lager:warning("Shouldn't get here"),
@@ -204,13 +210,13 @@ handle_request(Payload, #state{buffer=Buffer,
     end.
 
 
--spec handle_line(binary(), binary(), binary(), string())
+-spec handle_line(binary(), server_config())
                  -> gemini_response().
-handle_line(Cmd, _Host, _Port, _Docroot) when is_binary(Cmd),
-                                              size(Cmd) > 1024 ->
+handle_line(Cmd, _Config) when is_binary(Cmd),
+                               size(Cmd) > 1024 ->
     {error_code, request_too_long};
 
-handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
+handle_line(Cmd, Config) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^"
                           ++ "\([a-z0-9]+:\)?//"
                           ++ "\([^/:]+\)"
@@ -223,7 +229,7 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
     case Match of
         {match, [_All|Matches]} ->
             %lager:info("Matches: ~p", [Matches]),
-            handle_url(Matches, Host, Port, Docroot);
+            handle_url(Matches, Config);
         nomatch ->
             {ok, Re2} = re:compile("^"
                                    ++ "\([a-z0-9]+:\)?//"
@@ -235,39 +241,42 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
             case Match2 of
                 {match, [_All|[Scheme, ReqHost, ReqPort]]} ->
                     handle_url([Scheme, ReqHost, ReqPort, <<"/">>],
-                               Host, Port, Docroot);
+                               Config);
                 {match, [_All|[Scheme, ReqHost]]} ->
+                    Port = Config#server_config.port,
                     handle_url([Scheme, ReqHost, <<":", Port/binary>>, <<"">>],
-                               Host, Port, Docroot);
+                               Config);
                 nomatch -> {error_code, request_not_parsed}
             end
     end.
 
 
--spec handle_url([any()], binary(), binary(), string()) -> gemini_response().
-handle_url([<<"gopher:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
+-spec handle_url([any()], server_config()) -> gemini_response().
+handle_url([<<"gopher:">>, _ReqHost, _ReqPort, _Path], _Config)
 ->
     {error_code, proxy_refused};
 
-handle_url([<<"https:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
+handle_url([<<"https:">>, _ReqHost, _ReqPort, _Path], _Config)
 ->
     {error_code, proxy_refused};
 
-handle_url([<<"http:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
+handle_url([<<"http:">>, _ReqHost, _ReqPort, _Path], _Config)
 ->
     {error_code, proxy_refused};
 
-handle_url([?PROTO, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
+handle_url([?PROTO, ReqHost, ReqPort, Path],
+           #server_config{hostname=Host, port=Port, docroot=Docroot}) ->
     handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot);
 
-handle_url([?EMPTY_BUF, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
+handle_url([?EMPTY_BUF, ReqHost, ReqPort, Path],
+           #server_config{hostname=Host, port=Port, docroot=Docroot}) ->
     handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot);
 
-handle_url([Proto, ReqHost, ReqPort, Path], _Host, _Port, _Docroot) ->
+handle_url([Proto, ReqHost, ReqPort, Path], _Config) ->
     lager:info("unrec: ~p", [{Proto, ReqHost, ReqPort, Path}]),
     {error_code, unrecognised_protocol};
 
-handle_url(_, _Host, _Port, _Docroot) ->
+handle_url(_, _Config) ->
     {error_code, request_not_understood}.
 
 -spec handle_gemini_url(binary(), binary(), binary(), binary(), bitstring(),
@@ -352,7 +361,8 @@ handle_line_test_data() ->
 
 handle_line_test_() ->
     [ ?_assertEqual(Expected, handle_line(TestInput,
-                                          <<"this.host.dev">>,
-                                          <<"1965">>,
-                                          "/bin")) ||
+                                          #server_config{
+                                             hostname= <<"this.host.dev">>,
+                                             port= <<"1965">>,
+                                             docroot="/bin"})) ||
         {Expected, TestInput} <- handle_line_test_data() ].
