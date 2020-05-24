@@ -37,7 +37,7 @@
 
 -type state() :: #state{}.
 -type gemini_response() :: {'file', binary(), binary()}
-                         | {'error', integer(), binary()}
+                         | {'error_code', integer(), binary()}
                          | {'redirect', binary()}.
 
 %%% FIXME: This function is never called. We only define it so that
@@ -83,7 +83,7 @@ handle_info({ssl, Socket, Payload}, State) ->
         try handle_request(Payload, State) of
             Result -> Result
         catch
-            _ -> {<<"">>, {error, 40, "Internal Server Error"}}
+            _ -> {<<"">>, {error_code, 40, "Internal Server Error"}}
         end,
     NewState = State#state{buffer=Buffer},
     Transport = State#state.transport,
@@ -132,7 +132,7 @@ respond(Transport, Socket, _State, {file, MimeType, Filename}) ->
     Transport:sendfile(Socket, Filename),
     finished;
 
-respond(Transport, Socket, _State, {error, Code, Explanation}) ->
+respond(Transport, Socket, _State, {error_code, Code, Explanation}) ->
     {ok, Msg} = format_error(Code, Explanation),
     Transport:send(Socket, Msg),
     finished;
@@ -168,7 +168,7 @@ handle_request(Payload, #state{buffer=Buffer,
                  -> gemini_response().
 handle_line(Cmd, _Host, _Port, _Docroot) when is_binary(Cmd),
                                               size(Cmd) > 1024 ->
-    {error, 59, <<"Request too long">>};
+    {error_code, 59, <<"Request too long">>};
 
 handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^"
@@ -199,7 +199,7 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
                 {match, [_All|[Scheme, ReqHost]]} ->
                     handle_url([Scheme, ReqHost, <<":", Port/binary>>, <<"">>],
                                Host, Port, Docroot);
-                nomatch -> {error, 59, <<"Request not parsed">>}
+                nomatch -> {error_code, 59, <<"Request not parsed">>}
             end
     end.
 
@@ -207,15 +207,15 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
 -spec handle_url([any()], binary(), binary(), string()) -> gemini_response().
 handle_url([<<"gopher:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
-    {error, 53, <<"Proxy request refused">>};
+    {error_code, 53, <<"Proxy request refused">>};
 
 handle_url([<<"https:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
-    {error, 53, <<"Proxy request refused">>};
+    {error_code, 53, <<"Proxy request refused">>};
 
 handle_url([<<"http:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
-    {error, 53, <<"Proxy request refused">>};
+    {error_code, 53, <<"Proxy request refused">>};
 
 handle_url([?PROTO, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
     handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot);
@@ -225,10 +225,10 @@ handle_url([?EMPTY_BUF, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
 
 handle_url([Proto, ReqHost, ReqPort, Path], _Host, _Port, _Docroot) ->
     lager:info("unrec: ~p", [{Proto, ReqHost, ReqPort, Path}]),
-    {error, 59, <<"Protocol not recognised">>};
+    {error_code, 59, <<"Protocol not recognised">>};
 
 handle_url(_, _Host, _Port, _Docroot) ->
-    {error, 59, <<"Request not understood">>}.
+    {error_code, 59, <<"Request not understood">>}.
 
 -spec handle_gemini_url(binary(), binary(), binary(), binary(), bitstring(),
                         string()) -> gemini_response().
@@ -237,9 +237,9 @@ handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
     case {ReqHost, ReqPort} of
         {Host, <<>>}      -> handle_file(Path, Docroot);
         {Host, MatchPort} -> handle_file(Path, Docroot);
-        {_,    MatchPort} -> {error, 53, <<"Host not recognised">>};
-        {Host, _}         -> {error, 53, <<"Port not recognised">>};
-        _                 -> {error, 53, <<"Host not recognised">>}
+        {_,    MatchPort} -> {error_code, 53, <<"Host not recognised">>};
+        {Host, _}         -> {error_code, 53, <<"Port not recognised">>};
+        _                 -> {error_code, 53, <<"Host not recognised">>}
     end.
 
 
@@ -247,12 +247,12 @@ handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
     Recoded = unicode:characters_to_binary(<<Path/binary>>, utf8),
     case Recoded of
-        {error, _, _}      -> {error, 59, <<"Bad unicode in request">>};
-        {incomplete, _, _} -> {error, 59, <<"Bad unicode in request">>};
+        {error, _, _}      -> {error_code, 59, <<"Bad unicode in request">>};
+        {incomplete, _, _} -> {error_code, 59, <<"Bad unicode in request">>};
         _ ->
             case string:split(Path, "..") of
                 [_] -> serve_file(Path, Docroot);
-                [_, _] -> {error, 59, <<"Illegal filename">>}
+                [_, _] -> {error_code, 59, <<"Illegal filename">>}
             end
     end.
 
@@ -269,7 +269,7 @@ serve_file(Path, Docroot) ->
             MimeType = mime_type(Full),
             {file, MimeType, Full};
         _ ->
-            {error, 51, <<"File not found">>}
+            {error_code, 51, <<"File not found">>}
     end.
 
 
