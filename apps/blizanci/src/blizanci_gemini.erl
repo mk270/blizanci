@@ -26,6 +26,7 @@
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini:">>).
 -define(INDEX, "index.gemini").
+-define(TIMEOUT_MS, 10000).
 
 -record(state,
         {socket    :: inet:socket(),
@@ -80,6 +81,7 @@ init(Ref, Socket, Transport, Opts) ->
                hostname=Hostname,
                port=Port,
                docroot=proplists:get_value(docroot, Opts)},
+    erlang:send_after(?TIMEOUT_MS, self(), timeout),
     gen_server:enter_loop(?MODULE, [], State).
 
 
