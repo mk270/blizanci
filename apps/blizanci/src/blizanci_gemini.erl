@@ -179,7 +179,7 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
             handle_url(Matches, Host, Port, Docroot);
         nomatch ->
             {ok, Re2} = re:compile("^"
-                                   ++ "\([a-z0-9]+://\)?"
+                                   ++ "\([a-z0-9]+:\)?//"
                                    ++ "\([^/:]+\)"
                                    ++ "\(:[0-9]+\)?"
                                    ++ "$"
@@ -190,7 +190,7 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
                     handle_url([Scheme, ReqHost, ReqPort, <<"/">>],
                                Host, Port, Docroot);
                 {match, [_All|[Scheme, ReqHost]]} -> 
-                    handle_url([Scheme, ReqHost, Port, <<"">>],
+                    handle_url([Scheme, ReqHost, <<":", Port/binary>>, <<"">>],
                                Host, Port, Docroot);
                 nomatch -> invalid_request(<<"Request not parsed">>)
             end
@@ -198,16 +198,6 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
 
 
 -spec handle_url([any()], binary(), integer(), string()) -> gemini_response().
-handle_url([?PROTO, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
-    MatchPort = <<":", Port/binary>>,
-    case {ReqHost, ReqPort} of
-        {Host, <<>>}      -> handle_file(Path, Docroot);
-        {Host, MatchPort} -> handle_file(Path, Docroot);
-        {_,    MatchPort} -> {error, 53, <<"Host not recognised">>};
-        {Host, _}         -> {error, 53, <<"Port not recognised">>};
-        _                 -> {error, 53, <<"Host not recognised">>}
-    end;
-
 handle_url([<<"gopher:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
     {error, 53, <<"Proxy request refused">>};
@@ -220,12 +210,30 @@ handle_url([<<"http:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
     {error, 53, <<"Proxy request refused">>};
 
-handle_url([_Proto, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot) ->
+handle_url([?PROTO, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
+    handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot);
+
+handle_url([?EMPTY_BUF, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
+    handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot);
+
+handle_url([Proto, ReqHost, ReqPort, Path], _Host, _Port, _Docroot) ->
+    lager:info("unrec: ~p", [{Proto, ReqHost, ReqPort, Path}]),
     invalid_request(<<"Protocol not recognised">>);
 
 handle_url(_, _Host, _Port, _Docroot) ->
     invalid_request(<<"Request not understood">>).
 
+
+handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
+    MatchPort = <<":", Port/binary>>,
+    case {ReqHost, ReqPort} of
+        {Host, <<>>}      -> handle_file(Path, Docroot);
+        {Host, MatchPort} -> handle_file(Path, Docroot);
+        {_,    MatchPort} -> {error, 53, <<"Host not recognised">>};
+        {Host, _}         -> {error, 53, <<"Port not recognised">>};
+        _                 -> {error, 53, <<"Host not recognised">>}
+    end.
+    
 
 -spec handle_file(binary(), string()) -> gemini_response().
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
