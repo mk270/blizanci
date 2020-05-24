@@ -62,6 +62,7 @@ gemini_status(file_not_found)         -> {51, <<"File not found">>}.
 %%
 %% API.
 %%
+
 -spec start_link(pid(), any(), any(), [any()]) -> {ok, pid()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [{Ref, Socket, Transport, Opts}]).
@@ -210,7 +211,6 @@ handle_request(Payload, #state{buffer=Buffer,
 % Take the request line which has been received in full from the client
 % and parse it for a URL. This is slightly messy due to an earlier
 % implementation having misinterpreted an ambiguity in the spec.
-
 -spec handle_line(binary(), server_config())
                  -> gemini_response().
 handle_line(Cmd, _Config) when is_binary(Cmd),
@@ -254,7 +254,6 @@ handle_line(Cmd, Config) when is_binary(Cmd) ->
 
 % Handle a request whose URL has been broken up thus:
 %   [Scheme, Hostname, Port, Path]
-
 -spec handle_url([any()], server_config()) -> gemini_response().
 handle_url([<<"gopher:">>|_], _Config) -> {error_code, proxy_refused};
 handle_url([<<"https:">> |_], _Config) -> {error_code, proxy_refused};
@@ -283,7 +282,6 @@ handle_url(_, _Config) ->
 % Handle a request which has been determined to be a Gemini URL, but not
 % necessarily one which should have come to this server (e.g., a proxy
 % request)
-
 -spec handle_gemini_url(binary(), binary(), binary(), binary(), bitstring(),
                         string()) -> gemini_response().
 handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
@@ -299,7 +297,6 @@ handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
 
 % Check that the URL requested is actually in UTF8 before interpreting
 % is as a filename.
-
 -spec handle_file(binary(), string()) -> gemini_response().
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
     Recoded = unicode:characters_to_binary(<<Path/binary>>, utf8),
@@ -315,9 +312,8 @@ handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
 
 
 % If there's a valid file requested, then get its full path, so that
-% it can be sendfile()'d back the client. If it's a directory, redirect
+% it can be sendfile()'d back to the client. If it's a directory, redirect
 % to an index file.
-
 -spec serve_file(binary(), string()) -> gemini_response().
 serve_file(Path, Docroot) ->
     Full = filename:join(Docroot, Path),
@@ -337,7 +333,6 @@ serve_file(Path, Docroot) ->
 % Look up the MIME type for a given filename. If the filename doesn't contain
 % a ".", then assume it's text/gemini. If it contains a "." but isn't in
 % the MIME types dataset, then assume it's application/octet-stream.
-
 -spec mime_type(binary()) -> binary().
 mime_type(Path) when is_binary(Path) ->
     case binary_to_list(filename:extension(Path)) of
