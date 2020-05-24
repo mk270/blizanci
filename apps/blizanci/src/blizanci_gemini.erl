@@ -238,9 +238,15 @@ handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
 
 -spec handle_file(binary(), string()) -> gemini_response().
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
-    case string:split(Path, "..") of
-        [_] -> serve_file(Path, Docroot);
-        [_, _] -> invalid_request(<<"Illegal filename">>)
+    Recoded = unicode:characters_to_binary(<<Path/binary>>, utf8),
+    case Recoded of
+        {error, _, _}      -> {error, 59, <<"Bad unicode in request">>};
+        {incomplete, _, _} -> {error, 59, <<"Bad unicode in request">>};
+        _ -> 
+            case string:split(Path, "..") of
+                [_] -> serve_file(Path, Docroot);
+                [_, _] -> invalid_request(<<"Illegal filename">>)
+            end
     end.
 
 
