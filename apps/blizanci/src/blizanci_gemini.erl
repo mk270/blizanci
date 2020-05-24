@@ -294,23 +294,22 @@ format_headers(Code, Meta) when is_integer(Code), is_binary(Meta) ->
 -spec format_error(atom()) -> {'ok', iolist()}.
 format_error(Code) when is_atom(Code) ->
     {GeminiStatus, Explanation} = error_detail(Code),
-    Status = list_to_binary(integer_to_list(GeminiStatus)),
-    {ok, [Status, " ", Explanation, "\r\n"]}.
+    Headers = format_headers(GeminiStatus, Explanation),
+    {ok, Headers}.
 
 
--spec error_detail(atom()) -> {integer(), string()}.
-error_detail(request_too_long)       -> {59, "Request too long"};
-error_detail(request_not_parsed)     -> {59, "Request not parsed"};
-error_detail(proxy_refused)          -> {53, "Proxy request refused"};
-error_detail(host_unrecognised)      -> {53, "Host unrecognised"};
-error_detail(port_unrecognised)      -> {53, "Port unrecognised"};
-error_detail(unrecognised_protocol)  -> {59, "Protocol not recognised"};
-error_detail(request_not_understood) -> {59, "Request not understood"};
-error_detail(bad_unicode)            -> {59, "Bad unicode in request"};
-error_detail(bad_filename)           -> {59, "Illegal filename"};
-error_detail(internal_server_error)  -> {40, "Internal server error"};
-error_detail(file_not_found)         -> {51, "File not found"}.
-%error_detail(_)                      -> {40, "Internal server error"}.
+-spec error_detail(atom()) -> {integer(), binary()}.
+error_detail(request_too_long)       -> {59, <<"Request too long">>};
+error_detail(request_not_parsed)     -> {59, <<"Request not parsed">>};
+error_detail(proxy_refused)          -> {53, <<"Proxy request refused">>};
+error_detail(host_unrecognised)      -> {53, <<"Host unrecognised">>};
+error_detail(port_unrecognised)      -> {53, <<"Port unrecognised">>};
+error_detail(unrecognised_protocol)  -> {59, <<"Protocol not recognised">>};
+error_detail(request_not_understood) -> {59, <<"Request not understood">>};
+error_detail(bad_unicode)            -> {59, <<"Bad unicode in request">>};
+error_detail(bad_filename)           -> {59, <<"Illegal filename">>};
+error_detail(internal_server_error)  -> {40, <<"Internal server error">>};
+error_detail(file_not_found)         -> {51, <<"File not found">>}.
     
 
 %% tests
