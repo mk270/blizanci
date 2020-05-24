@@ -79,7 +79,7 @@ handle_info(timeout, State) ->
     {stop, normal, State};
 
 handle_info({ssl, Socket, Payload}, State) ->
-    {Buffer, Response} = 
+    {Buffer, Response} =
         try handle_request(Payload, State) of
             Result -> Result
         catch
@@ -126,18 +126,18 @@ respond(_Transport, _Socket, _State, none) -> continue;
 
 respond(_Transport, _Socket, _State, hangup) -> finished;
 
-respond(Transport, Socket, _State, {file, MimeType, Filename}) -> 
+respond(Transport, Socket, _State, {file, MimeType, Filename}) ->
     Header = format_headers(20, MimeType),
     Transport:send(Socket, Header),
     Transport:sendfile(Socket, Filename),
     finished;
 
-respond(Transport, Socket, _State, {error, Code, Explanation}) -> 
+respond(Transport, Socket, _State, {error, Code, Explanation}) ->
     {ok, Msg} = format_error(Code, Explanation),
     Transport:send(Socket, Msg),
     finished;
 
-respond(Transport, Socket, State, {redirect, Path}) -> 
+respond(Transport, Socket, State, {redirect, Path}) ->
     Host = State#state.hostname,
     Port = State#state.port,
     Msg = <<"31 gemini://", Host/binary, ":",
@@ -196,7 +196,7 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
                 {match, [_All|[Scheme, ReqHost, ReqPort]]} ->
                     handle_url([Scheme, ReqHost, ReqPort, <<"/">>],
                                Host, Port, Docroot);
-                {match, [_All|[Scheme, ReqHost]]} -> 
+                {match, [_All|[Scheme, ReqHost]]} ->
                     handle_url([Scheme, ReqHost, <<":", Port/binary>>, <<"">>],
                                Host, Port, Docroot);
                 nomatch -> invalid_request(<<"Request not parsed">>)
@@ -241,7 +241,7 @@ handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
         {Host, _}         -> {error, 53, <<"Port not recognised">>};
         _                 -> {error, 53, <<"Host not recognised">>}
     end.
-    
+
 
 -spec handle_file(binary(), string()) -> gemini_response().
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
@@ -249,7 +249,7 @@ handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
     case Recoded of
         {error, _, _}      -> {error, 59, <<"Bad unicode in request">>};
         {incomplete, _, _} -> {error, 59, <<"Bad unicode in request">>};
-        _ -> 
+        _ ->
             case string:split(Path, "..") of
                 [_] -> serve_file(Path, Docroot);
                 [_, _] -> invalid_request(<<"Illegal filename">>)
