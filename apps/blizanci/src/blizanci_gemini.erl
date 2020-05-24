@@ -25,6 +25,7 @@
 
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini://">>).
+-define(INDEX, "index.gemini").
 
 -record(state,
         {socket :: inet:socket(),
@@ -36,7 +37,8 @@
 
 -type state() :: #state{}.
 -type gemini_response() :: {'file', binary(), binary()}
-                         | {'error', integer(), binary()}.
+                         | {'error', integer(), binary()}
+                         | {'redirect', binary()}.
 
 %%% FIXME: This function is never called. We only define it so that
 %% we can use the -behaviour(gen_server) attribute.
@@ -99,7 +101,15 @@ handle_info({ssl, Socket, Payload}, State) ->
                            {ok, Msg} = format_response(Code, <<"text/plain">>,
                                                        Explanation),
                            Transport:send(Socket, Msg),
-                           Transport:close(Socket)
+                           Transport:close(Socket);
+                       {redirect, Path} ->
+                           Host = State#state.hostname,
+                           Port = State#state.port,
+                           Msg = <<"31 gemini://", Host/binary, ":",
+                                   Port/binary, Path/binary, "\r\n">>,
+                           Transport:send(Socket, Msg),
+                           Transport:close(Socket),
+                           ok
                    end,
               {noreply, NewState}
     end;
@@ -222,11 +232,15 @@ handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
 -spec serve_file(binary(), string()) -> gemini_response().
 serve_file(Path, Docroot) ->
     Full = filename:join(Docroot, Path),
-    case filelib:is_regular(Full) of
-        true ->
+    % lager:info("Path: ~p", [{Docroot, Path, Full}]),
+    case {filelib:is_dir(Full), filelib:is_regular(Full)} of
+        {true, _} -> 
+            Redirect = filename:join(Path, ?INDEX),
+            {redirect, Redirect};
+        {false, true} ->
             MimeType = mime_type(Full),
             {file, MimeType, Full};
-        false ->
+        _ ->
             {error, 51, <<"File not found">>}
     end.
 
