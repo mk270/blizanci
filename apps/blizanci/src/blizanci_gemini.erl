@@ -29,8 +29,7 @@
 -define(TIMEOUT_MS, 10000).
 
 -record(state,
-        {socket    :: inet:socket(),
-         transport :: atom(),
+        {transport :: atom(),
          buffer    :: binary(),
          hostname  :: binary(),
          port      :: binary(),
@@ -75,7 +74,6 @@ init(Ref, Socket, Transport, Opts) ->
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     Port = integer_to_binary(proplists:get_value(port, Opts)),
     State = #state{
-               socket=Socket,
                transport=Transport,
                buffer=?EMPTY_BUF,
                hostname=Hostname,
