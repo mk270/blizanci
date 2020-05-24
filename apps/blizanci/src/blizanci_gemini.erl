@@ -37,7 +37,7 @@
 
 -type state() :: #state{}.
 -type gemini_response() :: {'file', binary(), binary()}
-                         | {'error_code', integer(), binary()}
+                         | {'error_code', atom()}
                          | {'redirect', binary()}.
 
 %%% FIXME: This function is never called. We only define it so that
@@ -83,7 +83,7 @@ handle_info({ssl, Socket, Payload}, State) ->
         try handle_request(Payload, State) of
             Result -> Result
         catch
-            _ -> {<<"">>, {error_code, 40, "Internal Server Error"}}
+            _ -> {<<"">>, {error_code, internal_server_error}}
         end,
     NewState = State#state{buffer=Buffer},
     Transport = State#state.transport,
@@ -132,8 +132,8 @@ respond(Transport, Socket, _State, {file, MimeType, Filename}) ->
     Transport:sendfile(Socket, Filename),
     finished;
 
-respond(Transport, Socket, _State, {error_code, Code, Explanation}) ->
-    {ok, Msg} = format_error(Code, Explanation),
+respond(Transport, Socket, _State, {error_code, Code}) ->
+    {ok, Msg} = format_error(Code),
     Transport:send(Socket, Msg),
     finished;
 
@@ -168,7 +168,7 @@ handle_request(Payload, #state{buffer=Buffer,
                  -> gemini_response().
 handle_line(Cmd, _Host, _Port, _Docroot) when is_binary(Cmd),
                                               size(Cmd) > 1024 ->
-    {error_code, 59, <<"Request too long">>};
+    {error_code, request_too_long};
 
 handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
     {ok, Re} = re:compile("^"
@@ -199,7 +199,7 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
                 {match, [_All|[Scheme, ReqHost]]} ->
                     handle_url([Scheme, ReqHost, <<":", Port/binary>>, <<"">>],
                                Host, Port, Docroot);
-                nomatch -> {error_code, 59, <<"Request not parsed">>}
+                nomatch -> {error_code, request_not_parsed}
             end
     end.
 
@@ -207,15 +207,15 @@ handle_line(Cmd, Host, Port, Docroot) when is_binary(Cmd) ->
 -spec handle_url([any()], binary(), binary(), string()) -> gemini_response().
 handle_url([<<"gopher:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
-    {error_code, 53, <<"Proxy request refused">>};
+    {error_code, proxy_refused};
 
 handle_url([<<"https:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
-    {error_code, 53, <<"Proxy request refused">>};
+    {error_code, proxy_refused};
 
 handle_url([<<"http:">>, _ReqHost, _ReqPort, _Path], _Host, _Port, _Docroot)
 ->
-    {error_code, 53, <<"Proxy request refused">>};
+    {error_code, proxy_refused};
 
 handle_url([?PROTO, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
     handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot);
@@ -225,10 +225,10 @@ handle_url([?EMPTY_BUF, ReqHost, ReqPort, Path], Host, Port, Docroot) ->
 
 handle_url([Proto, ReqHost, ReqPort, Path], _Host, _Port, _Docroot) ->
     lager:info("unrec: ~p", [{Proto, ReqHost, ReqPort, Path}]),
-    {error_code, 59, <<"Protocol not recognised">>};
+    {error_code, unrecognised_protocol};
 
 handle_url(_, _Host, _Port, _Docroot) ->
-    {error_code, 59, <<"Request not understood">>}.
+    {error_code, request_not_understood}.
 
 -spec handle_gemini_url(binary(), binary(), binary(), binary(), bitstring(),
                         string()) -> gemini_response().
@@ -237,9 +237,9 @@ handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
     case {ReqHost, ReqPort} of
         {Host, <<>>}      -> handle_file(Path, Docroot);
         {Host, MatchPort} -> handle_file(Path, Docroot);
-        {_,    MatchPort} -> {error_code, 53, <<"Host not recognised">>};
-        {Host, _}         -> {error_code, 53, <<"Port not recognised">>};
-        _                 -> {error_code, 53, <<"Host not recognised">>}
+        {_,    MatchPort} -> {error_code, host_unrecognised};
+        {Host, _}         -> {error_code, port_unrecognised};
+        _                 -> {error_code, host_unrecognised}
     end.
 
 
@@ -247,12 +247,12 @@ handle_gemini_url(ReqHost, ReqPort, Path, Host, Port, Docroot) ->
 handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
     Recoded = unicode:characters_to_binary(<<Path/binary>>, utf8),
     case Recoded of
-        {error, _, _}      -> {error_code, 59, <<"Bad unicode in request">>};
-        {incomplete, _, _} -> {error_code, 59, <<"Bad unicode in request">>};
+        {error, _, _}      -> {error_code, bad_unicode};
+        {incomplete, _, _} -> {error_code, bad_unicode};
         _ ->
             case string:split(Path, "..") of
                 [_] -> serve_file(Path, Docroot);
-                [_, _] -> {error_code, 59, <<"Illegal filename">>}
+                [_, _] -> {error_code, bad_filename}
             end
     end.
 
@@ -269,7 +269,7 @@ serve_file(Path, Docroot) ->
             MimeType = mime_type(Full),
             {file, MimeType, Full};
         _ ->
-            {error_code, 51, <<"File not found">>}
+            {error_code, file_not_found}
     end.
 
 
@@ -291,12 +291,27 @@ format_headers(Code, Meta) when is_integer(Code), is_binary(Meta) ->
     [Status, <<" ">>, Meta, <<"\r\n">>].
 
 
--spec format_error(integer(), binary()) -> {'ok', iolist()}.
-format_error(Code, Explanation) when is_integer(Code),
-                                     is_binary(Explanation) ->
-    Status = list_to_binary(integer_to_list(Code)),
-    {ok, [Status, <<" ", Explanation/binary>>]}.
+-spec format_error(atom()) -> {'ok', iolist()}.
+format_error(Code) when is_atom(Code) ->
+    {GeminiStatus, Explanation} = error_detail(Code),
+    Status = list_to_binary(integer_to_list(GeminiStatus)),
+    {ok, [Status, " ", Explanation, "\r\n"]}.
 
+
+-spec error_detail(atom()) -> {integer(), string()}.
+error_detail(request_too_long)       -> {59, "Request too long"};
+error_detail(request_not_parsed)     -> {59, "Request not parsed"};
+error_detail(proxy_refused)          -> {53, "Proxy request refused"};
+error_detail(host_unrecognised)      -> {53, "Host unrecognised"};
+error_detail(port_unrecognised)      -> {53, "Port unrecognised"};
+error_detail(unrecognised_protocol)  -> {59, "Protocol not recognised"};
+error_detail(request_not_understood) -> {59, "Request not understood"};
+error_detail(bad_unicode)            -> {59, "Bad unicode in request"};
+error_detail(bad_filename)           -> {59, "Illegal filename"};
+error_detail(internal_server_error)  -> {40, "Internal server error"};
+error_detail(file_not_found)         -> {51, "File not found"}.
+%error_detail(_)                      -> {40, "Internal server error"}.
+    
 
 %% tests
 
