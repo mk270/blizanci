@@ -7,11 +7,13 @@
 
 -module(blizanci_gemini).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("public_key/include/public_key.hrl").
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
 
 %% API.
 -export([start_link/4]).
+-export([verify_cert/3]).
 
 -export([init/1]).
 -export([handle_call/3]).
@@ -35,9 +37,10 @@
 -type server_config() :: #server_config{}.
 
 -record(state,
-        {transport :: atom(),
-         buffer    :: binary(),
-         config    :: server_config()}).
+        {transport   :: atom(),
+         buffer      :: binary(),
+         config      :: server_config(),
+         client_cert :: term()}).
 -type state() :: #state{}.
 
 -type gemini_response() :: {'file', binary(), binary()}
@@ -68,11 +71,28 @@ gemini_status(permanent_redirect)     -> {31, <<"Moved permanently">>}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [{Ref, Socket, Transport, Opts}]).
 
+
+-spec verify_cert(
+        OtpCert :: #'OTPCertificate'{},
+        Event :: {'bad_cert', Reason :: atom() | {'revoked', atom()}} |
+                 {'extension', #'Extension'{}} |
+                 'valid' |
+                 'valid_peer',
+        InitialUserState :: term()
+       ) -> {'valid', UserState :: term()} |
+            {'fail', Reason :: term()} |
+            {'unknown', UserState :: term()}.
+verify_cert(_Cert, _Event, _InitialUserState) ->
+    {valid, unknown_user}.
+
+
 -spec init({pid(), any(), any(), [any()]}) -> {ok, pid()}.
 init({Ref, Socket, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
     ok = activate(Transport, Socket),
+    PC = ssl:peercert(Socket),
+    report_peercert(PC),
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     Port = integer_to_binary(proplists:get_value(port, Opts)),
     Docroot = proplists:get_value(docroot, Opts),
@@ -83,7 +103,8 @@ init({Ref, Socket, Transport, Opts}) ->
     State = #state{
                transport=Transport,
                buffer=?EMPTY_BUF,
-               config=Config},
+               config=Config,
+               client_cert=PC},
     erlang:send_after(?TIMEOUT_MS, self(), timeout),
     gen_server:enter_loop(?MODULE, [], State).
 
@@ -358,17 +379,58 @@ format_error(Code) when is_atom(Code) ->
     {ok, Headers}.
 
 
--spec construct_local_url(server_config(), binary()) -> iolist().
+-spec construct_local_url(server_config(), binary()) -> binary().
 construct_local_url(Config, Path) ->
     construct_url(?PROTO,
                   Config#server_config.hostname,
                   Config#server_config.port,
                   Path).
 
--spec construct_url(binary(), binary(), binary(), binary()) -> iolist().
+-spec construct_url(binary(), binary(), binary(), binary()) -> binary().
 construct_url(Scheme, Hostname, Port, Path) ->
     <<Scheme/binary, "//", Hostname/binary, ":", Port/binary, Path/binary>>.
 
+
+report_peercert({error, no_peercert}) ->
+    lager:info("No peer cert");
+
+report_peercert({ok, Cert}) ->
+    Res = public_key:pkix_decode_cert(Cert, otp),
+    {Issuer, Subject} = cert_rdns(Res),
+    %lager:info("RDNs: ~p ~p", [Issuer, Subject]),
+    dump_rdn(Issuer),
+    lager:info("RDN: ~p", [dump_rdn(Subject)]).
+
+cert_rdns(Cert) ->
+    {'OTPCertificate', Data, _, _} = Cert,
+    {'OTPTBSCertificate',
+     _Version,
+     _Serial,
+     _Signature,
+     IssuerRDN,
+     _Validity,
+     SubjectRDN,
+     _PubKey,
+     _,
+     _,
+     _} = Data,
+    {IssuerRDN, SubjectRDN}.
+
+dump_rdn({rdnSequence, Data}) ->
+    {ok, [ {oid_alias(Oid), munge_utf8(Value) } ||
+        [{'AttributeTypeAndValue', Oid, Value}] <- Data ]
+    };
+dump_rdn(_X) ->
+    {error, rdn_parse_failure}.
+
+munge_utf8(S) when is_list(S)                 -> list_to_binary(S);
+munge_utf8({utf8String, B}) when is_binary(B) -> B.
+
+oid_alias({2,5,4,3}) -> common_name;
+oid_alias({2,5,4,6}) -> country;
+oid_alias({2,5,4,8}) -> location;
+oid_alias({2,5,4,10}) -> organisation;
+oid_alias(_) -> unknown.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Tests.

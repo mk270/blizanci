@@ -19,10 +19,15 @@ start(_StartType, _StartArgs) ->
     {ok, Hostname} = application:get_env(hostname),
     {ok, Docroot} = application:get_env(docroot),
     {ok, Port} = application:get_env(port),
+    VerifyFn = fun (ClientCert, Ev, Init) ->
+                   blizanci_gemini:verify_cert(ClientCert, Ev, Init) end,
     SSL_Opts =
         [{port, Port},
          {certfile, Cert},
-         {keyfile, Key}
+         {keyfile, Key},
+         {verify, verify_peer},
+         {cacertfile, "/dev/null"},
+         {verify_fun, {VerifyFn, []}}
         ],
     Proto_Opts =
         [{hostname, Hostname},
