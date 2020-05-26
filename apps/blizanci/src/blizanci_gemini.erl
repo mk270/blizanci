@@ -172,7 +172,7 @@ handle_info({ssl, Socket, Payload}, State) ->
     Transport = State#state.transport,
 
     case activate(Transport, Socket) of
-        ok -> case respond(State, Response) of
+        ok -> case respond(Response, State) of
                   continue -> {noreply, NewState};
                   finished -> Transport:close(Socket),
                               {noreply, NewState};
@@ -202,7 +202,7 @@ handle_info({'DOWN', OsPid, process, Pid, _Status}, State) ->
     {ExpectedPid, ExpectedOsPid, Buffer} = State#state.cgi_proc,
     ExpectedPid = Pid,
     ExpectedOsPid = OsPid,
-    respond(State, {cgi_output, Buffer}),
+    respond({cgi_output, Buffer}, State),
     {stop, normal, State};
 
 handle_info({stdout, OsPid, Msg}, State) ->
@@ -249,37 +249,36 @@ activate(Transport, Socket) ->
 % Send a response back to the client, generally closing the connection
 % if it is finished. If the client hasn't managed to send a whole request,
 % do nothing.
--spec respond(state(), gemini_response())
-             -> gemini_session().
-respond(_State, none) ->
+-spec respond(gemini_response(), state()) -> gemini_session().
+respond(none, _State) ->
     % don't hang up where only part of the URL + CRLF has been received
     continue;
 
-respond(_State, {init_cgi, Pid, OsPid}) ->
+respond({init_cgi, Pid, OsPid}, _State) ->
     {expect_cgi, Pid, OsPid};
 
-respond(#state{transport=Transport, socket=Socket}, {cgi_output, Msg}) ->
+respond({cgi_output, Msg}, #state{transport=Transport, socket=Socket}) ->
     Header = format_headers(20, <<"text/plain">>),
     Transport:send(Socket, [Header, Msg]),
     Transport:close(Socket),
     finished;
 
-respond(_State, hangup) ->
+respond(hangup, _State) ->
     finished;
 
-respond(#state{transport=Transport, socket=Socket},
-        {file, MimeType, Filename}) ->
+respond({file, MimeType, Filename},
+        #state{transport=Transport, socket=Socket}) ->
     Header = format_headers(20, MimeType),
     Transport:send(Socket, Header),
     Transport:sendfile(Socket, Filename),
     finished;
 
-respond(#state{transport=Transport, socket=Socket}, {error_code, Code}) ->
+respond({error_code, Code}, #state{transport=Transport, socket=Socket}) ->
     {ok, Msg} = format_error(Code),
     Transport:send(Socket, Msg),
     finished;
 
-respond(State=#state{transport=Transport, socket=Socket}, {redirect, Path}) ->
+respond({redirect, Path}, State=#state{transport=Transport, socket=Socket}) ->
     Config = State#state.config,
     Meta = construct_local_url(Config, Path),
     {Code, _} = gemini_status(permanent_redirect),
