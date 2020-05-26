@@ -13,9 +13,12 @@
 -define(SERVER, ?MODULE).
 
 serve(Path, Docroot) ->
-    lager:info("Should have run: ~p ~p", [Path, Docroot]),
-    Cmd = ["/usr/bin/env"],
+    Bin = filename:join([Docroot, "..", "cgi-bin", Path]),
+    Cmd = [binary_to_list(Bin)],
+    Env = [{"GATEWAY", "CGI"}],
+    lager:info("trying to execute ~p with ~p", [Bin, Env]),
     {ok, Pid, OsPid} = exec:run(Cmd, [monitor,
+                                      {env, Env},
                                       stdout,
                                       stderr]),
     {init_cgi, Pid, OsPid}.
