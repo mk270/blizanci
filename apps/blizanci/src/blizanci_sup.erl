@@ -44,11 +44,5 @@ init([]) ->
               shutdown => 5000,
               type => worker,
               modules => [blizanci_mimetypes]},
-    Chil2 = #{id => blizanci_cgi,
-              start => {blizanci_cgi, start_link, []},
-              restart => permanent,
-              shutdown => 5000,
-              type => worker,
-              modules => [blizanci_cgi]},
 
-    {ok, {SupFlags, [Child, Chil2]}}.
+    {ok, {SupFlags, [Child]}}.

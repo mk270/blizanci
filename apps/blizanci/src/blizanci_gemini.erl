@@ -67,6 +67,8 @@
 -define(TIMEOUT_MS, 10000).
 -define(MAX_REQUEST_BYTES, 4000).
 
+-type cgi_status() :: {pid(), integer(), binary()} | no_cgi.
+
 -record(server_config,
         {hostname  :: binary(),
         port       :: integer(),
@@ -75,15 +77,25 @@
 
 -record(state,
         {transport   :: atom(),
+         socket      :: inet:socket(),
          buffer      :: binary(),
          config      :: server_config(),
+         requested   :: boolean(),
+         cgi_proc    :: cgi_status(),
          client_cert :: term()}).
 -type state() :: #state{}.
 
 -type gemini_response() :: {'file', binary(), binary()}
                          | {'error_code', atom()}
                          | {'redirect', binary()}
-                         | hangup.
+                         | hangup
+                         | none
+                         | {'init_cgi', pid(), integer()}
+                         | {'cgi_output', binary()}.
+
+-type gemini_session() :: continue
+                        | finished 
+                        | {'expect_cgi', pid(), integer()}.
 
 -spec gemini_status(atom()) -> {integer(), binary()}.
 gemini_status(request_too_long)       -> {59, <<"Request too long">>};
@@ -95,7 +107,6 @@ gemini_status(unrecognised_protocol)  -> {59, <<"Protocol not recognised">>};
 gemini_status(bad_unicode)            -> {59, <<"Bad unicode in request">>};
 gemini_status(bad_filename)           -> {59, <<"Illegal filename">>};
 gemini_status(bad_hostname)           -> {59, <<"Illegal hostname">>};
-gemini_status(not_implemented)        -> {40, <<"Not implemented">>};
 gemini_status(internal_server_error)  -> {40, <<"Internal server error">>};
 gemini_status(file_not_found)         -> {51, <<"File not found">>};
 gemini_status(permanent_redirect)     -> {31, <<"Moved permanently">>}.
@@ -140,8 +151,11 @@ init({Ref, Socket, Transport, Opts}) ->
                 docroot=Docroot},
     State = #state{
                transport=Transport,
+               socket=Socket,
                buffer=?EMPTY_BUF,
                config=Config,
+               requested=false,
+               cgi_proc=no_cgi,
                client_cert=PC},
     erlang:send_after(?TIMEOUT_MS, self(), timeout),
     gen_server:enter_loop(?MODULE, [], State).
@@ -161,7 +175,10 @@ handle_info({ssl, Socket, Payload}, State) ->
         ok -> case respond(Transport, Socket, State, Response) of
                   continue -> {noreply, NewState};
                   finished -> Transport:close(Socket),
-                              {noreply, NewState}
+                              {noreply, NewState};
+                  {expect_cgi, Pid, OsPid} ->
+                      NewerState = NewState#state{cgi_proc={Pid, OsPid, <<>>}},
+                      {noreply, NewerState}
               end;
         {error, closed} ->
             {stop, normal, State};
@@ -180,6 +197,27 @@ handle_info(timeout, State) ->
 
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
+
+handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
+    {ExpectedPid, ExpectedOsPid, Buffer} = State#state.cgi_proc,
+    ExpectedPid = Pid,
+    ExpectedOsPid = OsPid,
+    lager:info("CGI finished ~p", [Status]),
+    respond(State#state.transport, State#state.socket, State,
+            {cgi_output, Buffer}),
+    {stop, normal, State};
+
+handle_info({stdout, OsPid, Msg}, State) ->
+    {ExpectedPid, ExpectedOsPid, Buffer} = State#state.cgi_proc,
+    ExpectedOsPid = OsPid,
+    NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
+    NewState = State#state{cgi_proc={ExpectedPid, ExpectedOsPid, NewBuffer}},
+    lager:info("got some stdout"),
+    {noreply, NewState};
+
+handle_info({stderr, _OsPid, Msg}, State) ->
+    lager:info("got errmsg ~p", [Msg]),
+    {noreply, State};
 
 handle_info(Msg, State) ->
     lager:debug("Received unrecognised message: ~p~n", [Msg]),
@@ -215,10 +253,20 @@ activate(Transport, Socket) ->
 % if it is finished. If the client hasn't managed to send a whole request,
 % do nothing.
 -spec respond(atom(), inet:socket(), state(), gemini_response())
-             -> 'continue' | 'finished'.
+             -> gemini_session().
 respond(_Transport, _Socket, _State, none) ->
     % don't hang up where only part of the URL + CRLF has been received
     continue;
+
+respond(_Transport, _Socket, _State, {init_cgi, Pid, OsPid}) ->
+    lager:info("expecting cgi result ~p ~p", [Pid, OsPid]),
+    {expect_cgi, Pid, OsPid};
+
+respond(Transport, Socket, _State, {cgi_output, Msg}) ->
+    Header = format_headers(20, <<"text/plain">>),
+    Transport:send(Socket, [Header, Msg]),
+    Transport:close(Socket),
+    finished;
 
 respond(_Transport, _Socket, _State, hangup) ->
     finished;
@@ -250,7 +298,7 @@ respond(Transport, Socket, State, {redirect, Path}) ->
 % is of course that the CRLF appears the first time we ever receive
 % data, rendering the buffer redundant.
 -spec handle_request(binary(), state())
-                    -> {binary(), 'none' | gemini_response()}.
+                    -> {binary(), gemini_response()}.
 handle_request(Payload, #state{buffer=Buffer,
                                config=Config}) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
