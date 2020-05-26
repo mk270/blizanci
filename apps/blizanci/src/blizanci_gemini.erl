@@ -198,11 +198,10 @@ handle_info(timeout, State) ->
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
-handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
+handle_info({'DOWN', OsPid, process, Pid, _Status}, State) ->
     {ExpectedPid, ExpectedOsPid, Buffer} = State#state.cgi_proc,
     ExpectedPid = Pid,
     ExpectedOsPid = OsPid,
-    lager:info("CGI finished ~p", [Status]),
     respond(State#state.transport, State#state.socket, State,
             {cgi_output, Buffer}),
     {stop, normal, State};
@@ -212,7 +211,6 @@ handle_info({stdout, OsPid, Msg}, State) ->
     ExpectedOsPid = OsPid,
     NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
     NewState = State#state{cgi_proc={ExpectedPid, ExpectedOsPid, NewBuffer}},
-    lager:info("got some stdout"),
     {noreply, NewState};
 
 handle_info({stderr, _OsPid, Msg}, State) ->
@@ -259,7 +257,6 @@ respond(_Transport, _Socket, _State, none) ->
     continue;
 
 respond(_Transport, _Socket, _State, {init_cgi, Pid, OsPid}) ->
-    lager:info("expecting cgi result ~p ~p", [Pid, OsPid]),
     {expect_cgi, Pid, OsPid};
 
 respond(Transport, Socket, _State, {cgi_output, Msg}) ->

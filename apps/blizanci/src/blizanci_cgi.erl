@@ -16,7 +16,6 @@ serve(Path, Docroot) ->
     Bin = filename:join([Docroot, "..", "cgi-bin", Path]),
     Cmd = [binary_to_list(Bin)],
     Env = [{"GATEWAY", "CGI"}],
-    lager:info("trying to execute ~p with ~p", [Bin, Env]),
     {ok, Pid, OsPid} = exec:run(Cmd, [monitor,
                                       {env, Env},
                                       stdout,
