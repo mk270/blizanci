@@ -44,11 +44,12 @@
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
 
+-include("blizanci_types.hrl").
+
 %% API to be called by other blizanci modules
 -export([start_link/4]).
 -export([verify_cert/3]).
--export([handle_line/2]).     % temporarily enabled for testing
--export([report_peercert/1]). % temporarily enabled for testing
+-export([handle_line/3]).     % temporarily enabled for testing
 
 %% API expected by gen_server callback behaviour
 -export([init/1]).
@@ -66,36 +67,6 @@
 -define(INDEX, "index.gemini").
 -define(TIMEOUT_MS, 10000).
 -define(MAX_REQUEST_BYTES, 4000).
-
--type cgi_status() :: {pid(), integer(), binary()} | no_cgi.
-
--record(server_config,
-        {hostname  :: binary(),
-        port       :: integer(),
-        docroot    :: string()}).
--type server_config() :: #server_config{}.
-
--record(state,
-        {transport   :: atom(),
-         socket      :: inet:socket(),
-         buffer      :: binary(),
-         config      :: server_config(),
-         requested   :: boolean(),
-         cgi_proc    :: cgi_status(),
-         client_cert :: term()}).
--type state() :: #state{}.
-
--type gemini_response() :: {'file', binary(), binary()}
-                         | {'error_code', atom()}
-                         | {'redirect', binary()}
-                         | hangup
-                         | none
-                         | {'init_cgi', pid(), integer()}
-                         | {'cgi_output', binary()}.
-
--type gemini_session() :: continue
-                        | finished 
-                        | {'expect_cgi', pid(), integer()}.
 
 -spec gemini_status(atom()) -> {integer(), binary()}.
 gemini_status(request_too_long)       -> {59, <<"Request too long">>};
@@ -296,7 +267,8 @@ respond({redirect, Path}, State=#state{transport=Transport, socket=Socket}) ->
 -spec handle_request(binary(), state())
                     -> {binary(), gemini_response()}.
 handle_request(Payload, #state{buffer=Buffer,
-                               config=Config}) ->
+                               config=Config,
+                               client_cert=Cert}) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
     case binary:split(AllInput, ?CRLF) of
         [S] when size(S) > ?MAX_REQUEST_BYTES ->
@@ -304,7 +276,7 @@ handle_request(Payload, #state{buffer=Buffer,
         [_] ->
             {AllInput, none};
         [Line, Rest] ->
-            R = handle_line(Line, Config),
+            R = handle_line(Line, Config, Cert),
             {Rest, R};
         _ ->
             lager:warning("Shouldn't get here"),
@@ -314,26 +286,26 @@ handle_request(Payload, #state{buffer=Buffer,
 
 % Take the request line which has been received in full from the client
 % and check that it's valid UTF8; if so, break it down into its URL parts
--spec handle_line(binary(), server_config())
+-spec handle_line(binary(), server_config(), term())
                  -> gemini_response().
-handle_line(Cmd, _Config) when is_binary(Cmd),
-                               size(Cmd) > 1024 ->
+handle_line(Cmd, _Config, _Cert) when is_binary(Cmd),
+                                      size(Cmd) > 1024 ->
     {error_code, request_too_long};
 
-handle_line(Cmd, Config) when is_binary(Cmd) ->
+handle_line(Cmd, Config, Cert) when is_binary(Cmd) ->
     Recoded = unicode:characters_to_binary(<<Cmd/binary>>, utf8),
     case Recoded of
         {error, _, _}      -> {error_code, bad_unicode};
         {incomplete, _, _} -> {error_code, bad_unicode};
         S -> case uri_string:parse(S) of
                  {error, _, _} -> {error_code, request_not_parsed};
-                 URI -> handle_parsed_url(URI, Config)
+                 URI -> handle_parsed_url(URI, Config, Cert)
              end
     end.
 
 % Extract the parts of the URL, providing defaults where necessary
--spec handle_parsed_url(map(), server_config()) -> gemini_response().
-handle_parsed_url(URI, Config) ->
+-spec handle_parsed_url(map(), server_config(), term()) -> gemini_response().
+handle_parsed_url(URI, Config, Cert) ->
     try
         ReqHost = maps:get(host, URI, <<>>),
         Path = maps:get(path, URI, <<"/">>),
@@ -343,10 +315,13 @@ handle_parsed_url(URI, Config) ->
                       <<>> -> <<"/">>;
                       P -> P
                   end,
+        Query = maps:get(query, URI, <<>>),
         #{ scheme => Scheme,
            host => ReqHost,
            port => ReqPort,
-           path => ReqPath
+           path => ReqPath,
+           query => Query,
+           client_cert => Cert
          }
     of
         Matches -> handle_url(Matches, Config)
@@ -372,9 +347,9 @@ handle_url(URI, _Config) ->
 % necessarily one which should have come to this server (e.g., a proxy
 % request)
 -spec handle_gemini_url(map(), server_config()) -> gemini_response().
-handle_gemini_url(#{ host := Host, port := Port, path := Path},
-                  #server_config{hostname=Host, port=Port, docroot=Docroot}) ->
-    handle_path(uri_string:normalize(Path), Docroot);
+handle_gemini_url(Req=#{ host := Host, port := Port, path := Path},
+                  Config=#server_config{hostname=Host, port=Port}) ->
+    handle_path(uri_string:normalize(Path), Req, Config);
 
 handle_gemini_url(#{ host := <<>>, port := Port },
                   #server_config{port=Port}) ->
@@ -394,26 +369,29 @@ handle_gemini_url(_, _) -> {error_code, host_unrecognised}.
 
 
 % Strip leading slash(es) from URL
--spec handle_path(binary(), string()) -> gemini_response().
-handle_path(<<$/, Trailing/binary>>, Docroot) ->
-    handle_path(Trailing, Docroot);
-handle_path(Path, Docroot) ->
-    handle_file(Path, Docroot).
+-spec handle_path(binary(), map(), server_config()) -> gemini_response().
+handle_path(<<$/, Trailing/binary>>, Req, Config) ->
+    handle_path(Trailing, Req, Config);
+handle_path(Path, Req, Config) ->
+    handle_file(Path, Req, Config).
 
 
 % Deal with ".." attempts
--spec handle_file(binary(), string()) -> gemini_response().
-handle_file(Path, Docroot) when is_binary(Path), is_list(Docroot) ->
+-spec handle_file(binary(), map(), server_config()) -> gemini_response().
+handle_file(Path, Req, Config) when is_binary(Path) ->
     case string:split(Path, "..") of
-        [_] -> serve(Path, Docroot);
+        [_] -> serve(Path, Req, Config);
         [_, _] -> {error_code, bad_filename}
     end.
 
 
-serve(<<"cgi-bin/", Rest/binary>>, Docroot) ->
-    blizanci_cgi:serve(Rest, Docroot);
-serve(Path, Docroot) ->
-    serve_file(Path, Docroot).
+% Separate out CGI
+-spec serve(binary(), map(), server_config()) -> gemini_response().
+serve(<<"cgi-bin/", Rest/binary>>, Req, Config) ->
+    blizanci_cgi:serve(Rest, Req, Config);
+serve(Path, _Req, Config) ->
+    serve_file(Path, Config#server_config.docroot).
+
 
 % If there's a valid file requested, then get its full path, so that
 % it can be sendfile()'d back to the client. If it's a directory, redirect
@@ -476,21 +454,6 @@ construct_url(Scheme, Hostname, Port, Path) ->
                             path => Path }).
 
 
--spec report_peercert(term()) -> 'ok'.
-report_peercert({ok, Cert}) ->
-    Res = public_key:pkix_decode_cert(Cert, otp),
-    {_Issuer, Subject} = blizanci_x509:cert_rdns(Res),
-    lager:info("RDN: ~p", [blizanci_x509:dump_rdn(Subject)]),
-    ok;
-
-report_peercert({error, no_peercert}) ->
-    lager:info("No peer cert"),
-    ok;
-
-report_peercert(_) ->
-    lager:info("No peer cert, unknown error"),
-    ok.
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Tests.
@@ -511,5 +474,6 @@ handle_line_test_() ->
                                           #server_config{
                                              hostname= <<"this.host.dev">>,
                                              port= 1965,
-                                             docroot="/bin"})) ||
+                                             docroot="/bin"},
+                                          {error, no_peercert})) ||
         {Expected, TestInput} <- handle_line_test_data() ].

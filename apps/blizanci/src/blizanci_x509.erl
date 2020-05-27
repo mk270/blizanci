@@ -7,7 +7,31 @@
 
 -module(blizanci_x509).
 
--export([cert_rdns/1, dump_rdn/1]).
+-export([cert_rdns/1, dump_rdn/1, report_peercert/1]).
+-export([peercert_cn/1]).
+
+peercert_cn({ok, Cert}) ->
+    Res = public_key:pkix_decode_cert(Cert, otp),
+    {_, Subject} = cert_rdns(Res),
+    {ok, RDN} = dump_rdn(Subject),
+    {common_name, proplists:get_value(common_name, RDN)};
+peercert_cn(_) ->
+    error.
+
+-spec report_peercert(term()) -> 'ok'.
+report_peercert({ok, Cert}) ->
+    Res = public_key:pkix_decode_cert(Cert, otp),
+    {_Issuer, Subject} = blizanci_x509:cert_rdns(Res),
+    lager:info("RDN: ~p", [blizanci_x509:dump_rdn(Subject)]),
+    ok;
+
+report_peercert({error, no_peercert}) ->
+    lager:info("No peer cert"),
+    ok;
+
+report_peercert(_) ->
+    lager:info("No peer cert, unknown error"),
+    ok.
 
 cert_rdns(Cert) ->
     {'OTPCertificate', Data, _, _} = Cert,
