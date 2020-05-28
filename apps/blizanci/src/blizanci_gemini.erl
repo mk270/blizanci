@@ -79,6 +79,7 @@ gemini_status(bad_unicode)            -> {59, <<"Bad unicode in request">>};
 gemini_status(bad_filename)           -> {59, <<"Illegal filename">>};
 gemini_status(bad_hostname)           -> {59, <<"Illegal hostname">>};
 gemini_status(internal_server_error)  -> {40, <<"Internal server error">>};
+gemini_status(cgi_exec_error)         -> {40, <<"Gateway error">>};
 gemini_status(file_not_found)         -> {51, <<"File not found">>};
 gemini_status(permanent_redirect)     -> {31, <<"Moved permanently">>}.
 
@@ -169,11 +170,22 @@ handle_info(timeout, State) ->
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
-handle_info({'DOWN', OsPid, process, Pid, _Status}, State) ->
+handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
     {ExpectedPid, ExpectedOsPid, Buffer} = State#state.cgi_proc,
     ExpectedPid = Pid,
     ExpectedOsPid = OsPid,
-    respond({cgi_output, Buffer}, State),
+    %ExitStatus = exec:status(Status),
+    case Status of
+        normal ->
+            respond({cgi_output, Buffer}, State);
+        {exit_status, St} ->
+            RV = exec:status(St),
+            lager:info("cgi process ended with non-zero status: ~p", [RV]),
+            respond({error_code, cgi_exec_error}, State);
+        St ->
+            lager:info("cgi process terminated anomalously: ~p", [St]),
+            respond({error_code, cgi_exec_error}, State)
+    end,
     {stop, normal, State};
 
 handle_info({stdout, OsPid, Msg}, State) ->

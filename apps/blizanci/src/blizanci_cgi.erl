@@ -15,15 +15,21 @@ serve(Path, Req, #server_config{
                     hostname=Hostname,
                     port=Port,
                     docroot=Docroot}) ->
-    Bin = filename:join([Docroot, "..", "cgi-bin", Path]),
-    Cmd = [binary_to_list(Bin)],
-    Env = cgi_environment(Path, Bin, Hostname, Req, Port),
+    PathElements = [Docroot, "..", "cgi-bin", binary_to_list(Path)],
+    {ok, Cmd} = fix_path(filename:join(PathElements)),
+    Args = [Cmd],
+    Env = cgi_environment(Path, Cmd, Hostname, Req, Port),
 
-    {ok, Pid, OsPid} = exec:run(Cmd, [monitor,
+    {ok, Pid, OsPid} = exec:run(Args, [monitor,
                                       {env, Env},
                                       stdout,
                                       stderr]),
     {init_cgi, Pid, OsPid}.
+
+fix_path(S) ->
+    {ok, S2} = realpath:normalise(S),
+    {ok, S3} = realpath:canonicalise(S2),
+    {ok, S3}.
 
 cgi_environment(Path, Bin, Hostname, Req, Port) ->
     Env0 = make_environment(Path, Bin, Hostname, Req, Port),
