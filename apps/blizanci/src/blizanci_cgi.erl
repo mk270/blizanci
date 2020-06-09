@@ -21,14 +21,19 @@ serve(Path, Req, #server_config{
     % this is a belt-and-braces check; URLs with ".." in them are current
     % forbidden anyway
     true = path_under_root(Cmd, CGIRoot),
-    Args = [Cmd],
-    Env = cgi_environment(Path, Cmd, Hostname, Req, Port),
 
-    {ok, Pid, OsPid} = exec:run(Args, [monitor,
-                                      {env, Env},
-                                      stdout,
-                                      stderr]),
-    {init_cgi, Pid, OsPid}.
+    case filelib:is_file(Cmd) of
+        false -> {error_code, file_not_found};
+        true ->
+            Args = [Cmd],
+            Env = cgi_environment(Path, Cmd, Hostname, Req, Port),
+
+            {ok, Pid, OsPid} = exec:run(Args, [monitor,
+                                               {env, Env},
+                                               stdout,
+                                               stderr]),
+            {init_cgi, Pid, OsPid}
+    end.
 
 fix_path(S) ->
     {ok, S2} = realpath:normalise(S),
