@@ -18,6 +18,7 @@ start(_StartType, _StartArgs) ->
     {ok, Key} = application:get_env(keyfile),
     {ok, Hostname} = application:get_env(hostname),
     {ok, Docroot} = application:get_env(docroot),
+    {ok, CGIroot} = application:get_env(cgiroot),
     {ok, Port} = application:get_env(port),
     VerifyFn = fun (ClientCert, Ev, Init) ->
                    blizanci_gemini:verify_cert(ClientCert, Ev, Init) end,
@@ -32,7 +33,9 @@ start(_StartType, _StartArgs) ->
     Proto_Opts =
         [{hostname, Hostname},
          {docroot, Docroot},
-         {port, Port}],
+         {cgiroot, CGIroot},
+         {port, Port}
+        ],
     {ok, Listener} = ranch:start_listener(blizanci_service_ssl,
                                           ranch_ssl, SSL_Opts,
                                           blizanci_gemini, Proto_Opts),

@@ -20,3 +20,8 @@ rebar3.crashdump
 *.pem
 config/sys.config
 config/vm.args
+cgi-vars
+fresh-start
+rebar.lock
+run
+todo.org

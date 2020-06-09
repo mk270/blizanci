@@ -10,7 +10,8 @@
 -record(server_config,
         {hostname  :: binary(),
         port       :: integer(),
-        docroot    :: string()}).
+        docroot    :: string(),
+        cgiroot    :: string()}).
 -type server_config() :: #server_config{}.
 
 -record(state,
@@ -34,3 +35,5 @@
 -type gemini_session() :: continue
                         | finished 
                         | {'expect_cgi', pid(), integer()}.
+
+-type authorisation() :: public | restricted | private.

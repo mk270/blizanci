@@ -10,11 +10,18 @@
 -export([cert_rdns/1, dump_rdn/1, report_peercert/1]).
 -export([peercert_cn/1]).
 
+-spec peercert_cn(term()) -> 'error' | {'ok', map()}.
 peercert_cn({ok, Cert}) ->
     Res = public_key:pkix_decode_cert(Cert, otp),
-    {_, Subject} = cert_rdns(Res),
+    {Issuer, Subject} = cert_rdns(Res),
     {ok, RDN} = dump_rdn(Subject),
-    {common_name, proplists:get_value(common_name, RDN)};
+    {ok, RDN_Issuer} = dump_rdn(Issuer),
+    Result =
+        #{
+          common_name => proplists:get_value(common_name, RDN),
+          issuer_common_name => proplists:get_value(common_name, RDN_Issuer)
+         },
+    {ok, Result};
 peercert_cn(_) ->
     error.
 
@@ -43,9 +50,9 @@ cert_rdns(Cert) ->
      _Validity,
      SubjectRDN,
      _PubKey,
-     _,
-     _,
-     _} = Data,
+     _X1,
+     _X2,
+     _X3} = Data,
     {IssuerRDN, SubjectRDN}.
 
 dump_rdn({rdnSequence, Data}) ->

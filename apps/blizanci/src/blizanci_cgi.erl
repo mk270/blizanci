@@ -14,9 +14,13 @@
 serve(Path, Req, #server_config{
                     hostname=Hostname,
                     port=Port,
-                    docroot=Docroot}) ->
-    PathElements = [Docroot, "..", "cgi-bin", binary_to_list(Path)],
-    {ok, Cmd} = fix_path(filename:join(PathElements)),
+                    cgiroot=CGIRoot}) ->
+    PathElements  = [CGIRoot, binary_to_list(Path)],
+    {ok, Cmd}     = fix_path(filename:join(PathElements)),
+
+    % this is a belt-and-braces check; URLs with ".." in them are current
+    % forbidden anyway
+    true = path_under_root(Cmd, CGIRoot),
     Args = [Cmd],
     Env = cgi_environment(Path, Cmd, Hostname, Req, Port),
 
@@ -31,6 +35,11 @@ fix_path(S) ->
     {ok, S3} = realpath:canonicalise(S2),
     {ok, S3}.
 
+path_under_root(S, CGIRoot) ->
+    L = string:len(CGIRoot),
+    Sl = string:slice(S, 0, L),
+    Sl =:= CGIRoot.
+
 cgi_environment(Path, Bin, Hostname, Req, Port) ->
     Env0 = make_environment(Path, Bin, Hostname, Req, Port),
     sanitise(Env0).
@@ -39,10 +48,11 @@ make_environment(Path, Bin, Hostname, Req, Port) ->
     ScriptName = "/cgi-bin/" ++ binary_to_list(Path),
     #{ query := QueryString,
        client_cert := Cert } = Req,
+
     CommonName = case blizanci_x509:peercert_cn(Cert) of
-        {common_name, CN} -> CN;
-        _ -> ""
-    end,
+                     {ok, #{ common_name := CN }} -> CN;
+                     error -> ""
+                 end,
     [
      {"PATH_TRANSLATED", Bin},
      {"QUERY_STRING", QueryString},

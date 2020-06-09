@@ -69,19 +69,20 @@
 -define(MAX_REQUEST_BYTES, 4000).
 
 -spec gemini_status(atom()) -> {integer(), binary()}.
-gemini_status(request_too_long)       -> {59, <<"Request too long">>};
-gemini_status(request_not_parsed)     -> {59, <<"Request not parsed">>};
-gemini_status(proxy_refused)          -> {53, <<"Proxy request refused">>};
-gemini_status(host_unrecognised)      -> {53, <<"Host unrecognised">>};
-gemini_status(port_unrecognised)      -> {53, <<"Port unrecognised">>};
-gemini_status(unrecognised_protocol)  -> {59, <<"Protocol not recognised">>};
-gemini_status(bad_unicode)            -> {59, <<"Bad unicode in request">>};
-gemini_status(bad_filename)           -> {59, <<"Illegal filename">>};
-gemini_status(bad_hostname)           -> {59, <<"Illegal hostname">>};
-gemini_status(internal_server_error)  -> {40, <<"Internal server error">>};
-gemini_status(cgi_exec_error)         -> {40, <<"Gateway error">>};
-gemini_status(file_not_found)         -> {51, <<"File not found">>};
-gemini_status(permanent_redirect)     -> {31, <<"Moved permanently">>}.
+gemini_status(request_too_long)      -> {59, <<"Request too long">>};
+gemini_status(request_not_parsed)    -> {59, <<"Request not parsed">>};
+gemini_status(proxy_refused)         -> {53, <<"Proxy request refused">>};
+gemini_status(host_unrecognised)     -> {53, <<"Host unrecognised">>};
+gemini_status(port_unrecognised)     -> {53, <<"Port unrecognised">>};
+gemini_status(unrecognised_protocol) -> {59, <<"Protocol not recognised">>};
+gemini_status(bad_unicode)           -> {59, <<"Bad unicode in request">>};
+gemini_status(bad_filename)          -> {59, <<"Illegal filename">>};
+gemini_status(bad_hostname)          -> {59, <<"Illegal hostname">>};
+gemini_status(internal_server_error) -> {40, <<"Internal server error">>};
+gemini_status(cgi_exec_error)        -> {40, <<"Gateway error">>};
+gemini_status(file_not_found)        -> {51, <<"File not found">>};
+gemini_status(cert_required)         -> {60, <<"Client certificate required">>};
+gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -117,10 +118,12 @@ init({Ref, Socket, Transport, Opts}) ->
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     Port = proplists:get_value(port, Opts),
     Docroot = proplists:get_value(docroot, Opts),
+    CGIroot = proplists:get_value(cgiroot, Opts),
     Config = #server_config{
                 hostname=Hostname,
                 port=Port,
-                docroot=Docroot},
+                docroot=Docroot,
+                cgiroot=CGIroot},
     State = #state{
                transport=Transport,
                socket=Socket,
@@ -399,10 +402,39 @@ handle_file(Path, Req, Config) when is_binary(Path) ->
 
 % Separate out CGI
 -spec serve(binary(), map(), server_config()) -> gemini_response().
-serve(<<"cgi-bin/", Rest/binary>>, Req, Config) ->
+serve(_Pth = <<"cgi-bin/", Rest/binary>>, Req, Config) ->
     blizanci_cgi:serve(Rest, Req, Config);
-serve(Path, _Req, Config) ->
-    serve_file(Path, Config#server_config.docroot).
+serve(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
+    serve_file(Path, Req, Config#server_config.docroot, restricted);
+serve(Path = <<"private/", _Rest/binary>>, Req, Config) ->
+    serve_file(Path, Req, Config#server_config.docroot, private);
+serve(Path, Req, Config) ->
+    serve_file(Path, Req, Config#server_config.docroot, public).
+
+
+% private: certificate must be signed by a particular CA
+% restricted: certificate must be presented
+% public: no certificate requirement
+-spec serve_file(binary(), map(), string(), authorisation())
+                -> gemini_response().
+serve_file(Path, _Req, Docroot, public) ->
+    serve_file(Path, Docroot);
+serve_file(Path, Req, Docroot, Auth) ->
+    #{ client_cert := Cert } = Req,
+    CertInfo = blizanci_x509:peercert_cn(Cert),
+    serve_restricted_file(Path, Docroot, Auth, CertInfo).
+
+
+-spec serve_restricted_file(binary(), string(), authorisation(),
+                            any()) ->
+                                   gemini_response().
+serve_restricted_file(_Path, _Docroot, _Auth, error) ->
+    {error_code, cert_required};
+serve_restricted_file(Path, Docroot, Auth, {ok, CertInfo}) ->
+    #{ common_name := Subject,
+       issuer_common_name := Issuer } = CertInfo,
+    lager:info("~p object requested, peercert: ~p/~p", [Auth, Subject, Issuer]),
+    serve_file(Path, Docroot).
 
 
 % If there's a valid file requested, then get its full path, so that
@@ -486,6 +518,7 @@ handle_line_test_() ->
                                           #server_config{
                                              hostname= <<"this.host.dev">>,
                                              port= 1965,
-                                             docroot="/bin"},
+                                             docroot="/bin",
+                                             cgiroot="/cgi-bin"},
                                           {error, no_peercert})) ||
         {Expected, TestInput} <- handle_line_test_data() ].
