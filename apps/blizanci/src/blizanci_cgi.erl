@@ -49,19 +49,21 @@ make_environment(Path, Bin, Hostname, Req, Port) ->
     #{ query := QueryString,
        client_cert := Cert } = Req,
 
-    CommonName = case blizanci_x509:peercert_cn(Cert) of
-                     {ok, #{ common_name := CN }} -> CN;
-                     error -> ""
-                 end,
-    [
+    KVPs = [
      {"PATH_TRANSLATED", Bin},
      {"QUERY_STRING", QueryString},
-     {"REMOTE_USER", CommonName},
      {"SCRIPT_NAME", ScriptName},
      {"SERVER_NAME", Hostname},
      {"SERVER_PORT", Port},
      {"SERVER_PROTOCOL", "GEMINI"}
-    ].
+           ],
+
+    case blizanci_x509:peercert_cn(Cert) of
+        {ok, #{ common_name := CN }} ->
+            KVPs ++ [{"REMOTE_USER", CN}];
+        error ->
+            KVPs
+    end.
 
 sanitise(Env) ->
     [ sanitise_kv(K, V) || {K, V} <- Env ].
