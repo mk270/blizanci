@@ -74,5 +74,8 @@ sanitise_kv(Key, Value) when is_binary(Value) ->
 sanitise_kv(Key, Value) when is_integer(Value) ->
     {Key, integer_to_list(Value)};
 
+sanitise_kv(Key, undefined) ->
+    {Key, "undefined"};
+
 sanitise_kv(Key, Value) ->
     {Key, Value}.
