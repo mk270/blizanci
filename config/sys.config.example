@@ -5,5 +5,22 @@
    {hostname, "savile.no.ucant.org"},
    {docroot, "/home/mk270/Src/ucant-gemini/public_gemini"},
    {cgiroot, "/home/mk270/Src/ucant-gemini/cgi-bin"}
+   ]},
+  {lager, [
+   {log_root, "log"}
+   {extra_sinks, [
+     {blizanci_access_lager_event, [
+       {handlers, [
+         {lager_file_backend, [
+           {file, "access.log"},
+           {level, info},
+           {size, 10485760},
+           {date, "$D0"},
+           {count, 5}
+         ]}
+        ]
+       }
+     ]}
    ]}
+  ]}
 ].

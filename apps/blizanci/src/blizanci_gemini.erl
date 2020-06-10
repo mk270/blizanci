@@ -312,10 +312,12 @@ handle_line(Cmd, Config, Cert) when is_binary(Cmd) ->
     case Recoded of
         {error, _, _}      -> {error_code, bad_unicode};
         {incomplete, _, _} -> {error_code, bad_unicode};
-        S -> case uri_string:parse(S) of
-                 {error, _, _} -> {error_code, request_not_parsed};
-                 URI -> handle_parsed_url(URI, Config, Cert)
-             end
+        S ->
+            blizanci_access:info("Request: ~p", [S]),
+            case uri_string:parse(S) of
+                {error, _, _} -> {error_code, request_not_parsed};
+                URI -> handle_parsed_url(URI, Config, Cert)
+            end
     end.
 
 % Extract the parts of the URL, providing defaults where necessary
