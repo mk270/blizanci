@@ -7,7 +7,7 @@
    {cgiroot, "/home/mk270/Src/ucant-gemini/cgi-bin"}
    ]},
   {lager, [
-   {log_root, "log"}
+   {log_root, "log"},
    {extra_sinks, [
      {blizanci_access_lager_event, [
        {handlers, [
