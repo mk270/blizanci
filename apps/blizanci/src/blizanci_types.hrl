@@ -8,10 +8,10 @@
 -type cgi_status() :: {pid(), integer(), binary()} | no_cgi.
 
 -record(server_config,
-        {hostname  :: binary(),
-        port       :: integer(),
-        docroot    :: string(),
-        cgiroot    :: string()}).
+        {hostname   :: binary(),
+         port       :: integer(),
+         docroot    :: string(),
+         cgiroot    :: string()}).
 -type server_config() :: #server_config{}.
 
 -record(state,
