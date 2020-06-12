@@ -156,22 +156,22 @@ handle_info({ssl, Socket, Payload}, State) ->
                       {noreply, NewerState}
               end;
         {error, closed} ->
-            close_session(State);
+            {stop, normal, State};
         _ ->
-            close_session(State)
+            {stop, normal, State}
     end;
 
 handle_info({tcp_closed, _Socket}, State) ->
-    close_session(State);
+    {stop, normal, State};
 
 handle_info({tcp_error, _, _Reason}, State) ->
-    close_session(State);
+    {stop, normal, State};
 
 handle_info(timeout, State) ->
-    close_session(State);
+    {stop, normal, State};
 
 handle_info({ssl_closed, _SocketInfo}, State) ->
-    close_session(State);
+    {stop, normal, State};
 
 handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
     {ExpectedPid, ExpectedOsPid, Buffer} = State#state.cgi_proc,
@@ -205,7 +205,7 @@ handle_info({stderr, _OsPid, Msg}, State) ->
 
 handle_info(Msg, State) ->
     lager:debug("Received unrecognised message: ~p~n", [Msg]),
-    close_session(State).
+    {stop, normal, State}.
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -213,7 +213,9 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(Reason, State) ->
+    lager:info("Terminating: ~p", [Reason]),
+    close_session(State),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -235,8 +237,7 @@ activate(Transport, Socket) ->
 
 close_session(State) ->
     CGIProc = State#state.cgi_proc,
-    blizanci_cgi:cancel(CGIProc),
-    {stop, normal, State}.
+    blizanci_cgi:cancel(CGIProc).
 
 
 % Send a response back to the client, generally closing the connection
