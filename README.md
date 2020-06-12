@@ -1,7 +1,7 @@
 blizanci
 ========
 
-A trivial Gemini protocol server; currently pre-alpha
+A non-trivial Gemini protocol server; currently pre-alpha
 
 Config
 ------
