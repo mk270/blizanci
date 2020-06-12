@@ -189,7 +189,8 @@ handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
             lager:info("cgi process terminated anomalously: ~p", [St]),
             respond({error_code, cgi_exec_error}, State)
     end,
-    {stop, normal, State};
+    NewState = State#state{cgi_proc=no_cgi},
+    {stop, normal, NewState};
 
 handle_info({stdout, OsPid, Msg}, State) ->
     {ExpectedPid, ExpectedOsPid, Buffer} = State#state.cgi_proc,
