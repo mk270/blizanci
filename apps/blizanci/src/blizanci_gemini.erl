@@ -213,8 +213,7 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-terminate(Reason, State) ->
-    lager:info("Terminating: ~p", [Reason]),
+terminate(_Reason, State) ->
     close_session(State),
     ok.
 
