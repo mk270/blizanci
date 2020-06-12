@@ -171,6 +171,8 @@ handle_info(timeout, State) ->
     {stop, normal, State};
 
 handle_info({ssl_closed, _SocketInfo}, State) ->
+    CGIProc = State#state.cgi_proc,
+    blizanci_cgi:cancel(CGIProc),
     {stop, normal, State};
 
 handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
