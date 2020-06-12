@@ -150,7 +150,7 @@ handle_info({ssl, Socket, Payload}, State) ->
         ok -> case respond(Response, State) of
                   continue -> {noreply, NewState};
                   finished -> Transport:close(Socket),
-                              {noreply, NewState};
+                              {stop, normal, NewState};
                   {expect_cgi, Pid, OsPid} ->
                       NewerState = NewState#state{cgi_proc={Pid, OsPid, <<>>}},
                       {noreply, NewerState}
