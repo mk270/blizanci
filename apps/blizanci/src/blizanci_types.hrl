@@ -5,7 +5,8 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
--type cgi_status() :: {pid(), integer(), binary()} | no_cgi.
+-type cgi_status() :: {pid(), integer(), binary()}.
+-type cgi_proc() :: {'proc', pid()} | 'no_proc'.
 
 -record(server_config,
         {hostname   :: binary(),
@@ -20,7 +21,7 @@
          buffer      :: binary(),
          config      :: server_config(),
          requested   :: boolean(),
-         cgi_proc    :: cgi_status(),
+         cgi_proc    :: cgi_proc(),
          client_cert :: term()}).
 -type state() :: #state{}.
 
@@ -29,11 +30,11 @@
                          | {'redirect', binary()}
                          | hangup
                          | none
-                         | {'init_cgi', pid(), integer()}
+                         | {'init_cgi', pid()}
                          | {'cgi_output', binary()}.
 
 -type gemini_session() :: continue
                         | finished 
-                        | {'expect_cgi', pid(), integer()}.
+                        | {'expect_cgi', pid()}.
 
 -type authorisation() :: public | restricted | private.

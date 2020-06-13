@@ -130,7 +130,7 @@ init({Ref, Socket, Transport, Opts}) ->
                buffer=?EMPTY_BUF,
                config=Config,
                requested=false,
-               cgi_proc=no_cgi,
+               cgi_proc=no_proc,
                client_cert=PC},
     erlang:send_after(?TIMEOUT_MS, self(), timeout),
     gen_server:enter_loop(?MODULE, [], State).
@@ -151,8 +151,8 @@ handle_info({ssl, Socket, Payload}, State) ->
                   continue -> {noreply, NewState};
                   finished -> Transport:close(Socket),
                               {stop, normal, NewState};
-                  {expect_cgi, Pid, OsPid} ->
-                      NewerState = NewState#state{cgi_proc={Pid, OsPid, <<>>}},
+                  {expect_cgi, Pid} ->
+                      NewerState = NewState#state{cgi_proc={proc, Pid}},
                       {noreply, NewerState}
               end;
         {error, closed} ->
@@ -173,34 +173,8 @@ handle_info(timeout, State) ->
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
-handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
-    {ExpectedPid, ExpectedOsPid, Buffer} = State#state.cgi_proc,
-    ExpectedPid = Pid,
-    ExpectedOsPid = OsPid,
-    %ExitStatus = exec:status(Status),
-    case Status of
-        normal ->
-            respond({cgi_output, Buffer}, State);
-        {exit_status, St} ->
-            RV = exec:status(St),
-            lager:info("cgi process ended with non-zero status: ~p", [RV]),
-            respond({error_code, cgi_exec_error}, State);
-        St ->
-            lager:info("cgi process terminated anomalously: ~p", [St]),
-            respond({error_code, cgi_exec_error}, State)
-    end,
-    NewState = State#state{cgi_proc=no_cgi},
-    {stop, normal, NewState};
-
-handle_info({stdout, OsPid, Msg}, State) ->
-    {ExpectedPid, ExpectedOsPid, Buffer} = State#state.cgi_proc,
-    ExpectedOsPid = OsPid,
-    NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
-    NewState = State#state{cgi_proc={ExpectedPid, ExpectedOsPid, NewBuffer}},
-    {noreply, NewState};
-
-handle_info({stderr, _OsPid, Msg}, State) ->
-    lager:info("got errmsg ~p", [Msg]),
+handle_info({cgi_exit, Result}, State) ->
+    respond(Result, State),
     {noreply, State};
 
 handle_info(Msg, State) ->
@@ -236,7 +210,7 @@ activate(Transport, Socket) ->
 
 close_session(State) ->
     CGIProc = State#state.cgi_proc,
-    blizanci_cgi:cancel(CGIProc).
+    blizanci_servlet:cancel(CGIProc).
 
 
 % Send a response back to the client, generally closing the connection
@@ -247,8 +221,8 @@ respond(none, _State) ->
     % don't hang up where only part of the URL + CRLF has been received
     continue;
 
-respond({init_cgi, Pid, OsPid}, _State) ->
-    {expect_cgi, Pid, OsPid};
+respond({init_cgi, Pid}, _State) ->
+    {expect_cgi, Pid};
 
 respond({cgi_output, Msg}, #state{transport=Transport, socket=Socket}) ->
     Header = format_headers(20, <<"text/plain">>),
@@ -412,7 +386,8 @@ handle_file(Path, Req, Config) when is_binary(Path) ->
 % Separate out CGI
 -spec serve(binary(), map(), server_config()) -> gemini_response().
 serve(_Pth = <<"cgi-bin/", Rest/binary>>, Req, Config) ->
-    blizanci_cgi:serve(Rest, Req, Config);
+    {ok, Pid} = blizanci_servlet:start_link(Rest, Req, Config),
+    {init_cgi, Pid};
 serve(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
     serve_file(Path, Req, Config#server_config.docroot, restricted);
 serve(Path = <<"private/", _Rest/binary>>, Req, Config) ->

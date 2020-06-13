@@ -1,6 +1,6 @@
 {application, blizanci,
  [{description, "A Gemini protocol server"},
-  {vsn, "1.1.2"},
+  {vsn, "1.2.0"},
   {registered, [blizanci_mimetypes]},
   {mod, {blizanci_app, []}},
   {applications,
@@ -21,7 +21,7 @@
     }
    ]},
   {modules, [blizanci_app, blizanci_cgi, blizanci_gemini, blizanci_mimetypes,
-             blizanci_sup, blizanci_x509]},
+             blizanci_sup, blizanci_x509, blizanci_servlet]},
 
   {licenses, ["Apache 2.0"]},
   {links, []}

@@ -8,9 +8,11 @@
 -module(blizanci_cgi).
 -include("blizanci_types.hrl").
 
--export([serve/3, cancel/1]).
+-export([serve/3]).
 
--spec serve(binary(), map(), server_config()) -> gemini_response().
+-spec serve(binary(), map(), server_config()) ->
+                   {'error_code', atom()} |
+                   {'init_cgi', pid(), integer()}.
 serve(Path, Req, #server_config{
                     hostname=Hostname,
                     port=Port,
@@ -84,11 +86,3 @@ sanitise_kv(Key, undefined) ->
 
 sanitise_kv(Key, Value) ->
     {Key, Value}.
-
--spec cancel(cgi_status()) -> 'ok'.
-cancel(no_cgi) ->
-    ok;
-cancel({Pid, OsPid, _Buffer}) ->
-    exit(Pid, kill),
-    exec:kill(OsPid, 9),
-    ok.
