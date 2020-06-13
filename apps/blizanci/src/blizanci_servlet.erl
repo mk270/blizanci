@@ -113,10 +113,6 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 
-cgi_finished(Reason, State=#servlet_state{parent=Parent}) ->
-    Parent ! {cgi_exit, Reason},
-    {stop, normal, State}.
-
 -spec terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
                 State :: term()) -> any().
 terminate(_Reason, _State) ->
@@ -133,3 +129,11 @@ code_change(_OldVsn, State, _Extra) ->
                     Status :: list()) -> Status :: term().
 format_status(_Opt, Status) ->
     Status.
+
+%%%===================================================================
+%%% Internal
+%%%===================================================================
+
+cgi_finished(Reason, State=#servlet_state{parent=Parent}) ->
+    Parent ! {cgi_exit, Reason},
+    {stop, normal, State}.
