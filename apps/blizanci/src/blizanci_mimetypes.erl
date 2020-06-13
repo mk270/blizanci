@@ -34,7 +34,7 @@ lookup(MimeType) when is_binary(MimeType) ->
                       {error, Error :: term()} |
                       ignore.
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    proc_lib:start_link(?MODULE, init, [[]])
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -46,9 +46,11 @@ start_link() ->
                               {stop, Reason :: term()} |
                               ignore.
 init([]) ->
-    process_flag(trap_exit, true),
-    self() ! load,
-    {ok, #state{}}.
+    proc_lib:init_ack({ok, self()}),
+    ok = load_data(),
+    register(?SERVER, self()),
+    gen_server:enter_loop(?MODULE, [], #state{}).
+
 
 -spec handle_call(Request :: term(), From :: {pid(), term()}, State :: term()) ->
                          {reply, Reply :: term(), NewState :: term()} |
