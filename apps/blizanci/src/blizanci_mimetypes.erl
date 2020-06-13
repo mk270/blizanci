@@ -82,7 +82,7 @@ handle_cast(_Request, State) ->
                          {noreply, NewState :: term(), Timeout :: timeout()} |
                          {noreply, NewState :: term(), hibernate} |
                          {stop, Reason :: normal | term(), NewState :: term()}.
-handle_info(load, State) ->
+handle_info(reload, State) ->
     ok = load_data(),
     {noreply, State};
 handle_info(_Info, State) ->
