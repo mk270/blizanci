@@ -85,14 +85,14 @@ handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
     NewState = State#servlet_state{cgi_status=no_proc},
     case Status of
         normal ->
-            myexit({cgi_output, Buffer}, NewState);
+            cgi_finished({cgi_output, Buffer}, NewState);
         {exit_status, St} ->
             RV = exec:status(St),
             lager:info("cgi process ended with non-zero status: ~p", [RV]),
-            myexit({error_code, cgi_exec_error}, NewState);
+            cgi_finished({error_code, cgi_exec_error}, NewState);
         St ->
             lager:info("cgi process terminated anomalously: ~p", [St]),
-            myexit({error_code, cgi_exec_error}, NewState)
+            cgi_finished({error_code, cgi_exec_error}, NewState)
     end;
 
 handle_info({stdout, OsPid, Msg}, State) ->
@@ -113,7 +113,7 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 
-myexit(Reason, State=#servlet_state{parent=Parent}) ->
+cgi_finished(Reason, State=#servlet_state{parent=Parent}) ->
     Parent ! {cgi_exit, Reason},
     {stop, normal, State}.
 
