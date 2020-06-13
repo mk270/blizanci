@@ -34,7 +34,7 @@ lookup(MimeType) when is_binary(MimeType) ->
                       {error, Error :: term()} |
                       ignore.
 start_link() ->
-    proc_lib:start_link(?MODULE, init, [[]])
+    proc_lib:start_link(?MODULE, init, [[]]).
 
 %%%===================================================================
 %%% gen_server callbacks
