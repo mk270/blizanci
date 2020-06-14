@@ -30,8 +30,10 @@
 cancel(no_proc) ->
     ok;
 cancel({proc, Pid}) ->
-    gen_server:call(Pid, quit),
-    ok.
+    case is_process_alive(Pid) of
+        true -> gen_server:call(Pid, quit);
+        _ -> ok
+    end.
 
 
 -spec start_link(any(), any(), any()) -> {ok, Pid :: pid()} |
@@ -69,7 +71,7 @@ init([Parent, URL, Req, Config]) ->
 handle_call(quit, _From, State) ->
     {_Pid, OsPid, _} = State#servlet_state.cgi_status,
     exec:kill(OsPid, 9),
-    {stop, normal, State};
+    {stop, normal, ok, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
