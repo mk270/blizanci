@@ -36,7 +36,7 @@ case "$1" in
          ;;
      stop-daemon)
          setup-env
-         $REL start
+         $REL stop
          ;;
      repl)
          rebar3 shell

@@ -78,6 +78,7 @@ gemini_status(unrecognised_protocol) -> {59, <<"Protocol not recognised">>};
 gemini_status(bad_unicode)           -> {59, <<"Bad unicode in request">>};
 gemini_status(bad_filename)          -> {59, <<"Illegal filename">>};
 gemini_status(bad_hostname)          -> {59, <<"Illegal hostname">>};
+gemini_status(userinfo_supplied)     -> {59, <<"Illegal username">>};
 gemini_status(internal_server_error) -> {40, <<"Internal server error">>};
 gemini_status(cgi_exec_error)        -> {40, <<"Gateway error">>};
 gemini_status(file_not_found)        -> {51, <<"File not found">>};
@@ -303,6 +304,8 @@ handle_line(Cmd, Config, Cert) when is_binary(Cmd) ->
 
 % Extract the parts of the URL, providing defaults where necessary
 -spec handle_parsed_url(map(), server_config(), term()) -> gemini_response().
+handle_parsed_url(#{ userinfo := _U}, _Config, _Cert) ->
+    {error_code, userinfo_supplied};
 handle_parsed_url(URI, Config, Cert) ->
     try
         ReqHost = maps:get(host, URI, <<>>),

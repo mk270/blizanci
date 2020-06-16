@@ -21,7 +21,7 @@
     }
    ]},
   {modules, [blizanci_app, blizanci_cgi, blizanci_gemini, blizanci_mimetypes,
-             blizanci_sup, blizanci_x509, blizanci_servlet]},
+             blizanci_sup, blizanci_x509, blizanci_servlet, blizanci_config]},
 
   {licenses, ["Apache 2.0"]},
   {links, []}
