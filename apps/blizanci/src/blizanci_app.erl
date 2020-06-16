@@ -14,7 +14,10 @@
 -define(LISTENER, blizanci_service_ssl).
 
 start(_StartType, _StartArgs) ->
+    ok = application:ensure_started(mime_lookup),
     ok = application:ensure_started(ranch),
+
+    ok = blizanci_cgi:start(),
 
     SSL_Opts   = blizanci_config:ssl_opts(),
     Proto_Opts = blizanci_config:proto_opts(),
@@ -22,8 +25,7 @@ start(_StartType, _StartArgs) ->
     {ok, Listener} = ranch:start_listener(?LISTENER,
                                           ranch_ssl, SSL_Opts,
                                           blizanci_gemini, Proto_Opts),
-    {ok, Pid} = blizanci_sup:start_link(),
-    {ok, Pid, Listener}.
+    {ok, Listener}.
 
 stop(_State) ->
     ok = ranch:stop_listener(?LISTENER).

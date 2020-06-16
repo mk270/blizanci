@@ -19,7 +19,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(servlet_state, {parent, url, request, config, cgi_status}).
+-record(servlet_state, {parent, url, request, config, cgi_pid}).
 
 %%%===================================================================
 %%% API
@@ -44,6 +44,7 @@ start_link(URL, Req, Config) ->
     Parent = self(),
     proc_lib:start_link(?MODULE, init, [[Parent, URL, Req, Config]]).
 
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -57,20 +58,22 @@ init([Parent, URL, Req, Config]) ->
     process_flag(trap_exit, true),
     proc_lib:init_ack({ok, self()}),
     case blizanci_cgi:serve(URL, Req, Config) of
-        {error_code, Error} -> exit({cgi_exec_failed, Error});
-        {init_cgi, Pid, OsPid} ->
+        {error_code, Error} ->
+            Parent ! {cgi_exec_failed, Error},
+            {stop, normal};
+        {init_cgi, Pid} ->
             State = #servlet_state{parent=Parent,
                            url=URL,
                            request=Req,
                            config=Config,
-                           cgi_status={Pid, OsPid, <<>>}},
+                           cgi_pid=Pid},
             gen_server:enter_loop(?MODULE, [], State)
     end.
 
 
 handle_call(quit, _From, State) ->
-    {_Pid, OsPid, _} = State#servlet_state.cgi_status,
-    exec:kill(OsPid, 9),
+    Pid = State#servlet_state.cgi_pid,
+    blizanci_cgi:cancel(Pid),
     {stop, normal, ok, State};
 
 handle_call(_Request, _From, State) ->
@@ -87,32 +90,9 @@ handle_cast(_Request, State) ->
                          {noreply, NewState :: term(), Timeout :: timeout()} |
                          {noreply, NewState :: term(), hibernate} |
                          {stop, Reason :: normal | term(), NewState :: term()}.
-
-handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
-    {ExpectedPid, ExpectedOsPid, Buffer} = State#servlet_state.cgi_status,
-    ExpectedPid = Pid,
-    ExpectedOsPid = OsPid,
-    %ExitStatus = exec:status(Status),
-    NewState = State#servlet_state{cgi_status=no_proc},
-    case Status of
-        normal ->
-            cgi_finished({cgi_output, Buffer}, NewState);
-        {exit_status, St} ->
-            RV = exec:status(St),
-            lager:info("cgi process ended with non-zero status: ~p", [RV]),
-            cgi_finished({error_code, cgi_exec_error}, NewState);
-        St ->
-            lager:info("cgi process terminated anomalously: ~p", [St]),
-            cgi_finished({error_code, cgi_exec_error}, NewState)
-    end;
-
-handle_info({stdout, OsPid, Msg}, State) ->
-    {ExpectedPid, ExpectedOsPid, Buffer} = State#servlet_state.cgi_status,
-    ExpectedOsPid = OsPid,
-    NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
-    NewState = State#servlet_state{
-                 cgi_status={ExpectedPid, ExpectedOsPid, NewBuffer}},
-    {noreply, NewState};
+handle_info({cgi_exit, Msg}, State=#servlet_state{parent=Parent}) ->
+    Parent ! {cgi_exit, Msg},
+    {noreply, State};
 
 handle_info(Info, State) ->
     lager:info("Servlet message: ~p", [Info]),
@@ -139,7 +119,3 @@ format_status(_Opt, Status) ->
 %%%===================================================================
 %%% Internal
 %%%===================================================================
-
-cgi_finished(Reason, State=#servlet_state{parent=Parent}) ->
-    Parent ! {cgi_exit, Reason},
-    {stop, normal, State}.

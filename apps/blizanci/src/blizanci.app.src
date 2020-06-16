@@ -1,7 +1,7 @@
 {application, blizanci,
  [{description, "A Gemini protocol server"},
-  {vsn, "1.3.0"},
-  {registered, [blizanci_mimetypes]},
+  {vsn, "1.5.0"},
+  {registered, []},
   {mod, {blizanci_app, []}},
   {applications,
    [kernel,
@@ -9,18 +9,13 @@
     lager,
     ranch,
     erlexec,
-    realpath
+    realpath,
+    mime_lookup,
+    ppool
    ]},
   {env,
-   [{port, 1965},
-    {mime_types_path, "/etc/mime.types"},
-    {mime_types, [
-            {<<"gemini">>, <<"text/gemini">>},
-            {<<"gmi">>, <<"text/gemini">>}
-            ]
-    }
-   ]},
-  {modules, [blizanci_app, blizanci_cgi, blizanci_gemini, blizanci_mimetypes,
+   [{port, 1965}]},
+  {modules, [blizanci_app, blizanci_cgi, blizanci_gemini,
              blizanci_sup, blizanci_x509, blizanci_servlet, blizanci_config]},
 
   {licenses, ["Apache 2.0"]},

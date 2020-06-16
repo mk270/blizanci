@@ -80,6 +80,7 @@ gemini_status(bad_filename)          -> {59, <<"Illegal filename">>};
 gemini_status(bad_hostname)          -> {59, <<"Illegal hostname">>};
 gemini_status(userinfo_supplied)     -> {59, <<"Illegal username">>};
 gemini_status(internal_server_error) -> {40, <<"Internal server error">>};
+gemini_status(too_many_cgi)          -> {40, <<"Gateway too busy">>};
 gemini_status(cgi_exec_error)        -> {40, <<"Gateway error">>};
 gemini_status(file_not_found)        -> {51, <<"File not found">>};
 gemini_status(cert_required)         -> {60, <<"Client certificate required">>};
@@ -176,6 +177,10 @@ handle_info({ssl_closed, _SocketInfo}, State) ->
 
 handle_info({cgi_exit, Result}, State) ->
     respond(Result, State),
+    {noreply, State};
+
+handle_info({cgi_exec_failed, Result}, State) ->
+    respond({error_code, Result}, State),
     {noreply, State};
 
 handle_info(Msg, State) ->
@@ -450,7 +455,7 @@ mime_type(Path) when is_binary(Path) ->
     case binary_to_list(filename:extension(Path)) of
         [] -> <<"text/gemini">>;
         [_Dot|Rest] -> Key = erlang:list_to_binary(Rest),
-                      case blizanci_mimetypes:lookup(Key) of
+                      case mime_lookup:lookup(Key) of
                           notfound -> <<"application/octet-stream">>;
                           {ok, Result} -> Result
                       end

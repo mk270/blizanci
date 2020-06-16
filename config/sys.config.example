@@ -2,9 +2,7 @@
   {blizanci, [
    {certfile, "/home/mk270/Src/blizanci/ssl/certificate.pem"},
    {keyfile, "/home/mk270/Src/blizanci/ssl/key.pem"},
-   {hostname, "savile.no.ucant.org"},
-   {docroot, "/home/mk270/Src/ucant-gemini/public_gemini"},
-   {cgiroot, "/home/mk270/Src/ucant-gemini/cgi-bin"}
+   {hostname, "your.fully.qualified.host.name"}
    ]},
   {lager, [
    {log_root, "log"},

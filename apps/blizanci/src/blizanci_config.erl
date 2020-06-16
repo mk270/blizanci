@@ -9,31 +9,33 @@
 
 -export([ssl_opts/0, proto_opts/0]).
 
+-define(APP, blizanci).
+-define(PORT, 1965).
+
 ssl_opts() ->
-    {ok, Cert} = application:get_env(certfile),
-    {ok, Key} = application:get_env(keyfile),
-    {ok, Port} = application:get_env(port),
+    Cert = application:get_env(?APP, certfile, "./ssl/certificate.pem"),
+    Key = application:get_env(?APP, keyfile, "./ssl/key.pem"),
+    Port = application:get_env(?APP, port, ?PORT),
     VerifyFn = fun (ClientCert, Ev, Init) ->
                    blizanci_gemini:verify_cert(ClientCert, Ev, Init) end,
-    SSL_Opts =
-        [{port, Port},
-         {certfile, Cert},
-         {keyfile, Key},
-         {verify, verify_peer},
-         {cacertfile, "/dev/null"},
-         {verify_fun, {VerifyFn, []}}
-        ],
-    SSL_Opts.
+
+    [{port, Port},
+     {certfile, Cert},
+     {keyfile, Key},
+     {verify, verify_peer},
+     {cacertfile, "/dev/null"},
+     {verify_fun, {VerifyFn, []}}
+    ].
 
 proto_opts() ->
-    {ok, Hostname} = application:get_env(hostname),
-    {ok, Docroot} = application:get_env(docroot),
-    {ok, CGIroot} = application:get_env(cgiroot),
-    {ok, Port} = application:get_env(port),
-    Proto_Opts =
-        [{hostname, Hostname},
-         {docroot, Docroot},
-         {cgiroot, CGIroot},
-         {port, Port}
-        ],
-    Proto_Opts.
+    {ok, Default_Hostname} = inet:gethostname(),
+    Hostname = application:get_env(?APP, hostname, Default_Hostname),
+    Docroot = application:get_env(?APP, docroot, "./public_gemini"),
+    CGIroot = application:get_env(?APP, cgiroot, "./cgi-bin"),
+    Port = application:get_env(?APP, port, ?PORT),
+
+    [{hostname, Hostname},
+     {docroot, Docroot},
+     {cgiroot, CGIroot},
+     {port, Port}
+    ].

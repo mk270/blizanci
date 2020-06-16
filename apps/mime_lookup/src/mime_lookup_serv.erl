@@ -1,11 +1,11 @@
-%% blizanci, a Gemini protocol server, by Martin Keegan
+%% MIME Lookup, a run-time MIME type lookup service, by Martin Keegan
 %%
 %% To the extent (if any) permissible by law, Copyright (C) 2020  Martin Keegan
 %%
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
--module(blizanci_mimetypes).
+-module(mime_lookup_serv).
 -include_lib("eunit/include/eunit.hrl").
 -behaviour(gen_server).
 

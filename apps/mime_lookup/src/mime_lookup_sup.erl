@@ -1,11 +1,11 @@
-%% Blizanci, a Gemini protocol server, by Martin Keegan
+%% MIME Lookup, a run-time MIME type lookup service, by Martin Keegan
 %%
 %% To the extent (if any) permissible by law, Copyright (C) 2020  Martin Keegan
 %%
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
--module(blizanci_sup).
+-module(mime_lookup_sup).
 
 -behaviour(supervisor).
 
@@ -38,11 +38,11 @@ init([]) ->
                  intensity => 1,
                  period => 5},
 
-    Child = #{id => blizanci_mimetypes,
-              start => {blizanci_mimetypes, start_link, []},
+    Child = #{id => mime_lookup_serv,
+              start => {mime_lookup_serv, start_link, []},
               restart => permanent,
               shutdown => 5000,
               type => worker,
-              modules => [blizanci_mimetypes]},
+              modules => [mime_lookup_serv]},
 
     {ok, {SupFlags, [Child]}}.
