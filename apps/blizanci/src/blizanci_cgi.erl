@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([serve/3, start/0, cancel/1]).
+-export([serve/3, start/0, cancel/1, unset_os_env_except/1]).
 -export([start_link/1]).
 
 %% gen_server callbacks
@@ -236,6 +236,17 @@ sanitise_kv(Key, undefined) ->
 
 sanitise_kv(Key, Value) ->
     {Key, Value}.
+
+
+
+defined_os_env_vars() ->
+    [ Head || [Head|_] <- [ string:split(Env, "=") || Env <- os:getenv() ] ].
+
+unset_os_env_except(Exceptions) ->
+    Keys = defined_os_env_vars(),
+    [ os:unsetenv(Key) ||
+        Key <- Keys,
+        not lists:member(Key, Exceptions) ].
 
 
 %%%===================================================================
