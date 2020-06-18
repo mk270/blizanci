@@ -6,6 +6,37 @@
 %% the terms of the Apache Software Licence v2.0.
 
 -module(blizanci_cgi).
+
+% This module is called by the servlet to run CGI scripts. It communicates
+% with three other processes:
+%
+% 1) the servlet. The servlet's Pid is stored in the process state, as
+%    "parent", though strictly-speaking the parent is the queue-manager
+%    referred to in 2). Each blizanci_cgi process is related to a different
+%    servlet process. The servlet uses code in this module to attempt to
+%    submit a new job to the ppool queue, which may fail. If it succeeds,
+%    then the queue-manager creates a process which calls blizanci_cgi:init/1.
+%
+% 2) the ppool queue-manager. Each blizanci_cgi process is managed by the
+%    *same* ppool queue-manager process
+%
+% 3) the erlexec process. Each blizanci_cgi process tries to start a
+%    external UNIX process via the erlexec application. The Pid of the
+%    the erlexec manager process, and the Pid of the created UNIX process
+%    are both stored in the blizanci_cgi process's state. There is one
+%    erlexec manager process for each blizanci_cgi process, and the latter
+%    should expect to receive a set of out-of-band info messages from the
+%    former advising of subprocess outputs and termination.
+%
+% Once the external UNIX process has terminated, a message is sent to the
+% servlet, in the form {cgi_exit, Result}, where Result may be:
+%
+%   {cgi_output, binary()}
+% | {cgi_exec_error, cgi_error()}
+%
+% This message is sent by calling blizanci_servlet:gateway_result/2.
+
+
 -include("blizanci_types.hrl").
 
 -behaviour(gen_server).
@@ -18,6 +49,10 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, format_status/2]).
 
+-record(worker_state, {parent, cgi_status}).
+-type worker_state() :: #worker_state{}.
+
+
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
 -define(ALLOWED_ENV,
@@ -27,12 +62,11 @@
          "LOGNAME",
          "SHELL"]).
 
--record(worker_state, {parent, cgi_status}).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+% Called by the ppool queue manager; passes the arguments straight through
 -spec start_link(term()) -> {ok, Pid :: pid()} |
                       {error, Error :: {already_started, pid()}} |
                       {error, Error :: term()} |
@@ -41,18 +75,18 @@ start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
 
+% Must be called by the application on initialisation; establishes the
+% ppool queue for which most of this module is a set of callbacks.
 start() ->
-    unset_os_env_except(?ALLOWED_ENV),
+    blizanci_osenv:unset_os_env_except(?ALLOWED_ENV),
     case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of
         {error, {already_started, _Pid}} -> ok;
         {ok, _Pid} -> ok
     end.
 
 
-submit(Args) ->
-    ppool:run(?QUEUE, [Args]).
-
-
+% Called by the servlet to cancel a job, e.g., if the TCP connection has
+% been closed by the remote end.
 cancel(Pid) ->
     case is_process_alive(Pid) of
         true -> gen_server:call(Pid, quit);
@@ -60,6 +94,10 @@ cancel(Pid) ->
     end.
 
 
+% Called by the servlet
+%
+% Validate that a proper CGI request has been received, and if so, submit
+% a job to the queue
 -spec serve(binary(), map(), server_config()) ->
                    {'error_code', atom()} |
                    {'init_cgi', pid()}.
@@ -68,41 +106,46 @@ serve(Path, Req, #server_config{
                     port=Port,
                     cgiroot=CGIRoot}) ->
     PathElements  = [CGIRoot, binary_to_list(Path)],
-    {ok, Cmd}     = fix_path(filename:join(PathElements)),
+    {ok, Cmd}     = blizanci_path:fix_path(filename:join(PathElements)),
 
     % this is a belt-and-braces check; URLs with ".." in them are current
     % forbidden anyway
-    true = path_under_root(Cmd, CGIRoot),
+    true = blizanci_path:path_under_root(Cmd, CGIRoot),
 
     case filelib:is_file(Cmd) of
         false -> {error_code, file_not_found};
         true ->
+            % Args represents a UNIX commandline comprising the path of
+            % the executable with zero arguments.
             Args = [Cmd],
             Env = cgi_environment(Path, Cmd, Hostname, Req, Port),
 
             case run_cgi(Args, Env) of
                 {ok, Pid} -> {init_cgi, Pid};
-                noalloc -> {error_code, too_many_cgi}
+                noalloc -> {error_code, gateway_busy}
             end
     end.
 
+-spec run_cgi([string()], env_list()) -> {'ok', pid()} | noalloc.
 run_cgi(Args, Env) ->
     Options = [monitor, {env, Env}, stdout, stderr],
-    submit({self(), {Args, Options}}).
+    ppool:run(?QUEUE, [{self(), {Args, Options}}]).
 
 
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
+% Called by the queue runner. The second argument to ppool:run is
+% passed in as the first argument to this function.
 -spec init(Args :: term()) -> {ok, State :: term()} |
                               {ok, State :: term(), Timeout :: timeout()} |
                               {ok, State :: term(), hibernate} |
                               {stop, Reason :: term()} |
                               ignore.
-init({Parent, {Args, Options}}) ->
+init({Parent, {CmdLine, Options}}) ->
     process_flag(trap_exit, true),
-    Result = exec:run(Args, Options),
+    Result = exec:run(CmdLine, Options),
     {ok, Pid, OsPid} = Result,
     {ok, #worker_state{parent=Parent, cgi_status={Pid, OsPid, <<>>}}}.
 
@@ -193,20 +236,15 @@ format_status(_Opt, Status) ->
 %%% Internal functions
 %%%===================================================================
 
+-spec cgi_finished(exec_result(), worker_state()) -> term().
+cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
+    blizanci_servlet:gateway_exit(Parent, Reason),
+    {stop, normal, State}.
 
-fix_path(S) ->
-    {ok, S2} = realpath:normalise(S),
-    {ok, S3} = realpath:canonicalise(S2),
-    {ok, S3}.
-
-path_under_root(S, CGIRoot) ->
-    L = string:len(CGIRoot),
-    Sl = string:slice(S, 0, L),
-    Sl =:= CGIRoot.
 
 cgi_environment(Path, Bin, Hostname, Req, Port) ->
     Env0 = make_environment(Path, Bin, Hostname, Req, Port),
-    sanitise(Env0).
+    blizanci_osenv:sanitise(Env0).
 
 make_environment(Path, Bin, Hostname, Req, Port) ->
     ScriptName = "/cgi-bin/" ++ binary_to_list(Path),
@@ -229,36 +267,3 @@ make_environment(Path, Bin, Hostname, Req, Port) ->
             KVPs
     end.
 
-sanitise(Env) ->
-    [ sanitise_kv(K, V) || {K, V} <- Env ].
-
-
-sanitise_kv(Key, <<"">>) ->
-    {Key, <<"">>}; % exec:run apparently objects to null-strings as lists
-
-sanitise_kv(Key, Value) when is_binary(Value) ->
-    {Key, binary_to_list(Value)};
-
-sanitise_kv(Key, Value) when is_integer(Value) ->
-    {Key, integer_to_list(Value)};
-
-sanitise_kv(Key, undefined) ->
-    {Key, "undefined"};
-
-sanitise_kv(Key, Value) ->
-    {Key, Value}.
-
-
-defined_os_env_vars() ->
-    [ Head || [Head|_] <- [ string:split(Env, "=") || Env <- os:getenv() ] ].
-
-unset_os_env_except(Exceptions) ->
-    Keys = defined_os_env_vars(),
-    [ os:unsetenv(Key) ||
-        Key <- Keys,
-        not lists:member(Key, Exceptions) ].
-
-
-cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
-    Parent ! {cgi_exit, Reason},
-    {stop, normal, State}.

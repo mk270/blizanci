@@ -49,6 +49,7 @@
 %% API to be called by other blizanci modules
 -export([start_link/4]).
 -export([verify_cert/3]).
+-export([servlet_result/2]).
 -export([handle_line/3]).     % temporarily enabled for testing
 
 %% API expected by gen_server callback behaviour
@@ -80,7 +81,7 @@ gemini_status(bad_filename)          -> {59, <<"Illegal filename">>};
 gemini_status(bad_hostname)          -> {59, <<"Illegal hostname">>};
 gemini_status(userinfo_supplied)     -> {59, <<"Illegal username">>};
 gemini_status(internal_server_error) -> {40, <<"Internal server error">>};
-gemini_status(too_many_cgi)          -> {40, <<"Gateway too busy">>};
+gemini_status(gateway_busy)          -> {40, <<"Gateway too busy">>};
 gemini_status(cgi_exec_error)        -> {40, <<"Gateway error">>};
 gemini_status(file_not_found)        -> {51, <<"File not found">>};
 gemini_status(cert_required)         -> {60, <<"Client certificate required">>};
@@ -111,6 +112,20 @@ verify_cert(_Cert, _Event, _InitialUserState) ->
     {valid, unknown_user}.
 
 
+-spec servlet_result(pid(), servlet_result()) -> 'ok'.
+servlet_result(Pid, Result) when is_pid(Pid) ->
+    case is_process_alive(Pid) of
+        true ->
+            gen_server:call(Pid, {servlet_result, Result});
+        _ ->
+            ok
+    end.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% gen_server.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 -spec init({pid(), any(), any(), [any()]}) -> {ok, pid()}.
 init({Ref, Socket, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
@@ -132,7 +147,7 @@ init({Ref, Socket, Transport, Opts}) ->
                buffer=?EMPTY_BUF,
                config=Config,
                requested=false,
-               cgi_proc=no_proc,
+               servlet_proc=no_proc,
                client_cert=PC},
     erlang:send_after(?TIMEOUT_MS, self(), timeout),
     gen_server:enter_loop(?MODULE, [], State).
@@ -153,8 +168,8 @@ handle_info({ssl, Socket, Payload}, State) ->
                   continue -> {noreply, NewState};
                   finished -> Transport:close(Socket),
                               {stop, normal, NewState};
-                  {expect_cgi, Pid} ->
-                      NewerState = NewState#state{cgi_proc={proc, Pid}},
+                  {expect_servlet, Pid} ->
+                      NewerState = NewState#state{servlet_proc={proc, Pid}},
                       {noreply, NewerState}
               end;
         {error, closed} ->
@@ -175,17 +190,17 @@ handle_info(timeout, State) ->
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
-handle_info({cgi_exit, Result}, State) ->
-    respond(Result, State),
-    {noreply, State};
-
-handle_info({cgi_exec_failed, Result}, State) ->
-    respond({error_code, Result}, State),
-    {noreply, State};
-
 handle_info(Msg, State) ->
     lager:debug("Received unrecognised message: ~p~n", [Msg]),
     {stop, normal, State}.
+
+handle_call({servlet_result, {servlet_failed, Result}}, _From, State) ->
+    respond({error_code, Result}, State),
+    {reply, ok, State};
+
+handle_call({servlet_result, {servlet_complete, Result}}, _From, State) ->
+    respond(Result, State),
+    {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -215,8 +230,8 @@ activate(Transport, Socket) ->
 
 
 close_session(State) ->
-    CGIProc = State#state.cgi_proc,
-    blizanci_servlet:cancel(CGIProc).
+    ServletProc = State#state.servlet_proc,
+    blizanci_servlet:cancel(ServletProc).
 
 
 % Send a response back to the client, generally closing the connection
@@ -227,8 +242,8 @@ respond(none, _State) ->
     % don't hang up where only part of the URL + CRLF has been received
     continue;
 
-respond({init_cgi, Pid}, _State) ->
-    {expect_cgi, Pid};
+respond({init_servlet, Pid}, _State) ->
+    {expect_servlet, Pid};
 
 respond({cgi_output, Msg}, #state{transport=Transport, socket=Socket}) ->
     Header = format_headers(20, <<"text/plain">>),
@@ -395,7 +410,7 @@ handle_file(Path, Req, Config) when is_binary(Path) ->
 -spec serve(binary(), map(), server_config()) -> gemini_response().
 serve(_Pth = <<"cgi-bin/", Rest/binary>>, Req, Config) ->
     {ok, Pid} = blizanci_servlet:start_link(Rest, Req, Config),
-    {init_cgi, Pid};
+    {init_servlet, Pid};
 serve(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
     serve_file(Path, Req, Config#server_config.docroot, restricted);
 serve(Path = <<"private/", _Rest/binary>>, Req, Config) ->

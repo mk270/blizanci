@@ -6,12 +6,32 @@
 %% the terms of the Apache Software Licence v2.0.
 
 -module(blizanci_servlet).
+
+% This module provides a mechanism for dynamic content generation for
+% Gemini requests. Currently it is somewhat hardwired to use CGI to
+% fulfil these.
+%
+% One blizanci_servlet process is generated per request. This is done by
+% calling blizanci_servlet:start_link/3, which has the side-effect of
+% caching the caller's Pid and passing it to the servlet process it
+% creates.
+%
+% On completion of the request, which may well not be synchronous, results
+% may be communicated back to the Gemini parent (the original caller) by
+% sending a message in the following form:
+%
+%    {cgi_exec_failed, atom()}
+%  | {cgi_exit, Result}
+%
+% These terms will be modified in due course to remove reference to CGI.
+
+
 -include("blizanci_types.hrl").
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, cancel/1]).
+-export([start_link/3, cancel/1, gateway_exit/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -26,12 +46,22 @@
 %%%===================================================================
 
 
--spec cancel(cgi_proc()) -> 'ok'.
+% Called by the gemini protocol server during shutdown of a connection
+-spec cancel(servlet_proc()) -> 'ok'.
 cancel(no_proc) ->
     ok;
 cancel({proc, Pid}) ->
     case is_process_alive(Pid) of
         true -> gen_server:call(Pid, quit);
+        _ -> ok
+    end.
+
+
+% Called by the CGI runner
+-spec gateway_exit(pid(), exec_result()) -> 'ok'.
+gateway_exit(Pid, Result) when is_pid(Pid) ->
+    case is_process_alive(Pid) of
+        true -> gen_server:call(Pid, {gateway_result, Result});
         _ -> ok
     end.
 
@@ -59,7 +89,7 @@ init([Parent, URL, Req, Config]) ->
     proc_lib:init_ack({ok, self()}),
     case blizanci_cgi:serve(URL, Req, Config) of
         {error_code, Error} ->
-            Parent ! {cgi_exec_failed, Error},
+            report_result(Parent, {servlet_failed, Error}),
             {stop, normal};
         {init_cgi, Pid} ->
             State = #servlet_state{parent=Parent,
@@ -70,11 +100,15 @@ init([Parent, URL, Req, Config]) ->
             gen_server:enter_loop(?MODULE, [], State)
     end.
 
-
 handle_call(quit, _From, State) ->
     Pid = State#servlet_state.cgi_pid,
     blizanci_cgi:cancel(Pid),
     {stop, normal, ok, State};
+
+handle_call({gateway_result, Result}, _From,
+            State=#servlet_state{parent=Parent}) ->
+    report_result(Parent, {servlet_complete, Result}),
+    {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -90,10 +124,6 @@ handle_cast(_Request, State) ->
                          {noreply, NewState :: term(), Timeout :: timeout()} |
                          {noreply, NewState :: term(), hibernate} |
                          {stop, Reason :: normal | term(), NewState :: term()}.
-handle_info({cgi_exit, Msg}, State=#servlet_state{parent=Parent}) ->
-    Parent ! {cgi_exit, Msg},
-    {noreply, State};
-
 handle_info(Info, State) ->
     lager:info("Servlet message: ~p", [Info]),
     {noreply, State}.
@@ -119,3 +149,8 @@ format_status(_Opt, Status) ->
 %%%===================================================================
 %%% Internal
 %%%===================================================================
+
+-spec report_result(pid(), servlet_result()) -> 'ok'.
+report_result(Parent, Result) ->
+    ServletResult = Result,
+    blizanci_gemini:servlet_result(Parent, ServletResult).
