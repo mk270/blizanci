@@ -20,10 +20,8 @@
 % may be communicated back to the Gemini parent (the original caller) by
 % sending a message in the following form:
 %
-%    {cgi_exec_failed, atom()}
-%  | {cgi_exit, Result}
-%
-% These terms will be modified in due course to remove reference to CGI.
+%    {servlet_failed, ErrorCode :: atom()}
+%  | {servlet_complete, Output :: binary()}
 
 
 -include("blizanci_types.hrl").
