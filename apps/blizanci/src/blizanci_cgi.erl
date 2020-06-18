@@ -32,7 +32,7 @@
 % servlet, in the form {cgi_exit, Result}, where Result may be:
 %
 %   {cgi_output, binary()}
-% | {cgi_exec_error, cgi_error()}
+% | {cgi_error, cgi_error()}
 %
 % This message is sent by calling blizanci_servlet:gateway_result/2.
 
@@ -197,10 +197,10 @@ handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
         {exit_status, St} ->
             RV = exec:status(St),
             lager:info("cgi process ended with non-zero status: ~p", [RV]),
-            cgi_finished({error_code, cgi_exec_error}, NewState);
+            cgi_finished({cgi_error, cgi_exec_error}, NewState);
         St ->
             lager:info("cgi process terminated anomalously: ~p", [St]),
-            cgi_finished({error_code, cgi_exec_error}, NewState)
+            cgi_finished({cgi_error, cgi_exec_error}, NewState)
     end;
 
 handle_info({stdout, OsPid, Msg}, State) ->

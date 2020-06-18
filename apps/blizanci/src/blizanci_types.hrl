@@ -45,7 +45,7 @@
 -type cgi_error() :: 'cgi_exec_error'.
 
 -type exec_result() :: {'cgi_output', binary()}
-                     | {'error_code', cgi_error()}.
+                     | {'cgi_error', cgi_error()}.
 
 -type servlet_result() :: {'servlet_failed', atom()}
                         | {'servlet_complete', binary() }.
