@@ -9,11 +9,11 @@
 
 -behaviour(application).
 
--export([start/2, stop/1]).
+-export([start/2, stop/1, prep_stop/1, listen/0]).
 
 -define(LISTENER, blizanci_service_ssl).
 
-start(_StartType, _StartArgs) ->
+listen() ->
     ok = application:ensure_started(mime_lookup),
     ok = application:ensure_started(ranch),
 
@@ -27,5 +27,12 @@ start(_StartType, _StartArgs) ->
                                           blizanci_gemini, Proto_Opts),
     {ok, Listener}.
 
-stop(_State) ->
+start(_StartType, _StartArgs) ->
+    {ok, _Listener} = listen(),
+    {ok, _Pid} = blizanci_sup:start_link().
+
+prep_stop(_State) ->
     ok = ranch:stop_listener(?LISTENER).
+
+stop(_State) ->
+    ok.

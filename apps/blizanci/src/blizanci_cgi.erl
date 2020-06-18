@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([serve/3, start/0, cancel/1, unset_os_env_except/1]).
+-export([serve/3, start/0, cancel/1]).
 -export([start_link/1]).
 
 %% gen_server callbacks
@@ -20,6 +20,12 @@
 
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
+-define(ALLOWED_ENV,
+        ["HOME",
+         "USER",
+         "PATH",
+         "LOGNAME",
+         "SHELL"]).
 
 -record(worker_state, {parent, cgi_status}).
 
@@ -36,6 +42,7 @@ start_link(Args) ->
 
 
 start() ->
+    unset_os_env_except(?ALLOWED_ENV),
     case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of
         {error, {already_started, _Pid}} -> ok;
         {ok, _Pid} -> ok
@@ -225,6 +232,10 @@ make_environment(Path, Bin, Hostname, Req, Port) ->
 sanitise(Env) ->
     [ sanitise_kv(K, V) || {K, V} <- Env ].
 
+
+sanitise_kv(Key, <<"">>) ->
+    {Key, <<"">>}; % exec:run apparently objects to null-strings as lists
+
 sanitise_kv(Key, Value) when is_binary(Value) ->
     {Key, binary_to_list(Value)};
 
@@ -238,7 +249,6 @@ sanitise_kv(Key, Value) ->
     {Key, Value}.
 
 
-
 defined_os_env_vars() ->
     [ Head || [Head|_] <- [ string:split(Env, "=") || Env <- os:getenv() ] ].
 
@@ -248,10 +258,6 @@ unset_os_env_except(Exceptions) ->
         Key <- Keys,
         not lists:member(Key, Exceptions) ].
 
-
-%%%===================================================================
-%%% Internal
-%%%===================================================================
 
 cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     Parent ! {cgi_exit, Reason},
