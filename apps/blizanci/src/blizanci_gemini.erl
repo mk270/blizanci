@@ -198,8 +198,8 @@ handle_call({servlet_result, {servlet_failed, Result}}, _From, State) ->
     respond({error_code, Result}, State),
     {reply, ok, State};
 
-handle_call({servlet_result, {servlet_complete, Result}}, _From, State) ->
-    respond(Result, State),
+handle_call({servlet_result, {servlet_complete, Output}}, _From, State) ->
+    respond({servlet_output, Output}, State),
     {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
@@ -245,7 +245,7 @@ respond(none, _State) ->
 respond({init_servlet, Pid}, _State) ->
     {expect_servlet, Pid};
 
-respond({cgi_output, Msg}, #state{transport=Transport, socket=Socket}) ->
+respond({servlet_output, Msg}, #state{transport=Transport, socket=Socket}) ->
     Header = format_headers(20, <<"text/plain">>),
     Transport:send(Socket, [Header, Msg]),
     Transport:close(Socket),

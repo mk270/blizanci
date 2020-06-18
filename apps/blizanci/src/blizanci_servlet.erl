@@ -107,7 +107,11 @@ handle_call(quit, _From, State) ->
 
 handle_call({gateway_result, Result}, _From,
             State=#servlet_state{parent=Parent}) ->
-    report_result(Parent, {servlet_complete, Result}),
+    ServletResult = case Result of
+                        {cgi_output, Output} -> {servlet_complete, Output};
+                        {error_code, Error} -> {servlet_failed, Error}
+                    end,
+    report_result(Parent, ServletResult),
     {reply, ok, State};
 
 handle_call(_Request, _From, State) ->

@@ -31,7 +31,7 @@
                          | hangup
                          | none
                          | {'init_servlet', pid()}
-                         | {'cgi_output', binary()}.
+                         | {'servlet_output', binary()}.
 
 -type gemini_session() :: continue
                         | finished 
@@ -48,4 +48,4 @@
                      | {'error_code', cgi_error()}.
 
 -type servlet_result() :: {'servlet_failed', atom()}
-                        | {'servlet_complete', exec_result() }.
+                        | {'servlet_complete', binary() }.
