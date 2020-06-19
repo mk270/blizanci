@@ -65,9 +65,9 @@
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini">>).
 -define(CRLF, <<"\r\n">>).
--define(INDEX, "index.gemini").
 -define(TIMEOUT_MS, 10000).
 -define(MAX_REQUEST_BYTES, 4000).
+-define(CGI_MODULE, blizanci_cgi).
 
 -spec gemini_status(atom()) -> {integer(), binary()}.
 gemini_status(request_too_long)      -> {59, <<"Request too long">>};
@@ -116,7 +116,7 @@ verify_cert(_Cert, _Event, _InitialUserState) ->
 servlet_result(Pid, Result) when is_pid(Pid) ->
     case is_process_alive(Pid) of
         true ->
-            gen_server:call(Pid, {servlet_result, Result});
+            ok = gen_server:call(Pid, {servlet_result, Result});
         _ ->
             ok
     end.
@@ -140,7 +140,8 @@ init({Ref, Socket, Transport, Opts}) ->
                 hostname=Hostname,
                 port=Port,
                 docroot=Docroot,
-                cgiroot=CGIroot},
+                cgiroot=CGIroot,
+                cgiprefix="/cgi-bin/"},
     State = #state{
                transport=Transport,
                socket=Socket,
@@ -187,6 +188,9 @@ handle_info({tcp_error, _, _Reason}, State) ->
 handle_info(timeout, State) ->
     {stop, normal, State};
 
+handle_info(finished, State) ->
+    {stop, normal, State};
+
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
@@ -196,10 +200,18 @@ handle_info(Msg, State) ->
 
 handle_call({servlet_result, {servlet_failed, Result}}, _From, State) ->
     respond({error_code, Result}, State),
+    self() ! finished,
     {reply, ok, State};
 
 handle_call({servlet_result, {servlet_complete, Output}}, _From, State) ->
     respond({servlet_output, Output}, State),
+    self() ! finished,
+    {reply, ok, State};
+
+handle_call({servlet_result, {servlet_bypassed, Result}}, _From,
+            State=#state{transport=Transport, socket=Socket}) ->
+    respond(Result, State),
+    Transport:close(Socket),
     {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
@@ -409,72 +421,9 @@ handle_file(Path, Req, Config) when is_binary(Path) ->
 % Separate out CGI
 -spec serve(binary(), map(), server_config()) -> gemini_response().
 serve(_Pth = <<"cgi-bin/", Rest/binary>>, Req, Config) ->
-    {ok, Pid} = blizanci_servlet:start_link(Rest, Req, Config),
-    {init_servlet, Pid};
-serve(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
-    serve_file(Path, Req, Config#server_config.docroot, restricted);
-serve(Path = <<"private/", _Rest/binary>>, Req, Config) ->
-    serve_file(Path, Req, Config#server_config.docroot, private);
+    blizanci_servlet:request(?CGI_MODULE, Rest, Req, Config);
 serve(Path, Req, Config) ->
-    serve_file(Path, Req, Config#server_config.docroot, public).
-
-
-% private: certificate must be signed by a particular CA
-% restricted: certificate must be presented
-% public: no certificate requirement
--spec serve_file(binary(), map(), string(), authorisation())
-                -> gemini_response().
-serve_file(Path, _Req, Docroot, public) ->
-    serve_file(Path, Docroot);
-serve_file(Path, Req, Docroot, Auth) ->
-    #{ client_cert := Cert } = Req,
-    CertInfo = blizanci_x509:peercert_cn(Cert),
-    serve_restricted_file(Path, Docroot, Auth, CertInfo).
-
-
--spec serve_restricted_file(binary(), string(), authorisation(),
-                            any()) ->
-                                   gemini_response().
-serve_restricted_file(_Path, _Docroot, _Auth, error) ->
-    {error_code, cert_required};
-serve_restricted_file(Path, Docroot, Auth, {ok, CertInfo}) ->
-    #{ common_name := Subject,
-       issuer_common_name := Issuer } = CertInfo,
-    lager:info("~p object requested, peercert: ~p/~p", [Auth, Subject, Issuer]),
-    serve_file(Path, Docroot).
-
-
-% If there's a valid file requested, then get its full path, so that
-% it can be sendfile()'d back to the client. If it's a directory, redirect
-% to an index file.
--spec serve_file(binary(), string()) -> gemini_response().
-serve_file(Path, Docroot) ->
-    Full = filename:join(Docroot, Path),
-    case {filelib:is_dir(Full), filelib:is_regular(Full)} of
-        {true, _} ->
-            Redirect = filename:join(Path, ?INDEX),
-            {redirect, Redirect};
-        {false, true} ->
-            MimeType = mime_type(Full),
-            {file, MimeType, Full};
-        _ ->
-            {error_code, file_not_found}
-    end.
-
-
-% Look up the MIME type for a given filename. If the filename doesn't contain
-% a ".", then assume it's text/gemini. If it contains a "." but isn't in
-% the MIME types dataset, then assume it's application/octet-stream.
--spec mime_type(binary()) -> binary().
-mime_type(Path) when is_binary(Path) ->
-    case binary_to_list(filename:extension(Path)) of
-        [] -> <<"text/gemini">>;
-        [_Dot|Rest] -> Key = erlang:list_to_binary(Rest),
-                      case mime_lookup:lookup(Key) of
-                          notfound -> <<"application/octet-stream">>;
-                          {ok, Result} -> Result
-                      end
-    end.
+    blizanci_servlet:request(blizanci_file, Path, Req, Config).
 
 
 -spec format_headers(integer(), binary()) -> iolist().
@@ -526,6 +475,7 @@ handle_line_test_() ->
                                              hostname= <<"this.host.dev">>,
                                              port= 1965,
                                              docroot="/bin",
-                                             cgiroot="/cgi-bin"},
+                                             cgiroot="/fake",
+                                             cgiprefix="/cgi-bin/"},
                                           {error, no_peercert})) ||
         {Expected, TestInput} <- handle_line_test_data() ].

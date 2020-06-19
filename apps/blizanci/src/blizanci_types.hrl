@@ -12,7 +12,8 @@
         {hostname   :: binary(),
          port       :: integer(),
          docroot    :: string(),
-         cgiroot    :: string()}).
+         cgiroot    :: string(),
+         cgiprefix  :: string()}).
 -type server_config() :: #server_config{}.
 
 -record(state,
@@ -42,10 +43,13 @@
 -type env_list() :: [{string(), string()}].
 
 
--type cgi_error() :: 'cgi_exec_error'.
+-type cgi_error() :: 'cgi_exec_error' | 'file_not_found' | 'gateway_busy'.
 
--type exec_result() :: {'cgi_output', binary()}
-                     | {'cgi_error', cgi_error()}.
+-type gateway_result() :: {'gateway_output', binary()}
+                        | {'gateway_error', cgi_error()}
+                        | {'gateway_started', pid()}
+                        | {'gateway_bypassed', gemini_response()}.
 
 -type servlet_result() :: {'servlet_failed', atom()}
-                        | {'servlet_complete', binary() }.
+                        | {'servlet_complete', binary() }
+                        | {'servlet_bypassed', gemini_response()}.

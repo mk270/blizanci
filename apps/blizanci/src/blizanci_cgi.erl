@@ -31,8 +31,8 @@
 % Once the external UNIX process has terminated, a message is sent to the
 % servlet, in the form {cgi_exit, Result}, where Result may be:
 %
-%   {cgi_output, binary()}
-% | {cgi_error, cgi_error()}
+%   {gateway_output, binary()}
+% | {gateway_error, cgi_error()}
 %
 % This message is sent by calling blizanci_servlet:gateway_result/2.
 
@@ -42,7 +42,7 @@
 -behaviour(gen_server).
 
 %% API
--export([serve/3, start/0, cancel/1]).
+-export([serve/3, start/0, cancel/1, request/3]).
 -export([start_link/1]).
 
 %% gen_server callbacks
@@ -89,22 +89,29 @@ start() ->
 % been closed by the remote end.
 cancel(Pid) ->
     case is_process_alive(Pid) of
-        true -> gen_server:call(Pid, quit);
+        true -> gen_server:cast(Pid, cgi_quit);
         _ -> ok
     end.
 
 
 % Called by the servlet
 %
+-spec request(any(), any(), any()) ->
+                     {'immediate', gemini_response()} |
+                     'defer'.
+request(_Path, _Req, _Config) ->
+    defer.
+
+% Called by the servlet
+%
 % Validate that a proper CGI request has been received, and if so, submit
 % a job to the queue
--spec serve(binary(), map(), server_config()) ->
-                   {'error_code', atom()} |
-                   {'init_cgi', pid()}.
+-spec serve(binary(), map(), server_config()) -> gateway_result().
 serve(Path, Req, #server_config{
                     hostname=Hostname,
                     port=Port,
                     cgiroot=CGIRoot}) ->
+    CGIPrefix     = "/cgi-bin/",
     PathElements  = [CGIRoot, binary_to_list(Path)],
     {ok, Cmd}     = blizanci_path:fix_path(filename:join(PathElements)),
 
@@ -113,16 +120,16 @@ serve(Path, Req, #server_config{
     true = blizanci_path:path_under_root(Cmd, CGIRoot),
 
     case filelib:is_file(Cmd) of
-        false -> {error_code, file_not_found};
+        false -> {gateway_error, file_not_found};
         true ->
             % Args represents a UNIX commandline comprising the path of
             % the executable with zero arguments.
             Args = [Cmd],
-            Env = cgi_environment(Path, Cmd, Hostname, Req, Port),
+            Env = cgi_environment(CGIPrefix, Path, Cmd, Hostname, Req, Port),
 
             case run_cgi(Args, Env) of
-                {ok, Pid} -> {init_cgi, Pid};
-                noalloc -> {error_code, gateway_busy}
+                {ok, Pid} -> {gateway_started, Pid};
+                noalloc -> {gateway_error, gateway_busy}
             end
     end.
 
@@ -163,11 +170,6 @@ init({Parent, {CmdLine, Options}}) ->
                          {stop, Reason :: term(), Reply :: term(),
                           NewState :: term()} |
                          {stop, Reason :: term(), NewState :: term()}.
-handle_call(quit, _From, State=#worker_state{cgi_status=CGI_Status}) ->
-    {_Pid, OsPid, _Buffer} = CGI_Status,
-    exec:kill(OsPid, 9),
-    {stop, normal, ok, State};
-
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -177,6 +179,11 @@ handle_call(_Request, _From, State) ->
                          {noreply, NewState :: term(), Timeout :: timeout()} |
                          {noreply, NewState :: term(), hibernate} |
                          {stop, Reason :: term(), NewState :: term()}.
+handle_cast(cgi_quit, State=#worker_state{cgi_status=CGI_Status}) ->
+    {_Pid, OsPid, _Buffer} = CGI_Status,
+    exec:kill(OsPid, 9),
+    {stop, normal, State};
+
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -193,14 +200,14 @@ handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
     NewState = State#worker_state{cgi_status=no_proc},
     case Status of
         normal ->
-            cgi_finished({cgi_output, Buffer}, NewState);
+            cgi_finished({gateway_output, Buffer}, NewState);
         {exit_status, St} ->
             RV = exec:status(St),
             lager:info("cgi process ended with non-zero status: ~p", [RV]),
-            cgi_finished({cgi_error, cgi_exec_error}, NewState);
+            cgi_finished({gateway_error, cgi_exec_error}, NewState);
         St ->
             lager:info("cgi process terminated anomalously: ~p", [St]),
-            cgi_finished({cgi_error, cgi_exec_error}, NewState)
+            cgi_finished({gateway_error, cgi_exec_error}, NewState)
     end;
 
 handle_info({stdout, OsPid, Msg}, State) ->
@@ -217,7 +224,10 @@ handle_info(Info, State) ->
 
 -spec terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
                 State :: term()) -> any().
-terminate(_Reason, _State) ->
+terminate(normal, _State) ->
+    ok;
+terminate(Reason, _State) ->
+    lager:info("CGI queue worker ~p terminating: [[~p]]", [self(), Reason]),
     ok.
 
 -spec code_change(OldVsn :: term() | {down, term()},
@@ -236,18 +246,18 @@ format_status(_Opt, Status) ->
 %%% Internal functions
 %%%===================================================================
 
--spec cgi_finished(exec_result(), worker_state()) -> term().
+-spec cgi_finished(gateway_result(), worker_state()) -> term().
 cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     blizanci_servlet:gateway_exit(Parent, Reason),
     {stop, normal, State}.
 
 
-cgi_environment(Path, Bin, Hostname, Req, Port) ->
-    Env0 = make_environment(Path, Bin, Hostname, Req, Port),
+cgi_environment(CGIPrefix, Path, Bin, Hostname, Req, Port) ->
+    Env0 = make_environment(CGIPrefix, Path, Bin, Hostname, Req, Port),
     blizanci_osenv:sanitise(Env0).
 
-make_environment(Path, Bin, Hostname, Req, Port) ->
-    ScriptName = "/cgi-bin/" ++ binary_to_list(Path),
+make_environment(CGIPrefix, Path, Bin, Hostname, Req, Port) ->
+    ScriptName = CGIPrefix ++ binary_to_list(Path),
     #{ query := QueryString,
        client_cert := Cert } = Req,
 

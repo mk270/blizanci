@@ -12,7 +12,7 @@
 % fulfil these.
 %
 % One blizanci_servlet process is generated per request. This is done by
-% calling blizanci_servlet:start_link/3, which has the side-effect of
+% calling blizanci_servlet:request/4, which has the side-effect of
 % caching the caller's Pid and passing it to the servlet process it
 % creates.
 %
@@ -29,7 +29,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, cancel/1, gateway_exit/2]).
+-export([request/4, cancel/1, gateway_exit/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -37,7 +37,12 @@
 
 -define(SERVER, ?MODULE).
 
--record(servlet_state, {parent, url, request, config, cgi_pid}).
+-record(servlet_state, {parent,
+                        url,
+                        request,
+                        config,
+                        gateway_pid,
+                        gateway_module}).
 
 %%%===================================================================
 %%% API
@@ -50,13 +55,13 @@ cancel(no_proc) ->
     ok;
 cancel({proc, Pid}) ->
     case is_process_alive(Pid) of
-        true -> gen_server:call(Pid, quit);
+        true -> gen_server:cast(Pid, servlet_quit);
         _ -> ok
     end.
 
 
 % Called by the CGI runner
--spec gateway_exit(pid(), exec_result()) -> 'ok'.
+-spec gateway_exit(pid(), gateway_result()) -> 'ok'.
 gateway_exit(Pid, Result) when is_pid(Pid) ->
     case is_process_alive(Pid) of
         true -> gen_server:call(Pid, {gateway_result, Result});
@@ -64,13 +69,18 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
     end.
 
 
--spec start_link(any(), any(), any()) -> {ok, Pid :: pid()} |
-                      {error, Error :: {already_started, pid()}} |
-                      {error, Error :: term()} |
-                      ignore.
-start_link(URL, Req, Config) ->
+-spec request(module(), any(), any(), any()) -> gemini_response().
+request(Module, URL, Req, Config) ->
     Parent = self(),
-    proc_lib:start_link(?MODULE, init, [[Parent, URL, Req, Config]]).
+    case Module:request(URL, Req, Config) of
+        {immediate, Result} -> Result;
+        defer ->
+            case proc_lib:start_link(?MODULE, init, [[Parent, Module,
+                                                      URL, Req, Config]]) of
+                {ok, Pid} -> {init_servlet, Pid};
+                {error, _} -> {error_code, internal_server_error}
+            end
+    end.
 
 
 %%%===================================================================
@@ -82,32 +92,30 @@ start_link(URL, Req, Config) ->
                               {ok, State :: term(), hibernate} |
                               {stop, Reason :: term()} |
                               ignore.
-init([Parent, URL, Req, Config]) ->
-    process_flag(trap_exit, true),
+init([Parent, Module, URL, Req, Config]) ->
     proc_lib:init_ack({ok, self()}),
-    case blizanci_cgi:serve(URL, Req, Config) of
-        {error_code, Error} ->
+    case Module:serve(URL, Req, Config) of
+        {gateway_bypassed, Result} ->
+            report_result(Parent, {servlet_bypassed, Result}),
+            {stop, normal};
+        {gateway_error, Error} ->
             report_result(Parent, {servlet_failed, Error}),
             {stop, normal};
-        {init_cgi, Pid} ->
+        {gateway_started, Pid} ->
             State = #servlet_state{parent=Parent,
                            url=URL,
                            request=Req,
                            config=Config,
-                           cgi_pid=Pid},
+                           gateway_pid=Pid,
+                           gateway_module=Module},
             gen_server:enter_loop(?MODULE, [], State)
     end.
-
-handle_call(quit, _From, State) ->
-    Pid = State#servlet_state.cgi_pid,
-    blizanci_cgi:cancel(Pid),
-    {stop, normal, ok, State};
 
 handle_call({gateway_result, Result}, _From,
             State=#servlet_state{parent=Parent}) ->
     ServletResult = case Result of
-                        {cgi_output, Output} -> {servlet_complete, Output};
-                        {error_code, Error} -> {servlet_failed, Error}
+                        {gateway_output, Output} -> {servlet_complete, Output};
+                        {gateway_error, Error} -> {servlet_failed, Error}
                     end,
     report_result(Parent, ServletResult),
     {reply, ok, State};
@@ -116,6 +124,11 @@ handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
+
+handle_cast(servlet_quit, State=#servlet_state{gateway_module=Module}) ->
+    Pid = State#servlet_state.gateway_pid,
+    Module:cancel(Pid),
+    {stop, normal, State};
 
 handle_cast(_Request, State) ->
     {noreply, State}.
@@ -133,7 +146,10 @@ handle_info(Info, State) ->
 
 -spec terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
                 State :: term()) -> any().
-terminate(_Reason, _State) ->
+terminate(normal, _State) ->
+    ok;
+terminate(Reason, _State) ->
+    lager:info("servlet ~p terminating because: [[~p]]", [self(), Reason]),
     ok.
 
 -spec code_change(OldVsn :: term() | {down, term()},
@@ -155,4 +171,4 @@ format_status(_Opt, Status) ->
 -spec report_result(pid(), servlet_result()) -> 'ok'.
 report_result(Parent, Result) ->
     ServletResult = Result,
-    blizanci_gemini:servlet_result(Parent, ServletResult).
+    ok = blizanci_gemini:servlet_result(Parent, ServletResult).
