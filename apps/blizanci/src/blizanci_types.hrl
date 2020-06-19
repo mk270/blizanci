@@ -54,7 +54,10 @@
 -type env_list() :: [{string(), string()}].
 
 
--type cgi_error() :: 'cgi_exec_error' | 'file_not_found' | 'gateway_busy'.
+-type cgi_error() :: 'cgi_exec_error'
+                   | 'file_not_found'
+                   | 'gateway_busy'
+                   | 'unimplemented'.
 
 -type gateway_result() :: {'gateway_output', binary()}
                         | {'gateway_error', cgi_error()}

@@ -6,6 +6,7 @@
 %% the terms of the Apache Software Licence v2.0.
 
 -module(blizanci_cgi).
+-behaviour(blizanci_servlet).
 
 % This module is called by the servlet to run CGI scripts. It communicates
 % with three other processes:

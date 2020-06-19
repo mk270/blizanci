@@ -6,6 +6,8 @@
 %% the terms of the Apache Software Licence v2.0.
 
 -module(blizanci_static).
+-behaviour(blizanci_servlet).
+
 -include("blizanci_types.hrl").
 
 -export([serve/3, cancel/1, request/3]).
@@ -32,7 +34,7 @@ request(Path, Req, Config) ->
 
 
 serve(_, _, _) ->
-    {error_code, unimplemented}.
+    {gateway_error, unimplemented}.
 
 % private: certificate must be signed by a particular CA
 % restricted: certificate must be presented
