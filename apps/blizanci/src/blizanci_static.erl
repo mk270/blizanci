@@ -5,7 +5,7 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
--module(blizanci_file).
+-module(blizanci_static).
 -include("blizanci_types.hrl").
 
 -export([serve/3, cancel/1, request/3]).

@@ -423,7 +423,7 @@ handle_file(Path, Req, Config) when is_binary(Path) ->
 serve(_Pth = <<"cgi-bin/", Rest/binary>>, Req, Config) ->
     blizanci_servlet:request(?CGI_MODULE, Rest, Req, Config);
 serve(Path, Req, Config) ->
-    blizanci_servlet:request(blizanci_file, Path, Req, Config).
+    blizanci_servlet:request(blizanci_static, Path, Req, Config).
 
 
 -spec format_headers(integer(), binary()) -> iolist().
