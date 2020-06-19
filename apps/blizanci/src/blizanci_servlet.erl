@@ -27,6 +27,7 @@
 -include("blizanci_types.hrl").
 
 -behaviour(gen_server).
+-include("gen_server.hrl").
 
 %% API
 -export([request/4, cancel/1, gateway_exit/2]).
@@ -87,11 +88,6 @@ request(Module, URL, Req, Config) ->
 %%% gen_server callbacks
 %%%===================================================================
 
--spec init(Args :: term()) -> {ok, State :: term()} |
-                              {ok, State :: term(), Timeout :: timeout()} |
-                              {ok, State :: term(), hibernate} |
-                              {stop, Reason :: term()} |
-                              ignore.
 init([Parent, Module, URL, Req, Config]) ->
     proc_lib:init_ack({ok, self()}),
     case Module:serve(URL, Req, Config) of
@@ -131,33 +127,20 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 
--spec handle_info(Info :: timeout() | term(), State :: term()) ->
-                         {noreply, NewState :: term()} |
-                         {noreply, NewState :: term(), Timeout :: timeout()} |
-                         {noreply, NewState :: term(), hibernate} |
-                         {stop, Reason :: normal | term(), NewState :: term()}.
 handle_info(Info, State) ->
     lager:info("Servlet message: ~p", [Info]),
     {noreply, State}.
 
 
--spec terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
-                State :: term()) -> any().
 terminate(normal, _State) ->
     ok;
 terminate(Reason, _State) ->
     lager:info("servlet ~p terminating because: [[~p]]", [self(), Reason]),
     ok.
 
--spec code_change(OldVsn :: term() | {down, term()},
-                  State :: term(),
-                  Extra :: term()) -> {ok, NewState :: term()} |
-                                      {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
--spec format_status(Opt :: normal | terminate,
-                    Status :: list()) -> Status :: term().
 format_status(_Opt, Status) ->
     Status.
 

@@ -42,6 +42,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -behaviour(gen_server).
+-include("gen_server.hrl").
 -behaviour(ranch_protocol).
 
 -include("blizanci_types.hrl").
@@ -126,7 +127,6 @@ servlet_result(Pid, Result) when is_pid(Pid) ->
 %% gen_server.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--spec init({pid(), any(), any(), [any()]}) -> {ok, pid()}.
 init({Ref, Socket, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),

@@ -40,6 +40,7 @@
 -include("blizanci_types.hrl").
 
 -behaviour(gen_server).
+-include("gen_server.hrl").
 
 %% API
 -export([serve/3, start/0, cancel/1, request/3]).
@@ -145,11 +146,6 @@ run_cgi(Args, Env) ->
 
 % Called by the queue runner. The second argument to ppool:run is
 % passed in as the first argument to this function.
--spec init(Args :: term()) -> {ok, State :: term()} |
-                              {ok, State :: term(), Timeout :: timeout()} |
-                              {ok, State :: term(), hibernate} |
-                              {stop, Reason :: term()} |
-                              ignore.
 init({Parent, {CmdLine, Options}}) ->
     process_flag(trap_exit, true),
     Result = exec:run(CmdLine, Options),
@@ -157,28 +153,10 @@ init({Parent, {CmdLine, Options}}) ->
     {ok, #worker_state{parent=Parent, cgi_status={Pid, OsPid, <<>>}}}.
 
 
--spec handle_call(
-        Request :: term(), From :: {pid(), term()}, State :: term()) ->
-                         {reply, Reply :: term(), NewState :: term()} |
-                         {reply, Reply :: term(), NewState :: term(),
-                          Timeout :: timeout()} |
-                         {reply, Reply :: term(), NewState :: term(),
-                          hibernate} |
-                         {noreply, NewState :: term()} |
-                         {noreply, NewState :: term(), Timeout :: timeout()} |
-                         {noreply, NewState :: term(), hibernate} |
-                         {stop, Reason :: term(), Reply :: term(),
-                          NewState :: term()} |
-                         {stop, Reason :: term(), NewState :: term()}.
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
--spec handle_cast(Request :: term(), State :: term()) ->
-                         {noreply, NewState :: term()} |
-                         {noreply, NewState :: term(), Timeout :: timeout()} |
-                         {noreply, NewState :: term(), hibernate} |
-                         {stop, Reason :: term(), NewState :: term()}.
 handle_cast(cgi_quit, State=#worker_state{cgi_status=CGI_Status}) ->
     {_Pid, OsPid, _Buffer} = CGI_Status,
     exec:kill(OsPid, 9),
@@ -187,11 +165,6 @@ handle_cast(cgi_quit, State=#worker_state{cgi_status=CGI_Status}) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
--spec handle_info(Info :: timeout() | term(), State :: term()) ->
-                         {noreply, NewState :: term()} |
-                         {noreply, NewState :: term(), Timeout :: timeout()} |
-                         {noreply, NewState :: term(), hibernate} |
-                         {stop, Reason :: normal | term(), NewState :: term()}.
 handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
     {ExpectedPid, ExpectedOsPid, Buffer} = State#worker_state.cgi_status,
     ExpectedPid = Pid,
@@ -222,23 +195,15 @@ handle_info(Info, State) ->
     lager:info("OOB msg:~p", [Info]),
     {noreply, State}.
 
--spec terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
-                State :: term()) -> any().
 terminate(normal, _State) ->
     ok;
 terminate(Reason, _State) ->
     lager:info("CGI queue worker ~p terminating: [[~p]]", [self(), Reason]),
     ok.
 
--spec code_change(OldVsn :: term() | {down, term()},
-                  State :: term(),
-                  Extra :: term()) -> {ok, NewState :: term()} |
-                                      {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
--spec format_status(Opt :: normal | terminate,
-                    Status :: list()) -> Status :: term().
 format_status(_Opt, Status) ->
     Status.
 
