@@ -141,7 +141,8 @@ init({Ref, Socket, Transport, Opts}) ->
                 port=Port,
                 docroot=Docroot,
                 cgiroot=CGIroot,
-                cgiprefix="/cgi-bin/"},
+                cgiprefix="/cgi-bin/",
+                routing=[]},
     State = #state{
                transport=Transport,
                socket=Socket,
@@ -470,6 +471,7 @@ handle_line_test_() ->
                                              port= 1965,
                                              docroot="/bin",
                                              cgiroot="/fake",
-                                             cgiprefix="/cgi-bin/"},
+                                             cgiprefix="/cgi-bin/",
+                                             routing=[]},
                                           {error, no_peercert})) ||
         {Expected, TestInput} <- handle_line_test_data() ].

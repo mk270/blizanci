@@ -8,12 +8,23 @@
 -type cgi_status()   :: {pid(), integer(), binary()}.
 -type servlet_proc() :: {'proc', pid()} | 'no_proc'.
 
+-type mp() :: {re_pattern, _, _, _, _}.
+
+-type route_option() :: {atom(), any()}.
+
+-record(route,
+        {pattern :: mp(),
+         module  :: module(),
+         options :: [route_option()]}).
+-type route() :: #route{}.
+
 -record(server_config,
         {hostname   :: binary(),
          port       :: integer(),
          docroot    :: string(),
          cgiroot    :: string(),
-         cgiprefix  :: string()}).
+         cgiprefix  :: string(),
+         routing    :: [route()]}).
 -type server_config() :: #server_config{}.
 
 -record(state,
