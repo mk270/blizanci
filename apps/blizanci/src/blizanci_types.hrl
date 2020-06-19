@@ -47,9 +47,8 @@
 
 -type gateway_result() :: {'gateway_output', binary()}
                         | {'gateway_error', cgi_error()}
-                        | {'gateway_started', pid()}
-                        | {'gateway_bypassed', gemini_response()}.
+                        | {'gateway_started', pid()}.
+
 
 -type servlet_result() :: {'servlet_failed', atom()}
-                        | {'servlet_complete', binary() }
-                        | {'servlet_bypassed', gemini_response()}.
+                        | {'servlet_complete', binary() }.

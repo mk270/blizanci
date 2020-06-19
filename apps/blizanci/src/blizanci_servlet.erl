@@ -95,9 +95,6 @@ request(Module, URL, Req, Config) ->
 init([Parent, Module, URL, Req, Config]) ->
     proc_lib:init_ack({ok, self()}),
     case Module:serve(URL, Req, Config) of
-        {gateway_bypassed, Result} ->
-            report_result(Parent, {servlet_bypassed, Result}),
-            {stop, normal};
         {gateway_error, Error} ->
             report_result(Parent, {servlet_failed, Error}),
             {stop, normal};

@@ -208,12 +208,6 @@ handle_call({servlet_result, {servlet_complete, Output}}, _From, State) ->
     self() ! finished,
     {reply, ok, State};
 
-handle_call({servlet_result, {servlet_bypassed, Result}}, _From,
-            State=#state{transport=Transport, socket=Socket}) ->
-    respond(Result, State),
-    Transport:close(Socket),
-    {reply, ok, State};
-
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
