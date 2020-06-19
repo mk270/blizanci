@@ -5,16 +5,16 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
--module(blizanci_servlet).
+-module(blizanci_servlet_container).
 
 % This module provides a mechanism for dynamic content generation for
 % Gemini requests. Currently it is somewhat hardwired to use CGI to
 % fulfil these.
 %
-% One blizanci_servlet process is generated per request. This is done by
-% calling blizanci_servlet:request/4, which has the side-effect of
-% caching the caller's Pid and passing it to the servlet process it
-% creates.
+% One blizanci_servlet_container process is generated per
+% request. This is done by calling blizanci_servlet_container:request/4,
+% which has the side-effect of caching the caller's Pid and passing it to
+% the servlet process it creates.
 %
 % On completion of the request, which may well not be synchronous, results
 % may be communicated back to the Gemini parent (the original caller) by

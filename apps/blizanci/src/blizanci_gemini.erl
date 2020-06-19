@@ -238,7 +238,7 @@ activate(Transport, Socket) ->
 
 close_session(State) ->
     ServletProc = State#state.servlet_proc,
-    blizanci_servlet:cancel(ServletProc).
+    blizanci_servlet_container:cancel(ServletProc).
 
 
 % Send a response back to the client, generally closing the connection
@@ -416,9 +416,9 @@ handle_file(Path, Req, Config) when is_binary(Path) ->
 % Separate out CGI
 -spec serve(binary(), map(), server_config()) -> gemini_response().
 serve(_Pth = <<"cgi-bin/", Rest/binary>>, Req, Config) ->
-    blizanci_servlet:request(?CGI_MODULE, Rest, Req, Config);
+    blizanci_servlet_container:request(?CGI_MODULE, Rest, Req, Config);
 serve(Path, Req, Config) ->
-    blizanci_servlet:request(blizanci_static, Path, Req, Config).
+    blizanci_servlet_container:request(blizanci_static, Path, Req, Config).
 
 
 -spec format_headers(integer(), binary()) -> iolist().
