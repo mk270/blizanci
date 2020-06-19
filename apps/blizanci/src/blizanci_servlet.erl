@@ -138,9 +138,13 @@ terminate(Reason, _State) ->
     lager:info("servlet ~p terminating because: [[~p]]", [self(), Reason]),
     ok.
 
+
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
+-spec format_status(Opt :: normal | terminate,
+                    Status :: list()) -> Status :: term().
 format_status(_Opt, Status) ->
     Status.
 

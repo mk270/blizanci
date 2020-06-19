@@ -44,6 +44,3 @@
                   Extra :: term()) -> {ok, NewState :: term()} |
                                       {error, Reason :: term()}.
 
--spec format_status(Opt :: normal | terminate,
-                    Status :: list()) -> Status :: term().
-

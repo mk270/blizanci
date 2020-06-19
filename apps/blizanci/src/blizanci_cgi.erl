@@ -204,6 +204,9 @@ terminate(Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
+-spec format_status(Opt :: normal | terminate,
+                    Status :: list()) -> Status :: term().
 format_status(_Opt, Status) ->
     Status.
 
