@@ -257,7 +257,7 @@ make_environment(CGIPrefix, Path, Bin, Options, QueryString, Cert) ->
      {"SERVER_NAME", Hostname},
      {"SERVER_PORT", Port},
      {"SERVER_PROTOCOL", "GEMINI"}
-           ],
+    ],
 
     case blizanci_x509:peercert_cn(Cert) of
         {ok, #{ common_name := CN }} ->
