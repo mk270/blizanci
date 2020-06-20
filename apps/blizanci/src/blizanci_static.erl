@@ -13,11 +13,13 @@
 -export([serve/3, cancel/1, request/3]).
 
 -type options() :: #{ bare_mimetype := binary(),
-                      unknown_mimetype := binary() }.
+                      unknown_mimetype := binary(),
+                      docroot := string() }.
 
 -define(INDEX, "index.gemini").
 -define(BARE_MIMETYPE, <<"text/gemini">>).
 -define(UNKNOWN_MIMETYPE, <<"application/octet-stream">>).
+-define(DEFAULT_DOCROOT, <<"./public_gemini">>).
 
 cancel(_) ->
     ok.
@@ -28,14 +30,29 @@ cancel(_) ->
                      {'immediate', gemini_response()} |
                      'defer'.
 request(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
+    Opts = #{
+             bare_mimetype => <<"text/gemini">>,
+             unknown_mimetype => <<"application/octet-stream">>,
+             docroot => Config#server_config.docroot
+            },
     {immediate,
-     serve_file(Path, Req, Config#server_config.docroot, restricted)};
+     serve_file(Path, Req, Opts, restricted)};
 request(Path = <<"private/", _Rest/binary>>, Req, Config) ->
+    Opts = #{
+             bare_mimetype => <<"text/gemini">>,
+             unknown_mimetype => <<"application/octet-stream">>,
+             docroot => Config#server_config.docroot
+            },
     {immediate,
-     serve_file(Path, Req, Config#server_config.docroot, private)};
+     serve_file(Path, Req, Opts, private)};
 request(Path, Req, Config) ->
+    Opts = #{
+             bare_mimetype => <<"text/gemini">>,
+             unknown_mimetype => <<"application/octet-stream">>,
+             docroot => Config#server_config.docroot
+            },
     {immediate,
-     serve_file(Path, Req, Config#server_config.docroot, public)}.
+     serve_file(Path, Req, Opts, public)}.
 
 
 serve(_, _, _) ->
@@ -44,43 +61,40 @@ serve(_, _, _) ->
 % private: certificate must be signed by a particular CA
 % restricted: certificate must be presented
 % public: no certificate requirement
--spec serve_file(binary(), map(), string(), authorisation())
+-spec serve_file(binary(), map(), options(), authorisation())
                 -> gemini_response().
-serve_file(Path, _Req, Docroot, public) ->
-    serve_file(Path, Docroot);
-serve_file(Path, Req, Docroot, Auth) ->
+serve_file(Path, _Req, Opts, public) ->
+    serve_file(Path, Opts);
+serve_file(Path, Req, Opts, Auth) ->
     #{ client_cert := Cert } = Req,
     CertInfo = blizanci_x509:peercert_cn(Cert),
-    serve_restricted_file(Path, Docroot, Auth, CertInfo).
+    serve_restricted_file(Path, Opts, Auth, CertInfo).
 
 
--spec serve_restricted_file(binary(), string(), authorisation(),
+-spec serve_restricted_file(binary(), options(), authorisation(),
                             any()) ->
                                    gemini_response().
-serve_restricted_file(_Path, _Docroot, _Auth, error) ->
+serve_restricted_file(_Path, _Opts, _Auth, error) ->
     {error_code, cert_required};
-serve_restricted_file(Path, Docroot, Auth, {ok, CertInfo}) ->
+serve_restricted_file(Path, Opts, Auth, {ok, CertInfo}) ->
     #{ common_name := Subject,
        issuer_common_name := Issuer } = CertInfo,
     lager:info("~p object requested, peercert: ~p/~p", [Auth, Subject, Issuer]),
-    serve_file(Path, Docroot).
+    serve_file(Path, Opts).
 
 
 % If there's a valid file requested, then get its full path, so that
 % it can be sendfile()'d back to the client. If it's a directory, redirect
 % to an index file.
--spec serve_file(binary(), string()) -> gemini_response().
-serve_file(Path, Docroot) ->
+-spec serve_file(binary(), options()) -> gemini_response().
+serve_file(Path, Opts) ->
+    Docroot = maps:get(docroot, Opts, ?DEFAULT_DOCROOT),
     Full = filename:join(Docroot, Path),
     case {filelib:is_dir(Full), filelib:is_regular(Full)} of
         {true, _} ->
             Redirect = filename:join(Path, ?INDEX),
             {redirect, Redirect};
         {false, true} ->
-            Opts = #{
-                     bare_mimetype => <<"text/gemini">>,
-                     unknown_mimetype => <<"application/octet-stream">>
-                    },
             MimeType = mime_type(Full, Opts),
             {file, MimeType, Full};
         _ ->
