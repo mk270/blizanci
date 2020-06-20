@@ -79,7 +79,7 @@ serve_restricted_file(_Path, _Opts, _Auth, error) ->
 serve_restricted_file(Path, Opts, Auth, {ok, CertInfo}) ->
     #{ common_name := Subject,
        issuer_common_name := Issuer } = CertInfo,
-    lager:info("~p object requested, peercert: ~p/~p", [Auth, Subject, Issuer]),
+    lager:info("~p object requested, cert: ~p/~p", [Auth, Subject, Issuer]),
     serve_file(Path, Opts).
 
 
