@@ -29,6 +29,11 @@
 %   handle_path(...):
 %     strip out multiple leading slashes from path component of URL
 %
+%
+%   [the processing is handed off to a servlet, which through callbacks then
+%    does something like the following:]
+%
+%
 %   handle_file(...):
 %     strip out requests involving ".."
 %

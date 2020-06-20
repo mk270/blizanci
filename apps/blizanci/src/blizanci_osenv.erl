@@ -8,7 +8,7 @@
 -module(blizanci_osenv).
 -include("blizanci_types.hrl").
 
-% This module deals with the OS environment, as in conventional UNIX
+% This module deals with the OS environment, that is, conventional UNIX
 % environment variables as opposed to Erlang's per-application environments.
 % OS environment variables are implicated in two ways:
 %
