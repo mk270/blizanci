@@ -32,18 +32,15 @@ cancel(_) ->
                      {'immediate', gemini_response()} |
                      'defer'.
 request(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
-    Opts = convert(Config),
-    {immediate,
-     serve_file(Path, Req, Opts, restricted)};
+    {immediate, serve_file(Path, Req, convert(Opts), restricted)};
 request(Path = <<"private/", _Rest/binary>>, Req, Config) ->
-    Opts = convert(Config),
-    {immediate,
-     serve_file(Path, Req, Opts, private)};
+    {immediate, serve_file(Path, Req, convert(Opts), private)};
 request(Path, Req, Config) ->
-    Opts = convert(Config),
-    {immediate,
-     serve_file(Path, Req, Opts, public)}.
+    {immediate, serve_file(Path, Req, convert(Opts), public)}.
 
+
+% temporary affordance in anticipation of when the config
+% is passed into this module from the router
 -spec convert(server_config()) -> options().
 convert(Config) ->
     Opts = #{
