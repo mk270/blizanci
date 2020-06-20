@@ -21,9 +21,6 @@
 -record(server_config,
         {hostname   :: binary(),
          port       :: integer(),
-         docroot    :: string(),
-         cgiroot    :: string(),
-         cgiprefix  :: string(),
          routing    :: [route()]}).
 -type server_config() :: #server_config{}.
 

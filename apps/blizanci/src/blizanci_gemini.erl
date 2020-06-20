@@ -139,15 +139,10 @@ init({Ref, Socket, Transport, Opts}) ->
     PC = ssl:peercert(Socket),
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     Port = proplists:get_value(port, Opts),
-    Docroot = proplists:get_value(docroot, Opts),
-    CGIroot = proplists:get_value(cgiroot, Opts),
     Routing = proplists:get_value(routing, Opts),
     Config = #server_config{
                 hostname=Hostname,
                 port=Port,
-                docroot=Docroot,
-                cgiroot=CGIroot,
-                cgiprefix="/cgi-bin/",
                 routing=Routing},
     State = #state{
                transport=Transport,
@@ -473,9 +468,6 @@ handle_line_test_() ->
                                           #server_config{
                                              hostname= <<"this.host.dev">>,
                                              port= 1965,
-                                             docroot="/bin",
-                                             cgiroot="/fake",
-                                             cgiprefix="/cgi-bin/",
                                              routing=[]},
                                           {error, no_peercert})) ||
         {Expected, TestInput} <- handle_line_test_data() ].
