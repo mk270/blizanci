@@ -141,13 +141,14 @@ init({Ref, Socket, Transport, Opts}) ->
     Port = proplists:get_value(port, Opts),
     Docroot = proplists:get_value(docroot, Opts),
     CGIroot = proplists:get_value(cgiroot, Opts),
+    Routing = proplists:get_value(routing, Opts),
     Config = #server_config{
                 hostname=Hostname,
                 port=Port,
                 docroot=Docroot,
                 cgiroot=CGIroot,
                 cgiprefix="/cgi-bin/",
-                routing=[]},
+                routing=Routing},
     State = #state{
                transport=Transport,
                socket=Socket,
@@ -420,10 +421,8 @@ handle_file(Path, Req, Config) when is_binary(Path) ->
 
 % Separate out CGI
 -spec serve(binary(), map(), server_config()) -> gemini_response().
-serve(_Pth = <<"cgi-bin/", Rest/binary>>, Req, Config) ->
-    blizanci_servlet_container:request(?CGI_MODULE, Rest, Req, Config);
 serve(Path, Req, Config) ->
-    blizanci_servlet_container:request(blizanci_static, Path, Req, Config).
+    blizanci_router:route(Path, Req, Config).
 
 
 -spec format_headers(integer(), binary()) -> iolist().

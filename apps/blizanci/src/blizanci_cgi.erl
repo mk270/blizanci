@@ -113,10 +113,11 @@ request(_Path, _Req, _Config) ->
 %
 % Validate that a proper CGI request has been received, and if so, submit
 % a job to the queue
--spec serve(binary(), request_details(), server_config()) -> gateway_result().
-serve(Path, Req, Config) ->
-    Options = #{ cgiprefix := CGIPrefix,
-                 cgiroot   := CGIRoot } = convert(Config),
+-spec serve(path_matches(), request_details(), options()) -> gateway_result().
+serve(Matches, Req, Options) ->
+    #{ <<"PATH">> := Path } = Matches,
+    #{ cgiprefix := CGIPrefix,
+       cgiroot   := CGIRoot } = Options,
     PathElements  = [CGIRoot, binary_to_list(Path)],
     {ok, Cmd}     = blizanci_path:fix_path(filename:join(PathElements)),
 
@@ -146,20 +147,6 @@ run_cgi(Args, Env) ->
     Options = [monitor, {env, Env}, stdout, stderr],
     ppool:run(?QUEUE, [{self(), {Args, Options}}]).
 
-
-% temporary affordance in anticipation of when the config
-% is passed into this module from the router
--spec convert(server_config()) -> options().
-convert(#server_config{
-           hostname=Hostname,
-           port=Port,
-           cgiroot=CGIRoot}) ->
-    #{
-      hostname => Hostname,
-      port => Port,
-      cgiroot => CGIRoot,
-      cgiprefix => "/cgi-bin/"
-     }.
 
 %%%===================================================================
 %%% gen_server callbacks

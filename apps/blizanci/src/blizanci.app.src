@@ -1,6 +1,6 @@
 {application, blizanci,
  [{description, "A Gemini protocol server"},
-  {vsn, "1.13.0"},
+  {vsn, "2.0.0"},
   {registered, [blizanci_sup]},
   {mod, {blizanci_app, []}},
   {applications,
@@ -19,7 +19,8 @@
   {modules, [blizanci_app, blizanci_cgi, blizanci_gemini,
              blizanci_sup, blizanci_x509, blizanci_servlet_container,
              blizanci_config, blizanci_servlet,
-             blizanci_osenv, blizanci_path, blizanci_static]},
+             blizanci_osenv, blizanci_path, blizanci_static,
+             blizanci_router]},
 
   {licenses, ["Apache 2.0"]},
   {links, []}

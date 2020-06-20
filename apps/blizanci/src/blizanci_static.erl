@@ -28,32 +28,29 @@ cancel(_) ->
 
 % Called by the servlet
 %
--spec request(binary(), request_details(), server_config()) ->
-                     {'immediate', gemini_response()} |
-                     'defer'.
-request(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
-    {immediate, serve_file(Path, Req, convert(Config), restricted)};
-request(Path = <<"private/", _Rest/binary>>, Req, Config) ->
-    {immediate, serve_file(Path, Req, convert(Config), private)};
-request(Path, Req, Config) ->
-    {immediate, serve_file(Path, Req, convert(Config), public)}.
+-spec request(path_matches(), request_details(), options()) ->
+                         {'immediate', gemini_response()} |
+                         'defer'.
+request(Matches, Req, Options) ->
+    #{ <<"PATH">> := Path } = Matches,
+    tmp_request(Path, Req, Options).
+
+-spec tmp_request(binary(), request_details(), options()) ->
+                         {'immediate', gemini_response()} |
+                         'defer'.
+tmp_request(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
+    {immediate, serve_file(Path, Req, Config, restricted)};
+tmp_request(Path = <<"private/", _Rest/binary>>, Req, Config) ->
+    {immediate, serve_file(Path, Req, Config, private)};
+tmp_request(Path, Req, Config) ->
+    {immediate, serve_file(Path, Req, Config, public)}.
 
 
-% temporary affordance in anticipation of when the config
-% is passed into this module from the router
--spec convert(server_config()) -> options().
-convert(Config) ->
-    Opts = #{
-             bare_mimetype => <<"text/gemini">>,
-             unknown_mimetype => <<"application/octet-stream">>,
-             docroot => Config#server_config.docroot,
-             index => "index.gemini"
-            },
-    Opts.
-
-
+-spec serve(path_matches(), request_details(), options()) ->
+                   gateway_result().
 serve(_, _, _) ->
     {gateway_error, unimplemented}.
+
 
 % private: certificate must be signed by a particular CA
 % restricted: certificate must be presented

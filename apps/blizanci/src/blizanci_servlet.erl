@@ -16,14 +16,14 @@
 % blizanci_servlet_container process). If it opts instead to defer
 % processing, the caller will start and link a new process which will call
 % Module:serve/3 below.
--callback request(binary(), request_details(), server_config()) ->
+-callback request(path_matches(), request_details(), map()) ->
     {'immediate', gemini_response()} |
     'defer'.
 
 % TBD: gateway_error | gateway_started
 % TBD: gateway_exit
 
--callback serve(binary(), request_details(), server_config()) ->
+-callback serve(path_matches(), request_details(), map()) ->
     gateway_result().
 
 % Called for asynchronous shutdown, e.g., when the client has hung up the

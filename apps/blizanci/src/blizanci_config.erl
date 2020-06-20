@@ -34,9 +34,30 @@ proto_opts() ->
     Docroot = application:get_env(App, docroot, "./public_gemini"),
     CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
     Port = application:get_env(App, port, ?PORT),
+    Default_Routing = routing_table(Hostname, Docroot, CGIroot, Port),
+    Routes = application:get_env(App, routing, Default_Routing),
+    {ok, Routing} = blizanci_router:prepare(Routes),
 
     [{hostname, Hostname},
      {docroot, Docroot},
      {cgiroot, CGIroot},
-     {port, Port}
+     {port, Port},
+     {routing, Routing}
+    ].
+
+routing_table(Hostname, Docroot, CGIroot, Port) ->
+    CGI_Opts =
+        #{ hostname => Hostname,
+           port => Port,
+           cgiroot => CGIroot,
+           cgiprefix => "/cgi-bin/" },
+    Static_Opts =
+        #{ index => "index.gemini",
+           docroot => Docroot,
+           unknown_mimetype => <<"application/octet-stream">>,
+           bare_mimetype => <<"text/gemini">>
+         },
+    [
+     {"cgi-bin/(?<PATH>.*)", blizanci_cgi, CGI_Opts},
+     {"(?<PATH>.*)", blizanci_static, Static_Opts}
     ].
