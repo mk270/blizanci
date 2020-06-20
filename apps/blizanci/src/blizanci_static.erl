@@ -35,6 +35,9 @@ request(Matches, Req, Options) ->
     #{ <<"PATH">> := Path } = Matches,
     tmp_request(Path, Req, Options).
 
+
+% The machinery connected with client certificates is not yet implemented;
+% This pass-through function represents where it would branch off.
 -spec tmp_request(binary(), request_details(), options()) ->
                          {'immediate', gemini_response()} |
                          'defer'.
