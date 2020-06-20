@@ -32,20 +32,20 @@ cancel(_) ->
                      {'immediate', gemini_response()} |
                      'defer'.
 request(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
-    Opts = tmp_config_to_opts(Config),
+    Opts = convert(Config),
     {immediate,
      serve_file(Path, Req, Opts, restricted)};
 request(Path = <<"private/", _Rest/binary>>, Req, Config) ->
-    Opts = tmp_config_to_opts(Config),
+    Opts = convert(Config),
     {immediate,
      serve_file(Path, Req, Opts, private)};
 request(Path, Req, Config) ->
-    Opts = tmp_config_to_opts(Config),
+    Opts = convert(Config),
     {immediate,
      serve_file(Path, Req, Opts, public)}.
 
--spec tmp_config_to_opts(server_config()) -> options().
-tmp_config_to_opts(Config) ->
+-spec convert(server_config()) -> options().
+convert(Config) ->
     Opts = #{
              bare_mimetype => <<"text/gemini">>,
              unknown_mimetype => <<"application/octet-stream">>,
