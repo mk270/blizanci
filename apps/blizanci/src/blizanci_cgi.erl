@@ -124,10 +124,13 @@ serve(Path, Req, #server_config{
     case filelib:is_file(Cmd) of
         false -> {gateway_error, file_not_found};
         true ->
+            #{ query := QueryString, client_cert := Cert } = Req,
+
             % Args represents a UNIX commandline comprising the path of
             % the executable with zero arguments.
             Args = [Cmd],
-            Env = cgi_environment(CGIPrefix, Path, Cmd, Hostname, Req, Port),
+            Env = cgi_environment(CGIPrefix, Path, Cmd, Hostname, Port,
+                                  QueryString, Cert),
 
             case run_cgi(Args, Env) of
                 {ok, Pid} -> {gateway_started, Pid};
@@ -221,14 +224,13 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     {stop, normal, State}.
 
 
-cgi_environment(CGIPrefix, Path, Bin, Hostname, Req, Port) ->
-    Env0 = make_environment(CGIPrefix, Path, Bin, Hostname, Req, Port),
+cgi_environment(CGIPrefix, Path, Bin, Hostname, Port, QueryString, Cert) ->
+    Env0 = make_environment(CGIPrefix, Path, Bin, Hostname, Port,
+                            QueryString, Cert),
     blizanci_osenv:sanitise(Env0).
 
-make_environment(CGIPrefix, Path, Bin, Hostname, Req, Port) ->
+make_environment(CGIPrefix, Path, Bin, Hostname, Port, QueryString, Cert) ->
     ScriptName = CGIPrefix ++ binary_to_list(Path),
-    #{ query := QueryString,
-       client_cert := Cert } = Req,
 
     KVPs = [
      {"PATH_TRANSLATED", Bin},
