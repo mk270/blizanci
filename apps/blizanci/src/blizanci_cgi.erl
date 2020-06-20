@@ -120,7 +120,7 @@ serve(Path, Req, Config) ->
     PathElements  = [CGIRoot, binary_to_list(Path)],
     {ok, Cmd}     = blizanci_path:fix_path(filename:join(PathElements)),
 
-    % this is a belt-and-braces check; URLs with ".." in them are current
+    % this is a belt-and-braces check; URLs with ".." in them are currently
     % forbidden anyway
     true = blizanci_path:path_under_root(Cmd, CGIRoot),
 
