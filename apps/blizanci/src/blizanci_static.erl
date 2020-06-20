@@ -13,6 +13,8 @@
 -export([serve/3, cancel/1, request/3]).
 
 -define(INDEX, "index.gemini").
+-define(BARE_MIMETYPE, <<"text/gemini">>).
+-define(UNKNOWN_MIMETYPE, <<"application/octet-stream">>).
 
 cancel(_) ->
     ok.
@@ -85,10 +87,10 @@ serve_file(Path, Docroot) ->
 -spec mime_type(binary()) -> binary().
 mime_type(Path) when is_binary(Path) ->
     case binary_to_list(filename:extension(Path)) of
-        [] -> <<"text/gemini">>;
+        [] -> ?BARE_MIMETYPE;
         [_Dot|Rest] -> Key = erlang:list_to_binary(Rest),
                       case mime_lookup:lookup(Key) of
-                          notfound -> <<"application/octet-stream">>;
+                          notfound -> ?UNKNOWN_MIMETYPE;
                           {ok, Result} -> Result
                       end
     end.
