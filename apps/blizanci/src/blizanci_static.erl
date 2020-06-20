@@ -14,7 +14,9 @@
 
 -type options() :: #{ bare_mimetype := binary(),
                       unknown_mimetype := binary(),
-                      docroot := string() }.
+                      docroot := string(),
+                      index := string()
+                    }.
 
 -define(INDEX, "index.gemini").
 -define(BARE_MIMETYPE, <<"text/gemini">>).
@@ -33,7 +35,8 @@ request(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
     Opts = #{
              bare_mimetype => <<"text/gemini">>,
              unknown_mimetype => <<"application/octet-stream">>,
-             docroot => Config#server_config.docroot
+             docroot => Config#server_config.docroot,
+             index => "index.gemini"
             },
     {immediate,
      serve_file(Path, Req, Opts, restricted)};
@@ -41,7 +44,8 @@ request(Path = <<"private/", _Rest/binary>>, Req, Config) ->
     Opts = #{
              bare_mimetype => <<"text/gemini">>,
              unknown_mimetype => <<"application/octet-stream">>,
-             docroot => Config#server_config.docroot
+             docroot => Config#server_config.docroot,
+             index => "index.gemini"
             },
     {immediate,
      serve_file(Path, Req, Opts, private)};
@@ -49,7 +53,8 @@ request(Path, Req, Config) ->
     Opts = #{
              bare_mimetype => <<"text/gemini">>,
              unknown_mimetype => <<"application/octet-stream">>,
-             docroot => Config#server_config.docroot
+             docroot => Config#server_config.docroot,
+             index => "index.gemini"
             },
     {immediate,
      serve_file(Path, Req, Opts, public)}.
@@ -92,7 +97,8 @@ serve_file(Path, Opts) ->
     Full = filename:join(Docroot, Path),
     case {filelib:is_dir(Full), filelib:is_regular(Full)} of
         {true, _} ->
-            Redirect = filename:join(Path, ?INDEX),
+            Index = maps:get(index, Opts, ?INDEX),
+            Redirect = filename:join(Path, Index),
             {redirect, Redirect};
         {false, true} ->
             MimeType = mime_type(Full, Opts),
