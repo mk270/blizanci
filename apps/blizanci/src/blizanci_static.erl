@@ -12,6 +12,9 @@
 
 -export([serve/3, cancel/1, request/3]).
 
+-type options() :: #{ bare_mimetype := binary(),
+                      unknown_mimetype := binary() }.
+
 -define(INDEX, "index.gemini").
 -define(BARE_MIMETYPE, <<"text/gemini">>).
 -define(UNKNOWN_MIMETYPE, <<"application/octet-stream">>).
@@ -74,7 +77,11 @@ serve_file(Path, Docroot) ->
             Redirect = filename:join(Path, ?INDEX),
             {redirect, Redirect};
         {false, true} ->
-            MimeType = mime_type(Full),
+            Opts = #{
+                     bare_mimetype => <<"text/gemini">>,
+                     unknown_mimetype => <<"application/octet-stream">>
+                    },
+            MimeType = mime_type(Full, Opts),
             {file, MimeType, Full};
         _ ->
             {error_code, file_not_found}
@@ -84,13 +91,14 @@ serve_file(Path, Docroot) ->
 % Look up the MIME type for a given filename. If the filename doesn't contain
 % a ".", then assume it's text/gemini. If it contains a "." but isn't in
 % the MIME types dataset, then assume it's application/octet-stream.
--spec mime_type(binary()) -> binary().
-mime_type(Path) when is_binary(Path) ->
+-spec mime_type(binary(), options()) -> binary().
+mime_type(Path, Opts) when is_binary(Path) ->
     case binary_to_list(filename:extension(Path)) of
-        [] -> ?BARE_MIMETYPE;
+        [] -> maps:get(bare_mimetype, Opts, ?BARE_MIMETYPE);
         [_Dot|Rest] -> Key = erlang:list_to_binary(Rest),
                       case mime_lookup:lookup(Key) of
-                          notfound -> ?UNKNOWN_MIMETYPE;
+                          notfound -> maps:get(unknown_mimetype, Opts,
+                                               ?UNKNOWN_MIMETYPE);
                           {ok, Result} -> Result
                       end
     end.
