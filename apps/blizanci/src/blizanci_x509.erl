@@ -6,11 +6,12 @@
 %% the terms of the Apache Software Licence v2.0.
 
 -module(blizanci_x509).
+-include("blizanci_types.hrl").
 
 -export([cert_rdns/1, dump_rdn/1, report_peercert/1]).
 -export([peercert_cn/1]).
 
--spec peercert_cn(term()) -> 'error' | {'ok', map()}.
+-spec peercert_cn(term()) -> client_cert().
 peercert_cn({ok, Cert}) ->
     Res = public_key:pkix_decode_cert(Cert, otp),
     {Issuer, Subject} = cert_rdns(Res),
@@ -39,6 +40,7 @@ report_peercert({error, no_peercert}) ->
 report_peercert(_) ->
     lager:info("No peer cert, unknown error"),
     ok.
+
 
 cert_rdns(Cert) ->
     {'OTPCertificate', Data, _, _} = Cert,
