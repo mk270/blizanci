@@ -32,11 +32,11 @@ cancel(_) ->
                      {'immediate', gemini_response()} |
                      'defer'.
 request(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
-    {immediate, serve_file(Path, Req, convert(Opts), restricted)};
+    {immediate, serve_file(Path, Req, convert(Config), restricted)};
 request(Path = <<"private/", _Rest/binary>>, Req, Config) ->
-    {immediate, serve_file(Path, Req, convert(Opts), private)};
+    {immediate, serve_file(Path, Req, convert(Config), private)};
 request(Path, Req, Config) ->
-    {immediate, serve_file(Path, Req, convert(Opts), public)}.
+    {immediate, serve_file(Path, Req, convert(Config), public)}.
 
 
 % temporary affordance in anticipation of when the config
