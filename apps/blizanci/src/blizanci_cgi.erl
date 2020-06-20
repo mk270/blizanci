@@ -53,7 +53,12 @@
 
 -record(worker_state, {parent, cgi_status}).
 -type worker_state() :: #worker_state{}.
-
+-type options() :: #{
+                     hostname := binary(),
+                     port := integer(),
+                     cgiroot := string(),
+                     cgiprefix := string()
+                    }.
 
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
@@ -109,11 +114,9 @@ request(_Path, _Req, _Config) ->
 % Validate that a proper CGI request has been received, and if so, submit
 % a job to the queue
 -spec serve(binary(), request_details(), server_config()) -> gateway_result().
-serve(Path, Req, #server_config{
-                    hostname=Hostname,
-                    port=Port,
-                    cgiroot=CGIRoot}) ->
-    CGIPrefix     = "/cgi-bin/",
+serve(Path, Req, Config) ->
+    Options = #{ cgiprefix := CGIPrefix,
+                 cgiroot   := CGIRoot } = convert(Config),
     PathElements  = [CGIRoot, binary_to_list(Path)],
     {ok, Cmd}     = blizanci_path:fix_path(filename:join(PathElements)),
 
@@ -129,7 +132,7 @@ serve(Path, Req, #server_config{
             % Args represents a UNIX commandline comprising the path of
             % the executable with zero arguments.
             Args = [Cmd],
-            Env = cgi_environment(CGIPrefix, Path, Cmd, Hostname, Port,
+            Env = cgi_environment(CGIPrefix, Path, Cmd, Options,
                                   QueryString, Cert),
 
             case run_cgi(Args, Env) of
@@ -143,6 +146,20 @@ run_cgi(Args, Env) ->
     Options = [monitor, {env, Env}, stdout, stderr],
     ppool:run(?QUEUE, [{self(), {Args, Options}}]).
 
+
+% temporary affordance in anticipation of when the config
+% is passed into this module from the router
+-spec convert(server_config()) -> options().
+convert(#server_config{
+           hostname=Hostname,
+           port=Port,
+           cgiroot=CGIRoot}) ->
+    #{
+      hostname => Hostname,
+      port => Port,
+      cgiroot => CGIRoot,
+      cgiprefix => "/cgi-bin/"
+     }.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -224,13 +241,14 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     {stop, normal, State}.
 
 
-cgi_environment(CGIPrefix, Path, Bin, Hostname, Port, QueryString, Cert) ->
-    Env0 = make_environment(CGIPrefix, Path, Bin, Hostname, Port,
-                            QueryString, Cert),
+cgi_environment(CGIPrefix, Path, Bin, Options, QueryString, Cert) ->
+    Env0 = make_environment(CGIPrefix, Path, Bin, Options, QueryString, Cert),
     blizanci_osenv:sanitise(Env0).
 
-make_environment(CGIPrefix, Path, Bin, Hostname, Port, QueryString, Cert) ->
+make_environment(CGIPrefix, Path, Bin, Options, QueryString, Cert) ->
     ScriptName = CGIPrefix ++ binary_to_list(Path),
+    #{ hostname := Hostname,
+       port     := Port } = Options,
 
     KVPs = [
      {"PATH_TRANSLATED", Bin},
