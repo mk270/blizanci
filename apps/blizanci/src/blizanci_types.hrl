@@ -71,3 +71,6 @@
                            issuer_common_name := binary() }.
 
 -type client_cert() :: 'error' | {'ok', cert_details()}.
+
+-type request_details() :: #{ client_cert := client_cert(),
+                              query := binary() }.

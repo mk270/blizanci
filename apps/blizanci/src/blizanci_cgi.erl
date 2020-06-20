@@ -98,7 +98,7 @@ cancel(Pid) ->
 
 % Called by the servlet
 %
--spec request(any(), any(), any()) ->
+-spec request(any(), request_details(), any()) ->
                      {'immediate', gemini_response()} |
                      'defer'.
 request(_Path, _Req, _Config) ->
@@ -108,7 +108,7 @@ request(_Path, _Req, _Config) ->
 %
 % Validate that a proper CGI request has been received, and if so, submit
 % a job to the queue
--spec serve(binary(), map(), server_config()) -> gateway_result().
+-spec serve(binary(), request_details(), server_config()) -> gateway_result().
 serve(Path, Req, #server_config{
                     hostname=Hostname,
                     port=Port,

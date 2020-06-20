@@ -19,7 +19,7 @@ cancel(_) ->
 
 % Called by the servlet
 %
--spec request(binary(), map(), server_config()) ->
+-spec request(binary(), request_details(), server_config()) ->
                      {'immediate', gemini_response()} |
                      'defer'.
 request(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
