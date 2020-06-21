@@ -55,9 +55,16 @@ routing_table(Hostname, Docroot, CGIroot, Port) ->
         #{ index => "index.gemini",
            docroot => Docroot,
            unknown_mimetype => <<"application/octet-stream">>,
-           bare_mimetype => <<"text/gemini">>
+           bare_mimetype => <<"text/gemini">>,
+           authorisation => public
          },
     [
-     {"cgi-bin/(?<PATH>.*)", blizanci_cgi, CGI_Opts},
-     {"(?<PATH>.*)", blizanci_static, Static_Opts}
+     {"cgi-bin/(?<PATH>.*)",
+      blizanci_cgi, CGI_Opts},
+
+     {"(?<PATH>restricted.*)",
+      blizanci_static, Static_Opts#{  authorisation => restricted } },
+
+     {"(?<PATH>.*)",
+      blizanci_static, Static_Opts}
     ].

@@ -33,20 +33,8 @@ cancel(_) ->
                          'defer'.
 request(Matches, Req, Options) ->
     #{ <<"PATH">> := Path } = Matches,
-    tmp_request(Path, Req, Options).
-
-
-% The machinery connected with client certificates is not yet implemented;
-% This pass-through function represents where it would branch off.
--spec tmp_request(binary(), request_details(), options()) ->
-                         {'immediate', gemini_response()} |
-                         'defer'.
-tmp_request(Path = <<"restricted/", _Rest/binary>>, Req, Config) ->
-    {immediate, serve_file(Path, Req, Config, restricted)};
-tmp_request(Path = <<"private/", _Rest/binary>>, Req, Config) ->
-    {immediate, serve_file(Path, Req, Config, private)};
-tmp_request(Path, Req, Config) ->
-    {immediate, serve_file(Path, Req, Config, public)}.
+    #{ authorisation := Auth } = Options,
+    {immediate, serve_file(Path, Req, Options, Auth)}.
 
 
 -spec serve(path_matches(), request_details(), options()) ->
