@@ -16,12 +16,19 @@
    ]},
   {env,
    [{port, 1965}]},
-  {modules, [blizanci_app, blizanci_cgi, blizanci_gemini,
-             blizanci_sup, blizanci_x509, blizanci_servlet_container,
-             blizanci_config, blizanci_servlet,
-             blizanci_osenv, blizanci_path, blizanci_static,
-             blizanci_router]},
-
+  {modules, [blizanci_app,
+             blizanci_cgi,
+             blizanci_config,
+             blizanci_gemini,
+             blizanci_path,
+             blizanci_router,
+             blizanci_servlet,
+             blizanci_servlet_container,
+             blizanci_static,
+             blizanci_sup,
+             blizanci_osenv,
+             blizanci_x509
+            ]},
   {licenses, ["Apache 2.0"]},
   {links, []}
  ]}.
