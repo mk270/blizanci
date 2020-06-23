@@ -12,7 +12,10 @@ Features:
 Prerequisites
 -------------
 
-You'll need Erlang and Rebar. TODO: installation instructions for these on deb-based systems.
+You'll need Erlang and Rebar. On a Debian-derived system like Ubuntu, this means installing the rebar3 executable from the rebar3 website, and installing the deb package erlang:
+
+* [Rebar3 installation instructions](https://www.rebar3.org/docs/getting-started#installing-binary)
+* `apt-get install erlang`
 
 Config
 ------
