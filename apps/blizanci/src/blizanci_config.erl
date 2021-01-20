@@ -64,7 +64,7 @@ routing_table(Hostname, Docroot, CGIroot, Port) ->
       blizanci_cgi, CGI_Opts},
 
      {"(?<PATH>restricted.*)",
-      blizanci_static, Static_Opts#{  authorisation => restricted } },
+      blizanci_static, Static_Opts#{ authorisation => restricted } },
 
      {"(?<PATH>.*)",
       blizanci_static, Static_Opts}
