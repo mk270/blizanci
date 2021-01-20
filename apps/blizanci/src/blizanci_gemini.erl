@@ -188,6 +188,7 @@ handle_info({tcp_error, _, _Reason}, State) ->
     {stop, normal, State};
 
 handle_info(timeout, State) ->
+    lager:debug("Timeout ~p", [State]),
     {stop, normal, State};
 
 handle_info(finished, State) ->
