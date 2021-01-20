@@ -53,7 +53,7 @@
 -include("blizanci_types.hrl").
 
 %% API to be called by other blizanci modules
--export([start_link/4]).
+-export([start_link/3]).
 -export([verify_cert/3]).
 -export([servlet_result/2]).
 -export([handle_line/3]).     % temporarily enabled for testing
@@ -99,9 +99,9 @@ gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
--spec start_link(pid(), any(), any(), [any()]) -> {ok, pid()}.
-start_link(Ref, Socket, Transport, Opts) ->
-    proc_lib:start_link(?MODULE, init, [{Ref, Socket, Transport, Opts}]).
+-spec start_link(pid(), any(), [any()]) -> {ok, pid()}.
+start_link(Ref, Transport, Opts) ->
+    proc_lib:start_link(?MODULE, init, [{Ref, Transport, Opts}]).
 
 
 -spec verify_cert(
@@ -132,9 +132,9 @@ servlet_result(Pid, Result) when is_pid(Pid) ->
 %% gen_server.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-init({Ref, Socket, Transport, Opts}) ->
+init({Ref, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
-    ok = ranch:accept_ack(Ref),
+    {ok, Socket} = ranch:handshake(Ref),
     ok = activate(Transport, Socket),
     PC = ssl:peercert(Socket),
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
