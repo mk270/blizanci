@@ -15,7 +15,8 @@
 -type options() :: #{ bare_mimetype := binary(),
                       unknown_mimetype := binary(),
                       docroot := string(),
-                      index := string()
+                      index := string(),
+                      authorisation := 'public' | 'restricted' | 'secret'
                     }.
 
 -define(INDEX, "index.gemini").
