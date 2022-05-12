@@ -15,6 +15,12 @@ fix_path(S) ->
     {ok, S3} = realpath:canonicalise(S2),
     {ok, S3}.
 
+
+% Is the path S underneath Root? This largely boils down to whether the former
+% is an initial substring of the latter.
+%
+% It is (currently) the responsibility of the caller to canonicalise/normalise
+% the paths before calling this function.
 -spec path_under_root(string(), string()) -> true | false.
 path_under_root(S, Root) ->
     L = string:len(Root),
