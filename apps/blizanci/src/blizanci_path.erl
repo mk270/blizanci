@@ -9,11 +9,13 @@
 
 -export([fix_path/1, path_under_root/2]).
 
+-spec fix_path(list()) -> {ok, string()} | {error, atom()}.
 fix_path(S) ->
     {ok, S2} = realpath:normalise(S),
     {ok, S3} = realpath:canonicalise(S2),
     {ok, S3}.
 
+-spec path_under_root(string(), string()) -> true | false.
 path_under_root(S, CGIRoot) ->
     L = string:len(CGIRoot),
     Sl = string:slice(S, 0, L),

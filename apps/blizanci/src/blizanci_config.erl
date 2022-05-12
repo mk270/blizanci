@@ -11,6 +11,7 @@
 
 -define(PORT, 1965).
 
+-spec ssl_opts() -> [{atom(), term()}].
 ssl_opts() ->
     {ok, App} = application:get_application(),
     Cert = application:get_env(App, certfile, "./ssl/certificate.pem"),
@@ -28,6 +29,7 @@ ssl_opts() ->
      {versions, ['tlsv1.3']}
     ].
 
+-spec proto_opts() -> [{atom(), term()}].
 proto_opts() ->
     {ok, App} = application:get_application(),
     {ok, Default_Hostname} = inet:gethostname(),
@@ -46,6 +48,8 @@ proto_opts() ->
      {routing, Routing}
     ].
 
+-type route_entry() :: {string(), atom(), map()}.
+-spec routing_table(string(), string(), string(), integer()) -> [route_entry()].
 routing_table(Hostname, Docroot, CGIroot, Port) ->
     CGI_Opts =
         #{ hostname => Hostname,
