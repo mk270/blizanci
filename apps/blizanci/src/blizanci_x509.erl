@@ -41,7 +41,7 @@ report_peercert(_) ->
     lager:info("No peer cert, unknown error"),
     ok.
 
-
+%% TBD: types
 cert_rdns(Cert) ->
     {'OTPCertificate', Data, _, _} = Cert,
     {'OTPTBSCertificate',
@@ -57,6 +57,7 @@ cert_rdns(Cert) ->
      _X3} = Data,
     {IssuerRDN, SubjectRDN}.
 
+%% TBD: types
 dump_rdn({rdnSequence, Data}) ->
     {ok, [ {oid_alias(Oid), munge_utf8(Value) } ||
         [{'AttributeTypeAndValue', Oid, Value}] <- Data ]
