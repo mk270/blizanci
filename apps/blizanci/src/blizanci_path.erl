@@ -16,8 +16,8 @@ fix_path(S) ->
     {ok, S3}.
 
 -spec path_under_root(string(), string()) -> true | false.
-path_under_root(S, CGIRoot) ->
-    L = string:len(CGIRoot),
+path_under_root(S, Root) ->
+    L = string:len(Root),
     Sl = string:slice(S, 0, L),
-    Sl =:= CGIRoot.
+    Sl =:= Root.
 
