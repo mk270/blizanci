@@ -84,6 +84,7 @@ start_link(Args) ->
 
 % Must be called by the application on initialisation; establishes the
 % ppool queue for which most of this module is a set of callbacks.
+-spec start() -> ok.
 start() ->
     blizanci_osenv:unset_os_env_except(?ALLOWED_ENV),
     case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of
@@ -94,6 +95,7 @@ start() ->
 
 % Called by the servlet to cancel a job, e.g., if the TCP connection has
 % been closed by the remote end.
+-spec cancel(pid()) -> ok.
 cancel(Pid) ->
     case is_process_alive(Pid) of
         true -> gen_server:cast(Pid, cgi_quit);
