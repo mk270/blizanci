@@ -49,11 +49,14 @@ sanitise_kv(Key, Value) ->
 
 
 % Attempt to unset all environment variables except those in a whitelist.
+-spec unset_os_env_except([string()]) -> ok.
 unset_os_env_except(Exceptions) ->
     Keys = defined_os_env_vars(),
     [ os:unsetenv(Key) ||
         Key <- Keys,
-        not lists:member(Key, Exceptions) ].
+        not lists:member(Key, Exceptions) ],
+    ok.
 
+-spec defined_os_env_vars() -> [string()].
 defined_os_env_vars() ->
     [ Head || [Head|_] <- [ string:split(Env, "=") || Env <- os:getenv() ] ].

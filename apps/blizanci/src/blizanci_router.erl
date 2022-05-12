@@ -58,5 +58,7 @@ route_match(Path, #route{pattern=Regex, module=Module, options=Options}) ->
         _ -> nomatch
     end.
 
+% TBD typing could be improved
+-spec dispatch(map(), module(), map(), any()) -> any().
 dispatch(Matches, Module, Request, Options) ->
     blizanci_servlet_container:request(Module, Matches, Request, Options).

@@ -24,6 +24,7 @@
 -define(UNKNOWN_MIMETYPE, <<"application/octet-stream">>).
 -define(DEFAULT_DOCROOT, <<"./public_gemini">>).
 
+-spec cancel(pid()) -> ok.
 cancel(_) ->
     ok.
 
