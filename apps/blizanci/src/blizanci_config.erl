@@ -86,11 +86,15 @@ get_pem_file_from_environment(App, Key, Default_Filename) ->
 
 -spec validate_pem_file(string()) -> {ok, string()} | {fail, atom()}.
 validate_pem_file(Filename) ->
-    case file:read_file("cert.pem") of
+    case file:read_file(Filename) of
         {ok, PemBin} ->
             case public_key:pem_decode(PemBin) of
-                [] -> {fail, not_a_cert};
+                [] ->
+                    lager:warning("File ~p not a PEM cert.", [Filename]),
+                    {fail, not_a_cert};
                 _ -> {ok, Filename}
             end;
-        _ -> {fail, couldnt_open_pem_file}
+        _ ->
+            lager:warning("Couldn't open ~p", [Filename]),
+            {fail, couldnt_open_pem_file}
     end.
