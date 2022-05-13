@@ -22,9 +22,11 @@ prepare(RouteInfo) ->
         Err -> {error, Err}
     end.
 
+% TBD: spec
 make_routes(RouteInfo) ->
     [ make_route(R) || R <- RouteInfo ].
 
+-spec make_route({binary(), module(), [route_option()]}) -> route().
 make_route({Regex, Module, Opts}) ->
     {ok, RE} = re:compile(Regex),
     #route{pattern=RE, module=Module, options=Opts};
@@ -58,7 +60,7 @@ route_match(Path, #route{pattern=Regex, module=Module, options=Options}) ->
         _ -> nomatch
     end.
 
-% TBD typing could be improved
+% TBD: typing could be improved
 -spec dispatch(map(), module(), map(), any()) -> any().
 dispatch(Matches, Module, Request, Options) ->
     blizanci_servlet_container:request(Module, Matches, Request, Options).
