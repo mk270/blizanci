@@ -14,8 +14,10 @@
 -spec ssl_opts() -> [{atom(), term()}].
 ssl_opts() ->
     {ok, App} = application:get_application(),
-    Cert = application:get_env(App, certfile, "./ssl/certificate.pem"),
-    Key = application:get_env(App, keyfile, "./ssl/key.pem"),
+    {ok, Cert} = get_pem_file_from_environment(App, certfile,
+                                               "./ssl/certificate.pem"),
+    {ok, Key} = get_pem_file_from_environment(App, keyfile,
+                                              "./ssl/key.pem"),
     Port = application:get_env(App, port, ?PORT),
     VerifyFn = fun (ClientCert, Ev, Init) ->
                    blizanci_gemini:verify_cert(ClientCert, Ev, Init) end,
@@ -73,3 +75,22 @@ routing_table(Hostname, Docroot, CGIroot, Port) ->
      {"(?<PATH>.*)",
       blizanci_static, Static_Opts}
     ].
+
+
+-spec get_pem_file_from_environment(atom(), atom(), string()) ->
+          {ok, string()} | {fail, atom()}.
+get_pem_file_from_environment(App, Key, Default_Filename) ->
+    Value = application:get_env(App, Key, Default_Filename),
+    validate_pem_file(Value).
+
+
+-spec validate_pem_file(string()) -> {ok, string()} | {fail, atom()}.
+validate_pem_file(Filename) ->
+    case file:read_file("cert.pem") of
+        {ok, PemBin} ->
+            case public_key:pem_decode(PemBin) of
+                [] -> {fail, not_a_cert};
+                _ -> {ok, Filename}
+            end;
+        _ -> {fail, couldnt_open_pem_file}
+    end.

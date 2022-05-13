@@ -25,6 +25,11 @@ Currently, a config file is required. In due course, this will become optional.
 Create an appropriate `sys.config` and `vm.args` file in the `config/`
 directory in the format suggested in the examples in that directory.
 
+You'll also need to put TLS certificates in `ssl/certificate.pem` and
+`ssl/key.pem`; these locations can be reconfigured, but blizanci will
+fail on startup with a `badmatch` / `couldnt_open_pem_file` message if
+the certificates cannot be read.
+
 Build
 -----
 
