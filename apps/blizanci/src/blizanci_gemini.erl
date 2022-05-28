@@ -45,7 +45,6 @@
 
 -module(blizanci_gemini).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("public_key/include/public_key.hrl").
 -behaviour(gen_server).
 -include("gen_server.hrl").
 -behaviour(ranch_protocol).
@@ -54,7 +53,6 @@
 
 %% API to be called by other blizanci modules
 -export([start_link/3]).
--export([verify_cert/3]).
 -export([servlet_result/2]).
 -export([handle_line/3]).     % temporarily enabled for testing
 
@@ -102,20 +100,6 @@ gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>}.
 -spec start_link(pid(), any(), [any()]) -> {ok, pid()}.
 start_link(Ref, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [{Ref, Transport, Opts}]).
-
-
--spec verify_cert(
-        OtpCert :: #'OTPCertificate'{},
-        Event :: {'bad_cert', Reason :: atom() | {'revoked', atom()}} |
-                 {'extension', #'Extension'{}} |
-                 'valid' |
-                 'valid_peer',
-        InitialUserState :: term()
-       ) -> {'valid', UserState :: term()} |
-            {'fail', Reason :: term()} |
-            {'unknown', UserState :: term()}.
-verify_cert(_Cert, _Event, _InitialUserState) ->
-    {valid, unknown_user}.
 
 
 -spec servlet_result(pid(), servlet_result()) -> 'ok'.
