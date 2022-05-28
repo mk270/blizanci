@@ -107,6 +107,9 @@ init([Parent, Module, URL, Req, Config]) ->
             gen_server:enter_loop(?MODULE, [], State)
     end.
 
+%% @doc
+%% @hidden
+%% @end
 handle_call({gateway_result, Result}, _From,
             State=#servlet_state{parent=Parent}) ->
     ServletResult = case Result of
@@ -160,6 +163,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec format_status(Opt :: normal | terminate,
                     Status :: list()) -> Status :: term().
+%% @doc
+%% @hidden
+%% @end
 format_status(_Opt, Status) ->
     Status.
 

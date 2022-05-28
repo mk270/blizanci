@@ -238,6 +238,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec format_status(Opt :: normal | terminate,
                     Status :: list()) -> Status :: term().
+%% @doc
+%% @hidden
+%% @end
 format_status(_Opt, Status) ->
     Status.
 
