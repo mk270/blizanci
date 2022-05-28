@@ -116,6 +116,9 @@ servlet_result(Pid, Result) when is_pid(Pid) ->
 %% gen_server.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% @doc
+%% @hidden
+%% @end
 init({Ref, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
     {ok, Socket} = ranch:handshake(Ref),
@@ -139,7 +142,9 @@ init({Ref, Transport, Opts}) ->
     erlang:send_after(?TIMEOUT_MS, self(), timeout),
     gen_server:enter_loop(?MODULE, [], State).
 
-
+%% @doc
+%% @hidden
+%% @end
 handle_info({ssl, Socket, Payload}, State) ->
     {Buffer, Response} =
         try handle_request(Payload, State) of
@@ -185,6 +190,9 @@ handle_info(Msg, State) ->
     lager:debug("Received unrecognised message: ~p~n", [Msg]),
     {stop, normal, State}.
 
+%% @doc
+%% @hidden
+%% @end
 handle_call({servlet_result, {servlet_failed, Result}}, _From, State) ->
     respond({error_code, Result}, State),
     self() ! finished,
@@ -198,13 +206,22 @@ handle_call({servlet_result, {servlet_complete, Output}}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+%% @doc
+%% @hidden
+%% @end
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+%% @doc
+%% @hidden
+%% @end
 terminate(_Reason, State) ->
     close_session(State),
     ok.
 
+%% @doc
+%% @hidden
+%% @end
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -293,6 +310,12 @@ handle_request(Payload, #state{buffer=Buffer,
             {<<>>, hangup}
     end.
 
+
+%% @doc
+%% @hidden
+%% @end
+
+% This function is only exposed in order to facilitate testing.
 
 % Take the request line which has been received in full from the client
 % and check that it's valid UTF8; if so, break it down into its URL parts
