@@ -88,6 +88,9 @@ request(Module, URL, Req, Config) ->
 %%% gen_server callbacks
 %%%===================================================================
 
+%% @doc
+%% @hidden
+%% @end
 init([Parent, Module, URL, Req, Config]) ->
     proc_lib:init_ack({ok, self()}),
     case Module:serve(URL, Req, Config) of
@@ -118,6 +121,9 @@ handle_call(_Request, _From, State) ->
     {reply, Reply, State}.
 
 
+%% @doc
+%% @hidden
+%% @end
 handle_cast(servlet_quit, State=#servlet_state{gateway_module=Module}) ->
     Pid = State#servlet_state.gateway_pid,
     Module:cancel(Pid),
@@ -127,11 +133,17 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 
+%% @doc
+%% @hidden
+%% @end
 handle_info(Info, State) ->
     lager:info("Servlet message: ~p", [Info]),
     {noreply, State}.
 
 
+%% @doc
+%% @hidden
+%% @end
 terminate(normal, _State) ->
     ok;
 terminate(Reason, _State) ->
@@ -139,6 +151,9 @@ terminate(Reason, _State) ->
     ok.
 
 
+%% @doc
+%% @hidden
+%% @end
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
