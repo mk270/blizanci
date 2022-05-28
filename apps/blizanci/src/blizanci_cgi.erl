@@ -35,7 +35,7 @@
 %   {gateway_output, binary()}
 % | {gateway_error, cgi_error()}
 %
-% This message is sent by calling blizanci_servlet_container:gateway_result/2.
+% This message is sent by calling blizanci_servlet_container:gateway_exit/2.
 
 
 -include("blizanci_types.hrl").
