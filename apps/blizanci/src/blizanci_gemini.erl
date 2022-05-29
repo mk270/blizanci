@@ -186,19 +186,27 @@ handle_info(finished, State) ->
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
+handle_info({'EXIT', Pid, Reason}, State) ->
+    lager:info("Abend of process ~p ~p", [Pid, Reason]),
+    respond({error_code, internal_server_error}, State),
+    self() ! finished,
+    {noreply, State};
+
 handle_info(Msg, State) ->
-    lager:debug("Received unrecognised message: ~p~n", [Msg]),
+    lager:info("Received unrecognised message: ~p~n", [Msg]),
     {stop, normal, State}.
 
 %% @doc
 %% @hidden
 %% @end
 handle_call({servlet_result, {servlet_failed, Result}}, _From, State) ->
+    process_flag(trap_exit, false),
     respond({error_code, Result}, State),
     self() ! finished,
     {reply, ok, State};
 
 handle_call({servlet_result, {servlet_complete, Output}}, _From, State) ->
+    process_flag(trap_exit, false),
     respond({servlet_output, Output}, State),
     self() ! finished,
     {reply, ok, State};

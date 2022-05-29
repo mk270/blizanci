@@ -76,6 +76,7 @@ request(Module, Matches, Req, Config) ->
     case Module:request(Matches, Req, Config) of
         {immediate, Result} -> Result;
         defer ->
+            process_flag(trap_exit, true),
             case proc_lib:start_link(?MODULE, init, [[Parent, Module,
                                                       Matches, Req, Config]]) of
                 {ok, Pid} -> {init_servlet, Pid};
