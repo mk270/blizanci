@@ -39,7 +39,7 @@
 -define(SERVER, ?MODULE).
 
 -record(servlet_state, {parent,
-                        url,
+                        matches,
                         request,
                         config,
                         gateway_pid,
@@ -91,15 +91,15 @@ request(Module, Matches, Req, Config) ->
 %% @doc
 %% @hidden
 %% @end
-init([Parent, Module, URL, Req, Config]) ->
+init([Parent, Module, Matches, Req, Config]) ->
     proc_lib:init_ack({ok, self()}),
-    case Module:serve(URL, Req, Config) of
+    case Module:serve(Matches, Req, Config) of
         {gateway_error, Error} ->
             report_result(Parent, {servlet_failed, Error}),
             {stop, normal};
         {gateway_started, Pid} ->
             State = #servlet_state{parent=Parent,
-                           url=URL,
+                           matches=Matches,
                            request=Req,
                            config=Config,
                            gateway_pid=Pid,
