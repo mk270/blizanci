@@ -175,5 +175,10 @@ format_status(_Opt, Status) ->
 
 -spec report_result(pid(), servlet_result()) -> 'ok'.
 report_result(Parent, Result) ->
+    ok = check_result(Result),
     ServletResult = Result,
     ok = blizanci_gemini:servlet_result(Parent, ServletResult).
+
+-spec check_result(servlet_result()) -> 'ok'.
+check_result({servlet_failed, Atom}) when is_atom(Atom) -> ok;
+check_result({servlet_output, Output}) when is_binary(Output) -> ok.
