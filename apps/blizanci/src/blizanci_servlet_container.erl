@@ -75,15 +75,22 @@ request(Module, Matches, Req, Config) ->
     Parent = self(),
     case Module:request(Matches, Req, Config) of
         {immediate, Result} -> Result;
-        defer ->
-            process_flag(trap_exit, true),
-            case proc_lib:start_link(?MODULE, init, [[Parent, Module,
-                                                      Matches, Req, Config]]) of
-                {ok, Pid} -> {init_servlet, Pid};
-                {error, _} -> {error_code, internal_server_error}
-            end
+        defer -> defer_request(Parent, Module, Matches, Req, Config)
     end.
 
+
+-spec defer_request(Parent::pid(),
+                    Module::module(),
+                    Matches::path_matches(),
+                    Req::any(), % should be able to do better
+                    Config::any()) -> gemini_response().
+defer_request(Parent, Module, Matches, Req, Config) ->
+    Args = [Parent, Module, Matches, Req, Config],
+    process_flag(trap_exit, true),
+    case proc_lib:start_link(?MODULE, init, [Args]) of
+        {ok, Pid} -> {init_servlet, Pid};
+        {error, _} -> {error_code, internal_server_error}
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks
