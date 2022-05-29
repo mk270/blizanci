@@ -181,4 +181,4 @@ report_result(Parent, Result) ->
 
 -spec check_result(servlet_result()) -> 'ok'.
 check_result({servlet_failed, Atom}) when is_atom(Atom) -> ok;
-check_result({servlet_output, Output}) when is_binary(Output) -> ok.
+check_result({servlet_complete, Output}) when is_binary(Output) -> ok.
