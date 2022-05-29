@@ -72,4 +72,4 @@
 -type request_details() :: #{ client_cert := client_cert(),
                               query := binary() }.
 
--type path_matches() :: map().
+-type path_matches() :: #{ binary() => binary() }.
