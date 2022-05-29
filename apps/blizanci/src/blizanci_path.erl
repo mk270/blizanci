@@ -11,6 +11,7 @@
 
 -spec fix_path(list()) -> {ok, string()} | {error, atom()}.
 %% @doc Canonicalise and normalise (q.v.) the path S
+%% @todo does not support relative paths
 %% @end
 fix_path(S) ->
     {ok, S2} = realpath:normalise(S),
@@ -24,6 +25,8 @@ fix_path(S) ->
 %%
 %% It is (currently) the responsibility of the caller to canonicalise/normalise
 %% the paths before calling this function.
+%% @param S the path to check
+%% @param Root the directory under which S is supposed to be located
 %% @end
 path_under_root(S, Root) ->
     L = string:len(Root),
