@@ -72,20 +72,18 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
 
 -spec request(module(), path_matches(), any(), any()) -> gemini_response().
 request(Module, Matches, Req, Config) ->
-    Parent = self(),
     case Module:request(Matches, Req, Config) of
         {immediate, Result} -> Result;
-        defer -> defer_request(Parent, Module, Matches, Req, Config)
+        defer -> defer_request(Module, Matches, Req, Config)
     end.
 
 
--spec defer_request(Parent::pid(),
-                    Module::module(),
+-spec defer_request(Module::module(),
                     Matches::path_matches(),
                     Req::any(), % should be able to do better
                     Config::any()) -> gemini_response().
-defer_request(Parent, Module, Matches, Req, Config) ->
-    Args = [Parent, Module, Matches, Req, Config],
+defer_request(Module, Matches, Req, Config) ->
+    Args = [self(), Module, Matches, Req, Config],
     process_flag(trap_exit, true),
     case proc_lib:start_link(?MODULE, init, [Args]) of
         {ok, Pid} -> {init_servlet, Pid};
