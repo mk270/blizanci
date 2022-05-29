@@ -70,14 +70,14 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
     end.
 
 
--spec request(module(), any(), any(), any()) -> gemini_response().
-request(Module, URL, Req, Config) ->
+-spec request(module(), path_matches(), any(), any()) -> gemini_response().
+request(Module, Matches, Req, Config) ->
     Parent = self(),
-    case Module:request(URL, Req, Config) of
+    case Module:request(Matches, Req, Config) of
         {immediate, Result} -> Result;
         defer ->
             case proc_lib:start_link(?MODULE, init, [[Parent, Module,
-                                                      URL, Req, Config]]) of
+                                                      Matches, Req, Config]]) of
                 {ok, Pid} -> {init_servlet, Pid};
                 {error, _} -> {error_code, internal_server_error}
             end
