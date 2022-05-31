@@ -39,7 +39,7 @@
 -define(SERVER, ?MODULE).
 
 -record(servlet_state, {parent,
-                        url,
+                        matches,
                         request,
                         config,
                         gateway_pid,
@@ -70,33 +70,42 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
     end.
 
 
--spec request(module(), any(), any(), any()) -> gemini_response().
-request(Module, URL, Req, Config) ->
-    Parent = self(),
-    case Module:request(URL, Req, Config) of
+-spec request(module(), path_matches(), any(), any()) -> gemini_response().
+request(Module, Matches, Req, Config) ->
+    case Module:request(Matches, Req, Config) of
         {immediate, Result} -> Result;
-        defer ->
-            case proc_lib:start_link(?MODULE, init, [[Parent, Module,
-                                                      URL, Req, Config]]) of
-                {ok, Pid} -> {init_servlet, Pid};
-                {error, _} -> {error_code, internal_server_error}
-            end
+        defer -> defer_request(Module, Matches, Req, Config)
     end.
 
+
+-spec defer_request(Module::module(),
+                    Matches::path_matches(),
+                    Req::any(), % should be able to do better
+                    Config::any()) -> gemini_response().
+defer_request(Module, Matches, Req, Config) ->
+    Args = [self(), Module, Matches, Req, Config],
+    process_flag(trap_exit, true),
+    case proc_lib:start_link(?MODULE, init, [Args]) of
+        {ok, Pid} -> {init_servlet, Pid};
+        {error, _} -> {error_code, internal_server_error}
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
-init([Parent, Module, URL, Req, Config]) ->
+%% @doc
+%% @hidden
+%% @end
+init([Parent, Module, Matches, Req, Config]) ->
     proc_lib:init_ack({ok, self()}),
-    case Module:serve(URL, Req, Config) of
+    case Module:serve(Matches, Req, Config) of
         {gateway_error, Error} ->
             report_result(Parent, {servlet_failed, Error}),
             {stop, normal};
         {gateway_started, Pid} ->
             State = #servlet_state{parent=Parent,
-                           url=URL,
+                           matches=Matches,
                            request=Req,
                            config=Config,
                            gateway_pid=Pid,
@@ -104,6 +113,9 @@ init([Parent, Module, URL, Req, Config]) ->
             gen_server:enter_loop(?MODULE, [], State)
     end.
 
+%% @doc
+%% @hidden
+%% @end
 handle_call({gateway_result, Result}, _From,
             State=#servlet_state{parent=Parent}) ->
     ServletResult = case Result of
@@ -118,6 +130,9 @@ handle_call(_Request, _From, State) ->
     {reply, Reply, State}.
 
 
+%% @doc
+%% @hidden
+%% @end
 handle_cast(servlet_quit, State=#servlet_state{gateway_module=Module}) ->
     Pid = State#servlet_state.gateway_pid,
     Module:cancel(Pid),
@@ -127,11 +142,17 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 
+%% @doc
+%% @hidden
+%% @end
 handle_info(Info, State) ->
     lager:info("Servlet message: ~p", [Info]),
     {noreply, State}.
 
 
+%% @doc
+%% @hidden
+%% @end
 terminate(normal, _State) ->
     ok;
 terminate(Reason, _State) ->
@@ -139,12 +160,18 @@ terminate(Reason, _State) ->
     ok.
 
 
+%% @doc
+%% @hidden
+%% @end
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
 -spec format_status(Opt :: normal | terminate,
                     Status :: list()) -> Status :: term().
+%% @doc
+%% @hidden
+%% @end
 format_status(_Opt, Status) ->
     Status.
 
@@ -154,5 +181,10 @@ format_status(_Opt, Status) ->
 
 -spec report_result(pid(), servlet_result()) -> 'ok'.
 report_result(Parent, Result) ->
+    ok = check_result(Result),
     ServletResult = Result,
     ok = blizanci_gemini:servlet_result(Parent, ServletResult).
+
+-spec check_result(servlet_result()) -> 'ok'.
+check_result({servlet_failed, Atom}) when is_atom(Atom) -> ok;
+check_result({servlet_complete, Output}) when is_binary(Output) -> ok.

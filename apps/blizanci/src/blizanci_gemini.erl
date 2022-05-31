@@ -45,7 +45,6 @@
 
 -module(blizanci_gemini).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("public_key/include/public_key.hrl").
 -behaviour(gen_server).
 -include("gen_server.hrl").
 -behaviour(ranch_protocol).
@@ -54,7 +53,6 @@
 
 %% API to be called by other blizanci modules
 -export([start_link/3]).
--export([verify_cert/3]).
 -export([servlet_result/2]).
 -export([handle_line/3]).     % temporarily enabled for testing
 
@@ -104,20 +102,6 @@ start_link(Ref, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [{Ref, Transport, Opts}]).
 
 
--spec verify_cert(
-        OtpCert :: #'OTPCertificate'{},
-        Event :: {'bad_cert', Reason :: atom() | {'revoked', atom()}} |
-                 {'extension', #'Extension'{}} |
-                 'valid' |
-                 'valid_peer',
-        InitialUserState :: term()
-       ) -> {'valid', UserState :: term()} |
-            {'fail', Reason :: term()} |
-            {'unknown', UserState :: term()}.
-verify_cert(_Cert, _Event, _InitialUserState) ->
-    {valid, unknown_user}.
-
-
 -spec servlet_result(pid(), servlet_result()) -> 'ok'.
 servlet_result(Pid, Result) when is_pid(Pid) ->
     case is_process_alive(Pid) of
@@ -132,6 +116,9 @@ servlet_result(Pid, Result) when is_pid(Pid) ->
 %% gen_server.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% @doc
+%% @hidden
+%% @end
 init({Ref, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
     {ok, Socket} = ranch:handshake(Ref),
@@ -155,7 +142,9 @@ init({Ref, Transport, Opts}) ->
     erlang:send_after(?TIMEOUT_MS, self(), timeout),
     gen_server:enter_loop(?MODULE, [], State).
 
-
+%% @doc
+%% @hidden
+%% @end
 handle_info({ssl, Socket, Payload}, State) ->
     {Buffer, Response} =
         try handle_request(Payload, State) of
@@ -197,16 +186,27 @@ handle_info(finished, State) ->
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
+handle_info({'EXIT', Pid, Reason}, State) ->
+    lager:info("Abend of process ~p ~p", [Pid, Reason]),
+    respond({error_code, internal_server_error}, State),
+    self() ! finished,
+    {noreply, State};
+
 handle_info(Msg, State) ->
-    lager:debug("Received unrecognised message: ~p~n", [Msg]),
+    lager:info("Received unrecognised message: ~p~n", [Msg]),
     {stop, normal, State}.
 
+%% @doc
+%% @hidden
+%% @end
 handle_call({servlet_result, {servlet_failed, Result}}, _From, State) ->
+    process_flag(trap_exit, false),
     respond({error_code, Result}, State),
     self() ! finished,
     {reply, ok, State};
 
 handle_call({servlet_result, {servlet_complete, Output}}, _From, State) ->
+    process_flag(trap_exit, false),
     respond({servlet_output, Output}, State),
     self() ! finished,
     {reply, ok, State};
@@ -214,13 +214,22 @@ handle_call({servlet_result, {servlet_complete, Output}}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+%% @doc
+%% @hidden
+%% @end
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+%% @doc
+%% @hidden
+%% @end
 terminate(_Reason, State) ->
     close_session(State),
     ok.
 
+%% @doc
+%% @hidden
+%% @end
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -309,6 +318,12 @@ handle_request(Payload, #state{buffer=Buffer,
             {<<>>, hangup}
     end.
 
+
+%% @doc
+%% @hidden
+%% @end
+
+% This function is only exposed in order to facilitate testing.
 
 % Take the request line which has been received in full from the client
 % and check that it's valid UTF8; if so, break it down into its URL parts

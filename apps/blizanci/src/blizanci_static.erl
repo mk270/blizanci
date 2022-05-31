@@ -35,8 +35,12 @@ cancel(_) ->
                          'defer'.
 request(Matches, Req, Options) ->
     #{ <<"PATH">> := Path } = Matches,
-    #{ authorisation := Auth } = Options,
-    {immediate, serve_file(Path, Req, Options, Auth)}.
+    {ok, Auth} = blizanci_auth:authorisation_policy(Options),
+    Response = case blizanci_auth:authorised(Auth, Req) of
+                   authorised -> serve_file(Path, Options);
+                   Error -> Error
+               end,
+    {immediate, Response}.
 
 
 -spec serve(path_matches(), request_details(), options()) ->
@@ -48,27 +52,20 @@ serve(_, _, _) ->
 % private: certificate must be signed by a particular CA
 % restricted: certificate must be presented
 % public: no certificate requirement
--spec serve_file(binary(), map(), options(), authorisation())
-                -> gemini_response().
-serve_file(Path, _Req, Opts, public) ->
-    serve_file(Path, Opts);
-serve_file(Path, Req, Opts, Auth) ->
-    #{ client_cert := Cert } = Req,
-    CertInfo = blizanci_x509:peercert_cn(Cert),
-    serve_restricted_file(Path, Opts, Auth, CertInfo).
+
+%-spec serve_file(binary(), map(), options(), authorisation())
+%                -> gemini_response().
+%serve_file(Path, _Req, Opts, public) ->
+%    serve_file(Path, Opts);
+%serve_file(Path, Req, Opts, Auth) ->
+%    CertInfo = client_cert_info(Req),
+%    serve_restricted_file(Path, Opts, Auth, CertInfo).
 
 
--spec serve_restricted_file(binary(), options(), authorisation(),
-                            any()) ->
-                                   gemini_response().
-serve_restricted_file(_Path, _Opts, _Auth, error) ->
-    {error_code, cert_required};
-serve_restricted_file(Path, Opts, Auth, {ok, CertInfo}) ->
-    #{ common_name := Subject,
-       issuer_common_name := Issuer } = CertInfo,
-    lager:info("~p object requested, cert: ~p/~p", [Auth, Subject, Issuer]),
-    serve_file(Path, Opts).
-
+%-spec serve_restricted_file(binary(), options(), authorisation(),
+%                            any()) ->
+%                                   gemini_response().
+%serve_restricted_file(_Path, _Opts, _Auth, error) ->
 
 % If there's a valid file requested, then get its full path, so that
 % it can be sendfile()'d back to the client. If it's a directory, redirect

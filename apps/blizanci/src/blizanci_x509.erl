@@ -5,11 +5,15 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
+% RDN == relative distinguished name
+
 -module(blizanci_x509).
+-include_lib("public_key/include/public_key.hrl").
 -include("blizanci_types.hrl").
 
 -export([cert_rdns/1, dump_rdn/1, report_peercert/1]).
 -export([peercert_cn/1]).
+-export([verify_cert/3]).
 
 -spec peercert_cn(term()) -> client_cert().
 peercert_cn({ok, Cert}) ->
@@ -73,3 +77,17 @@ oid_alias({2,5,4,6}) -> country;
 oid_alias({2,5,4,8}) -> location;
 oid_alias({2,5,4,10}) -> organisation;
 oid_alias(_) -> unknown.
+
+
+-spec verify_cert(
+        OtpCert :: #'OTPCertificate'{},
+        Event :: {'bad_cert', Reason :: atom() | {'revoked', atom()}} |
+                 {'extension', #'Extension'{}} |
+                 'valid' |
+                 'valid_peer',
+        InitialUserState :: term()
+       ) -> {'valid', UserState :: term()} |
+            {'fail', Reason :: term()} |
+            {'unknown', UserState :: term()}.
+verify_cert(_Cert, _Event, _InitialUserState) ->
+    {valid, unknown_user}.

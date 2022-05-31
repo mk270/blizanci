@@ -51,6 +51,8 @@ try_route(Path, Request, Config, [Route|Tail]) ->
 -spec route_match(binary(), route()) ->
                          'nomatch' |
                          {'match', map(), module(), any()}.
+% see the documentation for re:inspect/2 for what Matches represents and
+% its format
 route_match(Path, #route{pattern=Regex, module=Module, options=Options}) ->
     {namelist, Names} = re:inspect(Regex, namelist),
     case re:run(Path, Regex, [{capture, all_names, binary}]) of
@@ -61,6 +63,6 @@ route_match(Path, #route{pattern=Regex, module=Module, options=Options}) ->
     end.
 
 % TBD: typing could be improved
--spec dispatch(map(), module(), map(), any()) -> any().
+-spec dispatch(path_matches(), module(), map(), any()) -> any().
 dispatch(Matches, Module, Request, Options) ->
     blizanci_servlet_container:request(Module, Matches, Request, Options).

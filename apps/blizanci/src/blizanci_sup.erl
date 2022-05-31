@@ -5,6 +5,8 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
+%% @hidden
+
 -module(blizanci_sup).
 
 -behaviour(supervisor).

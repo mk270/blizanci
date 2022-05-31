@@ -35,7 +35,7 @@
 %   {gateway_output, binary()}
 % | {gateway_error, cgi_error()}
 %
-% This message is sent by calling blizanci_servlet_container:gateway_result/2.
+% This message is sent by calling blizanci_servlet_container:gateway_exit/2.
 
 
 -include("blizanci_types.hrl").
@@ -78,6 +78,9 @@
                       {error, Error :: {already_started, pid()}} |
                       {error, Error :: term()} |
                       ignore.
+%% @doc
+%% @hidden
+%% @end
 start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
@@ -85,6 +88,9 @@ start_link(Args) ->
 % Must be called by the application on initialisation; establishes the
 % ppool queue for which most of this module is a set of callbacks.
 -spec start() -> ok.
+%% @doc
+%% @hidden
+%% @end
 start() ->
     blizanci_osenv:unset_os_env_except(?ALLOWED_ENV),
     case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of
@@ -156,6 +162,9 @@ run_cgi(Args, Env) ->
 
 % Called by the queue runner. The second argument to ppool:run is
 % passed in as the first argument to this function.
+%% @doc
+%% @hidden
+%% @end
 init({Parent, {CmdLine, Options}}) ->
     process_flag(trap_exit, true),
     Result = exec:run(CmdLine, Options),
@@ -163,10 +172,16 @@ init({Parent, {CmdLine, Options}}) ->
     {ok, #worker_state{parent=Parent, cgi_status={Pid, OsPid, <<>>}}}.
 
 
+%% @doc
+%% @hidden
+%% @end
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
+%% @doc
+%% @hidden
+%% @end
 handle_cast(cgi_quit, State=#worker_state{cgi_status=CGI_Status}) ->
     {_Pid, OsPid, _Buffer} = CGI_Status,
     exec:kill(OsPid, 9),
@@ -205,18 +220,27 @@ handle_info(Info, State) ->
     lager:info("OOB msg:~p", [Info]),
     {noreply, State}.
 
+%% @doc
+%% @hidden
+%% @end
 terminate(normal, _State) ->
     ok;
 terminate(Reason, _State) ->
     lager:info("CGI queue worker ~p terminating: [[~p]]", [self(), Reason]),
     ok.
 
+%% @doc
+%% @hidden
+%% @end
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
 -spec format_status(Opt :: normal | terminate,
                     Status :: list()) -> Status :: term().
+%% @doc
+%% @hidden
+%% @end
 format_status(_Opt, Status) ->
     Status.
 

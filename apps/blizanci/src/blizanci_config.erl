@@ -24,7 +24,7 @@ ssl_opts() ->
     ok = zotonic_ssl_certs:ensure_self_signed( Cert, Key, Options ),
     Port = application:get_env(App, port, ?PORT),
     VerifyFn = fun (ClientCert, Ev, Init) ->
-                   blizanci_gemini:verify_cert(ClientCert, Ev, Init) end,
+                   blizanci_x509:verify_cert(ClientCert, Ev, Init) end,
 
     [{port, Port},
      {certfile, Cert},

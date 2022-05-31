@@ -5,11 +5,13 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
+%% @hidden
+
 -module(blizanci_app).
 
 -behaviour(application).
 
--export([start/2, stop/1, prep_stop/1, listen/0]).
+-export([start/2, stop/1, prep_stop/1]).
 
 -define(LISTENER, blizanci_service_ssl).
 
@@ -28,7 +30,7 @@ listen() ->
     {ok, Listener}.
 
 start(_StartType, _StartArgs) ->
-    {ok, _Listener} = listen(),
+    {ok, _Listener} = listen(), % the _Listener is bound to the ranch pid
     {ok, _Pid} = blizanci_sup:start_link().
 
 prep_stop(_State) ->
