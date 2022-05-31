@@ -5,9 +5,7 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
--module(blizanci_cgi).
--behaviour(blizanci_servlet).
-
+%% @doc
 % This module is called by the servlet to run CGI scripts. It communicates
 % with three other processes:
 %
@@ -36,7 +34,10 @@
 % | {gateway_error, cgi_error()}
 %
 % This message is sent by calling blizanci_servlet_container:gateway_exit/2.
+%% @end
 
+-module(blizanci_cgi).
+-behaviour(blizanci_servlet).
 
 -include("blizanci_types.hrl").
 

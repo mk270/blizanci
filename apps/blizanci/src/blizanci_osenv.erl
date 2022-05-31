@@ -5,28 +5,35 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
+%% @doc
+%% This module deals with the OS environment.
+%% That is, it deals with conventional UNIX
+%% environment variables as opposed to Erlang's per-application environments.
+%% OS environment variables are implicated in two ways:
+%%
+%% 1) we want to sanitise a proplist of environment variables such that
+%%    it's appropriate for creating a new UNIX subprocess via the erlexec
+%%    port.
+%%
+%% 2) the Erlang VM is likely to be running in an OS process with its
+%%    own environment variables, and we want to unset most of those to
+%%    avoid polluting the environment of the subprocesses created in 1)
+%% @end
+
 -module(blizanci_osenv).
 -include("blizanci_types.hrl").
-
-% This module deals with the OS environment, that is, conventional UNIX
-% environment variables as opposed to Erlang's per-application environments.
-% OS environment variables are implicated in two ways:
-%
-% 1) we want to sanitise a proplist of environment variables such that
-%    it's appropriate for creating a new UNIX subprocess via the erlexec
-%    port.
-%
-% 2) the Erlang VM is likely to be running in an OS process with its
-%    own environment variables, and we want to unset most of those to
-%    avoid polluting the environment of the subprocesses created in 1)
 
 -export([sanitise/1, unset_os_env_except/1]).
 
 
-% erlexec expects environment variables to be strings, not binaries; we try
-% to massage the various reasonable input values (such as integers and
-% binaries) into acceptable strings.
 -spec sanitise([{string(), term()}]) -> env_list().
+%% @doc Sanitise the system environment variables.
+%%
+%% erlexec expects environment variables to be strings, not binaries;
+%% the function tries to massage the various reasonable input values
+%% (such as integers and binaries) into acceptable strings. It crashes
+%% on unreasonable input.
+%% @end
 sanitise(Env) ->
     [ sanitise_kv(K, V) || {K, V} <- Env ].
 
@@ -48,8 +55,9 @@ sanitise_kv(Key, Value) ->
     {Key, Value}.
 
 
-% Attempt to unset all environment variables except those in a whitelist.
 -spec unset_os_env_except([string()]) -> ok.
+%% @doc Unset all environment variables but those in the Exceptions whitelist.
+%% @end
 unset_os_env_except(Exceptions) ->
     Keys = defined_os_env_vars(),
     [ os:unsetenv(Key) ||
