@@ -26,6 +26,7 @@ cleanup () {
 trap cleanup EXIT
 
 DOCDIR=apps/blizanci/doc
+cp doc/overview.edoc $DOCDIR # ????
 rebar3 edoc
 
 rm -rf $TEMPDIR
