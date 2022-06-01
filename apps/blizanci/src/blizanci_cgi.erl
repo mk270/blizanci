@@ -118,11 +118,11 @@ cancel(Pid) ->
 request(_Path, _Req, _Config) ->
     defer.
 
-% Called by the servlet
-%
-% Validate that a proper CGI request has been received, and if so, submit
-% a job to the queue
 -spec serve(path_matches(), request_details(), options()) -> gateway_result().
+%% @doc
+%% Validate that a proper CGI request has been received, and if so, submit
+%% a job to the queue. Called by the servlet.
+%% @end
 serve(Matches, Req, Options) ->
     #{ <<"PATH">> := Path } = Matches,
     #{ cgiprefix := CGIPrefix,

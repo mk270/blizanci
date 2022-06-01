@@ -5,6 +5,12 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
+% TBD
+% private: certificate must be signed by a particular CA
+% restricted: certificate must be presented
+% public: no certificate requirement
+
+
 -module(blizanci_auth).
 -include("blizanci_types.hrl").
 

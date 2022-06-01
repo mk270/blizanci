@@ -5,6 +5,8 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
+% TBD: module-level docs
+
 -module(blizanci_static).
 -behaviour(blizanci_servlet).
 
@@ -48,24 +50,6 @@ request(Matches, Req, Options) ->
 serve(_, _, _) ->
     {gateway_error, unimplemented}.
 
-
-% private: certificate must be signed by a particular CA
-% restricted: certificate must be presented
-% public: no certificate requirement
-
-%-spec serve_file(binary(), map(), options(), authorisation())
-%                -> gemini_response().
-%serve_file(Path, _Req, Opts, public) ->
-%    serve_file(Path, Opts);
-%serve_file(Path, Req, Opts, Auth) ->
-%    CertInfo = client_cert_info(Req),
-%    serve_restricted_file(Path, Opts, Auth, CertInfo).
-
-
-%-spec serve_restricted_file(binary(), options(), authorisation(),
-%                            any()) ->
-%                                   gemini_response().
-%serve_restricted_file(_Path, _Opts, _Auth, error) ->
 
 % If there's a valid file requested, then get its full path, so that
 % it can be sendfile()'d back to the client. If it's a directory, redirect
