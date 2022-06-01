@@ -12,7 +12,7 @@
 
 -include("blizanci_types.hrl").
 
--spec prepare([{string(), module(), [route_option()]}]) ->
+-spec prepare([{string(), module(), authorisation(), [route_option()]}]) ->
     {'ok', [route()]} |
     {'error', atom()}.
 % TBD
@@ -30,10 +30,11 @@ prepare(RouteInfo) ->
 make_routes(RouteInfo) ->
     [ make_route(R) || R <- RouteInfo ].
 
--spec make_route({binary(), module(), [route_option()]}) -> route().
-make_route({Regex, Module, Opts}) ->
+-spec make_route({binary(), module(), authorisation(), [route_option()]})
+                -> route().
+make_route({Regex, Module, AuthPolicy, Opts}) ->
     {ok, RE} = re:compile(Regex),
-    #route{pattern=RE, module=Module, options=Opts};
+    #route{pattern=RE, module=Module, auth_policy=AuthPolicy, options=Opts};
 make_route(_) ->
     throw(invalid_route).
 
@@ -58,28 +59,32 @@ try_route(_Path, _Request, _Config, []) ->
     {error_code, file_not_found};
 try_route(Path, Request, Config, [Route|Tail]) ->
     case route_match(Path, Route) of
-        {match, Matches, Module, RouteOpts} ->
-            dispatch(Matches, Module, Request, Config, RouteOpts);
+        {match, Matches, Module, AuthPolicy, RouteOpts} ->
+            dispatch(Matches, Module, Request, AuthPolicy, Config, RouteOpts);
         _ -> try_route(Path, Request, Config, Tail)
     end.
 
 -spec route_match(binary(), route()) ->
                          'nomatch' |
-                         {'match', map(), module(), any()}.
+                         {'match', map(), module(), authorisation(), any()}.
 % see the documentation for re:inspect/2 for what Matches represents and
 % its format
-route_match(Path, #route{pattern=Regex, module=Module, options=RouteOpts}) ->
+route_match(Path, #route{pattern=Regex,
+                         module=Module,
+                         auth_policy=AuthPolicy,
+                         options=RouteOpts}) ->
     {namelist, Names} = re:inspect(Regex, namelist),
     case re:run(Path, Regex, [{capture, all_names, binary}]) of
         {match, M} ->
             Matches = maps:from_list(lists:zip(Names, M)),
-            {match, Matches, Module, RouteOpts};
+            {match, Matches, Module, AuthPolicy, RouteOpts};
         _ -> nomatch
     end.
 
 % TBD: typing could be improved
--spec dispatch(path_matches(), module(), map(), server_config(), any()) ->
+-spec dispatch(path_matches(), module(), map(), authorisation(),
+               server_config(), any()) ->
           any().
-dispatch(Matches, Module, Request, ServerConfig, RouteOpts) ->
+dispatch(Matches, Module, Request, _AuthPolicy, ServerConfig, RouteOpts) ->
     blizanci_servlet_container:request(Module, Matches, Request,
                                        ServerConfig, RouteOpts).

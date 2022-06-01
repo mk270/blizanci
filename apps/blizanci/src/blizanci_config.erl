@@ -74,7 +74,7 @@ proto_opts() ->
      {routing, Routing}
     ].
 
--type route_entry() :: {string(), atom(), map()}.
+-type route_entry() :: {string(), atom(), atom(), map()}.
 -spec routing_table(string(), string(), string(), integer()) -> [route_entry()].
 routing_table(Hostname, Docroot, CGIroot, Port) ->
     CGI_Opts =
@@ -91,9 +91,9 @@ routing_table(Hostname, Docroot, CGIroot, Port) ->
          },
     Restricted_Opts = Static_Opts#{ authorisation => restricted },
     [
-     {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    CGI_Opts},
-     {"(?<PATH>restricted.*)", blizanci_static, Restricted_Opts},
-     {"(?<PATH>.*)",           blizanci_static, Static_Opts}
+     {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,     CGI_Opts},
+     {"(?<PATH>restricted.*)", blizanci_static, restricted, Restricted_Opts},
+     {"(?<PATH>.*)",           blizanci_static, public,     Static_Opts}
     ].
 
 

@@ -15,9 +15,10 @@
 -type route_option() :: {atom(), any()}.
 
 -record(route,
-        {pattern :: mp(),
-         module  :: module(),
-         options :: [route_option()]}).
+        {pattern     :: mp(),
+         module      :: module(),
+         auth_policy :: authorisation(),
+         options     :: [route_option()]}).
 -type route() :: #route{}.
 
 -record(server_config,
