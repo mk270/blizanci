@@ -260,6 +260,8 @@ cgi_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert) ->
     Env0 = make_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert),
     blizanci_osenv:sanitise(Env0).
 
+-spec make_environment(string(), binary(), string(), map(), binary(), term()) ->
+          [{string(), term()}].
 make_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert) ->
     ScriptName = CGIPrefix ++ binary_to_list(Path),
     #{ hostname := Hostname,
