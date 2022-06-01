@@ -35,6 +35,17 @@ make_route(_) ->
 
 
 -spec route(binary(), map(), server_config()) -> gemini_response().
+%% @doc
+%% Route a Gemini request to a handler.
+%% The Config provides a routing table, which is an ordered list of regular
+%% expressions and associated handler modules. route/3 searches for whether
+%% the Request matches any of these routes, and if so dispatches it to the
+%% appropriate handler module.
+%%
+%% @param Path the Path in the Gemini request
+%% @param Request the Gemini request
+%% @param Config the server configuration, including the routing table
+%% @end
 route(Path, Request, Config=#server_config{routing=Routes}) ->
     try_route(Path, Request, Config, Routes).
 
