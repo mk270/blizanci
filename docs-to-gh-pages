@@ -20,7 +20,7 @@ TEMPDIR=$(tempfile)
 cleanup () {
     local rv=$?
     rm -rf -- $TEMPDIR
-    echo DID NOT git checkout $BRANCH
+    git checkout $BRANCH
     exit $rv
 }
 trap cleanup EXIT
@@ -32,4 +32,6 @@ rm -rf $TEMPDIR
 cp -a $DOCDIR $TEMPDIR
 git checkout gh-pages
 cp -a $TEMPDIR/* .
+git add .
 git status
+git commit -m "autocommit docs"
