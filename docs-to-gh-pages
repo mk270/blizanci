@@ -20,7 +20,7 @@ TEMPDIR=$(tempfile)
 cleanup () {
     local rv=$?
     rm -rf -- $TEMPDIR
-    git checkout $BRANCH
+    echo DID NOT git checkout $BRANCH
     exit $rv
 }
 trap cleanup EXIT
