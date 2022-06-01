@@ -5,6 +5,24 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
+%% @doc
+%% Most of the configuration of blizanci is done via this module, albeit
+%% there remain some key values hardwired into the source code of the other
+%% modules.
+%%
+%% Generally, configuration data is hardwired into this module, or derived
+%% from the application environment set in sys.config.
+%%
+%% This module is primarily called during the initialisation of the blizanci
+%% app, before the ranch listener is started. Its output is then inherited
+%% via the many processes started (directly or otherwise) by ranch.
+%%
+%% Invalid configuration items generally result in a crash of the process
+%% which responds to a relevant Gemini request. However, future versions
+%% of blizanci will become increasingly strict about verifying that the
+%% configuration is valid at application start time.
+%% @end
+
 -module(blizanci_config).
 
 -export([ssl_opts/0, proto_opts/0]).
@@ -12,6 +30,9 @@
 -define(PORT, 1965).
 
 -spec ssl_opts() -> [{atom(), term()}].
+%% @doc
+%% Generate the options required for ranch to initialise SSL
+%% @end
 ssl_opts() ->
     {ok, App} = application:get_application(),
     {ok, Cert} = get_pem_file_from_environment(App, certfile,
@@ -32,6 +53,9 @@ ssl_opts() ->
     ].
 
 -spec proto_opts() -> [{atom(), term()}].
+%% @doc
+%% Generate the options required for ranch to initialise the TCP listener
+%% @end
 proto_opts() ->
     {ok, App} = application:get_application(),
     {ok, Default_Hostname} = inet:gethostname(),
