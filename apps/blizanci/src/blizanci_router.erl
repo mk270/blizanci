@@ -59,7 +59,7 @@ try_route(_Path, _Request, _Config, []) ->
 try_route(Path, Request, Config, [Route|Tail]) ->
     case route_match(Path, Route) of
         {match, Matches, Module, RouteOpts} ->
-            dispatch(Matches, Module, Request, RouteOpts);
+            dispatch(Matches, Module, Request, Config, RouteOpts);
         _ -> try_route(Path, Request, Config, Tail)
     end.
 
@@ -78,6 +78,8 @@ route_match(Path, #route{pattern=Regex, module=Module, options=RouteOpts}) ->
     end.
 
 % TBD: typing could be improved
--spec dispatch(path_matches(), module(), map(), any()) -> any().
-dispatch(Matches, Module, Request, RouteOpts) ->
-    blizanci_servlet_container:request(Module, Matches, Request, RouteOpts).
+-spec dispatch(path_matches(), module(), map(), server_config(), any()) ->
+          any().
+dispatch(Matches, Module, Request, ServerConfig, RouteOpts) ->
+    blizanci_servlet_container:request(Module, Matches, Request,
+                                       ServerConfig, RouteOpts).

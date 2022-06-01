@@ -11,7 +11,7 @@
 % fulfil these.
 %
 % One blizanci_servlet_container process is generated per deferred
-% request. This is done by calling blizanci_servlet_container:request/4,
+% request. This is done by calling blizanci_servlet_container:request/5,
 % which has the side-effect of caching the caller's Pid and passing it to
 % the servlet process it creates.
 %
@@ -23,17 +23,17 @@
 %  | {servlet_complete, Output :: binary()}
 %
 % It is likely unnecessary for a handler module to provide substantive
-% implementations of both Module:serve/3 and Module:request/3. This is
+% implementations of both Module:serve/4 and Module:request/4. This is
 % because a handler module will likely behave wholly synchronously or
 % wholly asychronously.
 %
 % A synchrononous handler module should have a substantive implementation
-% of Module:request/3 which returns a gemini response marked with the
-% atom 'immediate'; this means its implementation of Module:serve/3 will
+% of Module:request/4 which returns a gemini response marked with the
+% atom 'immediate'; this means its implementation of Module:serve/4 will
 % never be called and may be left as a stub. Conversely, an asychronous
-% handler module would have a trivial implementation of Module:request/3,
+% handler module would have a trivial implementation of Module:request/4,
 % returning the atom 'defer', and the substantive implementation would be
-% afforded via its Module:serve/3 implementation instead.
+% afforded via its Module:serve/4 implementation instead.
 %
 %% @end
 
@@ -44,7 +44,7 @@
 -include("gen_server.hrl").
 
 %% API
--export([request/4, cancel/1, gateway_exit/2]).
+-export([request/5, cancel/1, gateway_exit/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -55,7 +55,8 @@
 -record(servlet_state, {parent,
                         matches,
                         request,
-                        config,
+                        server_config,
+                        route_options,
                         gateway_pid,
                         gateway_module}).
 
@@ -84,33 +85,37 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
     end.
 
 
--spec request(module(), path_matches(), any(), any()) -> gemini_response().
+-spec request(module(), path_matches(), any(), server_config(), any()) ->
+          gemini_response().
 %% @doc Called by the router to dispatch a request to a specific handler.
 %% @param Module the module implementing the handler
 %% @param Matches a list of binary key-value pairs representing the manner in which the request matched the pattern associated with the route
 %% @param Request the request
-%% @param Config the configuration to be passed to the servlet module
+%% @param ServerConfig the configuration for the Gemini server
+%% @param RouteOpts the configuration to be passed to the servlet module
 %%
 %% The function calls Module:request(Matches, Request, Config), which may
 %% return either an immediate Gemini response or the atom 'defer'. Where it
 %% is indicated that the response will be deferred, a new process is started
 %% and Module:serve(Matches, Req, Config) is called. This sets things up
 %% for the results of the request to be notified back to the caller
-%% (of request/4), which is a ranch handler for the Gemini protocol.
+%% (of request/5), which is a ranch handler for the Gemini protocol.
 %% @end
-request(Module, Matches, Request, Config) ->
-    case Module:request(Matches, Request, Config) of
+request(Module, Matches, Request, ServerConfig, RouteOpts) ->
+    case Module:request(Matches, Request, ServerConfig, RouteOpts) of
         {immediate, Result} -> Result;
-        defer -> defer_request(Module, Matches, Request, Config)
+        defer -> defer_request(Module, Matches, Request,
+                               ServerConfig, RouteOpts)
     end.
 
 
 -spec defer_request(Module::module(),
                     Matches::path_matches(),
                     Req::any(), % should be able to do better
-                    Config::any()) -> gemini_response().
-defer_request(Module, Matches, Req, Config) ->
-    Args = [self(), Module, Matches, Req, Config],
+                    ServerConfig::server_config(),
+                    RouteOpts::any()) -> gemini_response().
+defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
+    Args = [self(), Module, Matches, Req, ServerConfig, RouteOpts],
     process_flag(trap_exit, true),
     case proc_lib:start_link(?MODULE, init, [Args]) of
         {ok, Pid} -> {init_servlet, Pid};
@@ -124,9 +129,9 @@ defer_request(Module, Matches, Req, Config) ->
 %% @doc
 %% @hidden
 %% @end
-init([Parent, Module, Matches, Req, Config]) ->
+init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
     proc_lib:init_ack({ok, self()}),
-    case Module:serve(Matches, Req, Config) of
+    case Module:serve(Matches, Req, ServerConfig, RouteOpts) of
         {gateway_error, Error} ->
             report_result(Parent, {servlet_failed, Error}),
             {stop, normal};
@@ -134,7 +139,8 @@ init([Parent, Module, Matches, Req, Config]) ->
             State = #servlet_state{parent=Parent,
                            matches=Matches,
                            request=Req,
-                           config=Config,
+                           server_config=ServerConfig,
+                           route_options=RouteOpts,
                            gateway_pid=Pid,
                            gateway_module=Module},
             gen_server:enter_loop(?MODULE, [], State)

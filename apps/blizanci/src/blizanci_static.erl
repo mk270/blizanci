@@ -12,7 +12,7 @@
 
 -include("blizanci_types.hrl").
 
--export([serve/3, cancel/1, request/3]).
+-export([serve/4, cancel/1, request/4]).
 
 -type options() :: #{ bare_mimetype := binary(),
                       unknown_mimetype := binary(),
@@ -32,22 +32,22 @@ cancel(_) ->
 
 % Called by the servlet
 %
--spec request(path_matches(), request_details(), options()) ->
+-spec request(path_matches(), request_details(), server_config(), options()) ->
                          {'immediate', gemini_response()} |
                          'defer'.
-request(Matches, Req, Options) ->
+request(Matches, Req, _ServerConfig, RouteOpts) ->
     #{ <<"PATH">> := Path } = Matches,
-    {ok, Auth} = blizanci_auth:authorisation_policy(Options),
+    {ok, Auth} = blizanci_auth:authorisation_policy(RouteOpts),
     Response = case blizanci_auth:authorised(Auth, Req) of
-                   authorised -> serve_file(Path, Options);
+                   authorised -> serve_file(Path, RouteOpts);
                    Error -> Error
                end,
     {immediate, Response}.
 
 
--spec serve(path_matches(), request_details(), options()) ->
+-spec serve(path_matches(), request_details(), server_config(), options()) ->
                    gateway_result().
-serve(_, _, _) ->
+serve(_, _, _, _) ->
     {gateway_error, unimplemented}.
 
 

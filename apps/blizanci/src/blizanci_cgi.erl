@@ -45,7 +45,7 @@
 -include("gen_server.hrl").
 
 %% API
--export([serve/3, start/0, cancel/1, request/3]).
+-export([serve/4, start/0, cancel/1, request/4]).
 -export([start_link/1]).
 
 %% gen_server callbacks
@@ -112,21 +112,22 @@ cancel(Pid) ->
 
 % Called by the servlet
 %
--spec request(any(), request_details(), any()) ->
+-spec request(any(), request_details(), server_config(), any()) ->
                      {'immediate', gemini_response()} |
                      'defer'.
-request(_Path, _Req, _Config) ->
+request(_Path, _Req, _ServerConfig, _RouteOpts) ->
     defer.
 
--spec serve(path_matches(), request_details(), options()) -> gateway_result().
+-spec serve(path_matches(), request_details(), server_config(), options()) ->
+          gateway_result().
 %% @doc
 %% Validate that a proper CGI request has been received, and if so, submit
 %% a job to the queue. Called by the servlet.
 %% @end
-serve(Matches, Req, Options) ->
+serve(Matches, Req, _ServerConfig, RouteOpts) ->
     #{ <<"PATH">> := Path } = Matches,
     #{ cgiprefix := CGIPrefix,
-       cgiroot   := CGIRoot } = Options,
+       cgiroot   := CGIRoot } = RouteOpts,
     PathElements  = [CGIRoot, binary_to_list(Path)],
     {ok, Cmd}     = blizanci_path:fix_path(filename:join(PathElements)),
 
@@ -142,7 +143,7 @@ serve(Matches, Req, Options) ->
             % Args represents a UNIX commandline comprising the path of
             % the executable with zero arguments.
             Args = [Cmd],
-            Env = cgi_environment(CGIPrefix, Path, Cmd, Options,
+            Env = cgi_environment(CGIPrefix, Path, Cmd, RouteOpts,
                                   QueryString, Cert),
 
             case run_cgi(Args, Env) of
@@ -255,14 +256,14 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     {stop, normal, State}.
 
 
-cgi_environment(CGIPrefix, Path, Bin, Options, QueryString, Cert) ->
-    Env0 = make_environment(CGIPrefix, Path, Bin, Options, QueryString, Cert),
+cgi_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert) ->
+    Env0 = make_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert),
     blizanci_osenv:sanitise(Env0).
 
-make_environment(CGIPrefix, Path, Bin, Options, QueryString, Cert) ->
+make_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert) ->
     ScriptName = CGIPrefix ++ binary_to_list(Path),
     #{ hostname := Hostname,
-       port     := Port } = Options,
+       port     := Port } = RouteOpts,
 
     KVPs = [
      {"PATH_TRANSLATED", Bin},

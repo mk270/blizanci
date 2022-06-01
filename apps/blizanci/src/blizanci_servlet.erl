@@ -18,7 +18,7 @@
 -include("blizanci_types.hrl").
 
 % Called by blizanci_servlet_container *before* creating a servlet process;
--callback request(path_matches(), request_details(), map()) ->
+-callback request(path_matches(), request_details(), server_config(), map()) ->
     {'immediate', gemini_response()} |
     'defer'.
 
@@ -26,7 +26,7 @@
 % TBD: gateway_exit
 
 %% Serve the request asynchronously.
--callback serve(path_matches(), request_details(), map()) ->
+-callback serve(path_matches(), request_details(), server_config(), map()) ->
     gateway_result().
 
 %% Called for asynchronous shutdown, e.g., when the client has hung up the
