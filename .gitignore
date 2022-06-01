@@ -25,3 +25,5 @@ fresh-start
 rebar.lock
 run
 todo.org
+apps/blizanci/doc/
+cgi-bin/*
