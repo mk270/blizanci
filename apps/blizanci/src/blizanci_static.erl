@@ -35,13 +35,9 @@ cancel(_) ->
 -spec request(path_matches(), request_details(), server_config(), options()) ->
                          {'immediate', gemini_response()} |
                          'defer'.
-request(Matches, Req, _ServerConfig, RouteOpts) ->
+request(Matches, _Req, _ServerConfig, RouteOpts) ->
     #{ <<"PATH">> := Path } = Matches,
-    {ok, Auth} = blizanci_auth:authorisation_policy(RouteOpts),
-    Response = case blizanci_auth:authorised(Auth, Req) of
-                   authorised -> serve_file(Path, RouteOpts);
-                   Error -> Error
-               end,
+    Response = serve_file(Path, RouteOpts),
     {immediate, Response}.
 
 

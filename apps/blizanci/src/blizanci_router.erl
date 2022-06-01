@@ -84,7 +84,11 @@ route_match(Path, #route{pattern=Regex,
 % TBD: typing could be improved
 -spec dispatch(path_matches(), module(), map(), authorisation(),
                server_config(), any()) ->
-          any().
-dispatch(Matches, Module, Request, _AuthPolicy, ServerConfig, RouteOpts) ->
-    blizanci_servlet_container:request(Module, Matches, Request,
-                                       ServerConfig, RouteOpts).
+          gemini_response().
+dispatch(Matches, Module, Request, AuthPolicy, ServerConfig, RouteOpts) ->
+    case blizanci_auth:authorised(AuthPolicy, Request) of
+        authorised ->
+            blizanci_servlet_container:request(Module, Matches, Request,
+                                               ServerConfig, RouteOpts);
+        Error -> Error
+    end.
