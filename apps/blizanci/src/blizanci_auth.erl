@@ -12,6 +12,9 @@
 
 -spec authorisation_policy(map()) ->
           {'ok', authorisation()} | {'error', atom()}.
+%% @doc Derive the authorisation policy of a given routing table entry
+%% @returns {ok, public | restricted | private} | {error, atom()}
+%% @end
 authorisation_policy(Options) when is_map(Options) ->
     #{ authorisation := Auth } = Options,
     valid_authz_policy(Auth).
@@ -21,8 +24,12 @@ valid_authz_policy(restricted) -> {ok, restricted};
 valid_authz_policy(private) -> {ok, private};
 valid_authz_policy(_) -> {error, invalid_authz_policy}.
 
--spec authorised(authorisation(), map()) ->
+-spec authorised(AuthPolicy::authorisation(), Request::map()) ->
           'authorised' | {'error_code', atom()}.
+%% @doc Check if a route's authorisation policy permits a given request
+%% @param AuthPolicy the authorisation policy associated with the route
+%% @param Request the Gemini request
+%% @end
 authorised(public, _Request) -> authorised;
 authorised(AuthPolicy, Request) ->
     CertInfo = client_cert_info(Request),
