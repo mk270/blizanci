@@ -3,4 +3,7 @@
 @doc 
 A Gemini server.
 
+This documentation is largely for server internals. The authors do not really
+know how to use EDoc, so please bear with us.
+
 @end
