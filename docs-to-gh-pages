@@ -2,13 +2,21 @@
 
 set -eu
 
-DOCDIR=apps/blizanci/doc
 cd $(dirname $0)
-rm -rf $DOCDIR
 
-rebar3 edoc
 TEMPDIR=$(tempfile)
+cleanup () {
+    local rv=$?
+    rm -rf -- $TEMPDIR
+    exit $rv
+}
+trap cleanup EXIT
+
+DOCDIR=apps/blizanci/doc
+rebar3 edoc
+
 rm -rf $TEMPDIR
 cp -a $DOCDIR $TEMPDIR
-ls $TEMPDIR
-rm -rf $TEMPDIR
+git checkout gh-pages
+cp -a $TEMPDIR .
+git status
