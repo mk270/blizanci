@@ -12,6 +12,8 @@ cleanup () {
 }
 trap cleanup EXIT
 
+current-git-branch () { git branch | awk '$1 == "*" {print $2}' }
+
 DOCDIR=apps/blizanci/doc
 rebar3 edoc
 
