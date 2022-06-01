@@ -10,6 +10,8 @@
 
 -type mp() :: {re_pattern, _, _, _, _}.
 
+-type authorisation() :: public | restricted | private.
+
 -type route_option() :: {atom(), any()}.
 
 -record(route,
@@ -45,8 +47,6 @@
 -type gemini_session() :: continue
                         | finished 
                         | {'expect_servlet', pid()}.
-
--type authorisation() :: public | restricted | private.
 
 -type env_list() :: [{string(), string()}].
 
