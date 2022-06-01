@@ -128,6 +128,8 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
     #{ <<"PATH">> := Path } = Matches,
     #{ cgiprefix := CGIPrefix,
        cgiroot   := CGIRoot } = RouteOpts,
+    #{ hostname  := Hostname,
+       port      := Port } = RouteOpts,
     PathElements  = [CGIRoot, binary_to_list(Path)],
     {ok, Cmd}     = blizanci_path:fix_path(filename:join(PathElements)),
 
@@ -143,7 +145,7 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
             % Args represents a UNIX commandline comprising the path of
             % the executable with zero arguments.
             Args = [Cmd],
-            Env = cgi_environment(CGIPrefix, Path, Cmd, RouteOpts,
+            Env = cgi_environment(CGIPrefix, Path, Cmd, {Hostname, Port},
                                   QueryString, Cert),
 
             case run_cgi(Args, Env) of
@@ -255,18 +257,17 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     blizanci_servlet_container:gateway_exit(Parent, Reason),
     {stop, normal, State}.
 
--spec cgi_environment(string(), binary(), string(), map(), binary(), term()) ->
+-spec cgi_environment(string(), binary(), string(), {string(), integer()}, binary(), term()) ->
           env_list().
 cgi_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert) ->
     Env0 = make_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert),
     blizanci_osenv:sanitise(Env0).
 
--spec make_environment(string(), binary(), string(), map(), binary(), term()) ->
+-spec make_environment(string(), binary(), string(), {string(), integer()}, binary(), term()) ->
           [{string(), term()}].
 make_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert) ->
     ScriptName = CGIPrefix ++ binary_to_list(Path),
-    #{ hostname := Hostname,
-       port     := Port } = RouteOpts,
+    {Hostname, Port} = RouteOpts,
 
     KVPs = [
      {"PATH_TRANSLATED", Bin},
