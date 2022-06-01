@@ -15,6 +15,10 @@
 -spec prepare([{string(), module(), [route_option()]}]) ->
     {'ok', [route()]} |
     {'error', atom()}.
+% TBD
+%% @doc
+%% Check that a routing table entry is valid.
+%% @end
 prepare(RouteInfo) ->
     try make_routes(RouteInfo) of
         Routes -> {ok, Routes}
