@@ -5,7 +5,11 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
-% RDN == relative distinguished name
+%% @doc
+%% This module handles most of the certificate-related functionality.
+%%
+%% Herein, RDN means "relative distinguished name".
+%% @end
 
 -module(blizanci_x509).
 -include_lib("public_key/include/public_key.hrl").
