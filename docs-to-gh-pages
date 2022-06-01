@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -eu
+
+DOCDIR=apps/blizanci/doc
+cd $(dirname $0)
+rm -rf $DOCDIR
+
+rebar3 edoc
+TEMPDIR=$(tempfile)
+rm -rf $TEMPDIR
+cp -a $DOCDIR $TEMPDIR
+ls $TEMPDIR
+rm -rf $TEMPDIR
