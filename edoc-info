@@ -1,0 +1,5 @@
+%% encoding: UTF-8
+{application,blizanci}.
+{modules,[blizanci_auth,blizanci_cgi,blizanci_config,blizanci_gemini,
+          blizanci_osenv,blizanci_path,blizanci_router,blizanci_servlet,
+          blizanci_servlet_container,blizanci_static,blizanci_x509]}.
