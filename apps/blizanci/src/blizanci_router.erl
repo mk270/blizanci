@@ -58,8 +58,8 @@ try_route(_Path, _Request, _Config, []) ->
     {error_code, file_not_found};
 try_route(Path, Request, Config, [Route|Tail]) ->
     case route_match(Path, Route) of
-        {match, Matches, Module, Options} ->
-            dispatch(Matches, Module, Request, Options);
+        {match, Matches, Module, RouteOpts} ->
+            dispatch(Matches, Module, Request, RouteOpts);
         _ -> try_route(Path, Request, Config, Tail)
     end.
 
@@ -68,16 +68,16 @@ try_route(Path, Request, Config, [Route|Tail]) ->
                          {'match', map(), module(), any()}.
 % see the documentation for re:inspect/2 for what Matches represents and
 % its format
-route_match(Path, #route{pattern=Regex, module=Module, options=Options}) ->
+route_match(Path, #route{pattern=Regex, module=Module, options=RouteOpts}) ->
     {namelist, Names} = re:inspect(Regex, namelist),
     case re:run(Path, Regex, [{capture, all_names, binary}]) of
         {match, M} ->
             Matches = maps:from_list(lists:zip(Names, M)),
-            {match, Matches, Module, Options};
+            {match, Matches, Module, RouteOpts};
         _ -> nomatch
     end.
 
 % TBD: typing could be improved
 -spec dispatch(path_matches(), module(), map(), any()) -> any().
-dispatch(Matches, Module, Request, Options) ->
-    blizanci_servlet_container:request(Module, Matches, Request, Options).
+dispatch(Matches, Module, Request, RouteOpts) ->
+    blizanci_servlet_container:request(Module, Matches, Request, RouteOpts).
