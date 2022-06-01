@@ -4,19 +4,26 @@ set -eu
 
 cd $(dirname $0)
 
-TEMPDIR=$(tempfile)
-cleanup () {
-    local rv=$?
-    rm -rf -- $TEMPDIR
-    exit $rv
-}
-trap cleanup EXIT
-
 current-git-branch () {
     git branch | \
     grep -v 'HEAD detached' | \
     awk '$1 == "*" {print $2}'
 }
+
+BRANCH=$(current-git-branch)
+if [ -z "$BRANCH" ]; then
+    echo Cannot determine current git branch
+    exit 1
+fi
+
+TEMPDIR=$(tempfile)
+cleanup () {
+    local rv=$?
+    rm -rf -- $TEMPDIR
+    git checkout $BRANCH
+    exit $rv
+}
+trap cleanup EXIT
 
 DOCDIR=apps/blizanci/doc
 rebar3 edoc
