@@ -46,7 +46,7 @@
                          | {'servlet_output', binary()}.
 
 -type gemini_session() :: continue
-                        | finished 
+                        | finished
                         | {'expect_servlet', pid()}.
 
 -type env_list() :: [{string(), string()}].
