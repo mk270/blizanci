@@ -18,5 +18,5 @@ rebar3 edoc
 rm -rf $TEMPDIR
 cp -a $DOCDIR $TEMPDIR
 git checkout gh-pages
-cp -a $TEMPDIR .
+cp -a $TEMPDIR/* .
 git status
