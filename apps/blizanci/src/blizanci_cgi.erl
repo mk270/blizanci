@@ -124,12 +124,10 @@ request(_Path, _Req, _ServerConfig, _RouteOpts) ->
 %% Validate that a proper CGI request has been received, and if so, submit
 %% a job to the queue. Called by the servlet.
 %% @end
-serve(Matches, Req, _ServerConfig, RouteOpts) ->
+serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
     #{ <<"PATH">> := Path } = Matches,
     #{ cgiprefix := CGIPrefix,
        cgiroot   := CGIRoot } = RouteOpts,
-    #{ hostname  := Hostname,
-       port      := Port } = RouteOpts,
     PathElements  = [CGIRoot, binary_to_list(Path)],
     {ok, Cmd}     = blizanci_path:fix_path(filename:join(PathElements)),
 
@@ -257,13 +255,13 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     blizanci_servlet_container:gateway_exit(Parent, Reason),
     {stop, normal, State}.
 
--spec cgi_environment(string(), binary(), string(), {string(), integer()}, binary(), term()) ->
+-spec cgi_environment(string(), binary(), string(), {binary(), integer()}, binary(), term()) ->
           env_list().
 cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
     Env0 = make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert),
     blizanci_osenv:sanitise(Env0).
 
--spec make_environment(string(), binary(), string(), {string(), integer()}, binary(), term()) ->
+-spec make_environment(string(), binary(), string(), {binary(), integer()}, binary(), term()) ->
           [{string(), term()}].
 make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
     ScriptName = CGIPrefix ++ binary_to_list(Path),
