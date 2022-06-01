@@ -255,7 +255,8 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     blizanci_servlet_container:gateway_exit(Parent, Reason),
     {stop, normal, State}.
 
-
+-spec cgi_environment(string(), binary(), string(), map(), binary(), term()) ->
+          env_list().
 cgi_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert) ->
     Env0 = make_environment(CGIPrefix, Path, Bin, RouteOpts, QueryString, Cert),
     blizanci_osenv:sanitise(Env0).
