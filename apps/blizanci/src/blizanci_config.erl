@@ -87,10 +87,9 @@ routing_table(Docroot, CGIroot) ->
            bare_mimetype => <<"text/gemini">>,
            authorisation => public
          },
-    Restricted_Opts = Static_Opts#{ authorisation => restricted },
     [
      {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,     CGI_Opts},
-     {"(?<PATH>restricted.*)", blizanci_static, restricted, Restricted_Opts},
+     {"(?<PATH>restricted.*)", blizanci_static, restricted, Static_Opts},
      {"(?<PATH>.*)",           blizanci_static, public,     Static_Opts}
     ].
 
