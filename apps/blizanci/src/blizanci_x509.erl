@@ -20,6 +20,10 @@
 -export([validate_pem_file/1, certificate_from_file/1]).
 
 -spec peercert_cn(term()) -> client_cert().
+%% @doc
+%% Check if the connection has a valid certificate,
+%% and return the issuer and subject names, or error.
+%% @end
 peercert_cn({ok, Cert}) ->
     Res = public_key:pkix_decode_cert(Cert, otp),
     {Issuer, Subject} = cert_rdns(Res),
