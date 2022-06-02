@@ -41,23 +41,51 @@ valid_authz_policy(_) -> {error, invalid_authz_policy}.
 %% @end
 authorised(public, _Request) -> authorised;
 authorised(AuthPolicy, Request) ->
-    CertInfo = client_cert_info(Request),
-    cert_authorised(AuthPolicy, CertInfo).
+    #{ client_cert := Cert } = Request,
+    cert_authorised(AuthPolicy, Cert).
 
+%% TODO: should check for expiry
 -spec cert_authorised(authorisation(), term()) ->
           'authorised' | {'error_code', atom()}.
-cert_authorised(_, error) ->
+cert_authorised(_, {error, no_peercert}) ->
     {error_code, cert_required};
-cert_authorised(restricted, {ok, Cert}) ->
-    lager:info("Cert required: ~p", [Cert]),
+cert_authorised(restricted, {ok, _AnyCert}) ->
     authorised;
-cert_authorised({private, _Certs}, {ok, Cert}) ->
-    #{ common_name := Subject,
-       issuer_common_name := Issuer } = Cert,
-    lager:info("object requested, cert: ~p/~p", [Subject, Issuer]),
-    authorised.
+cert_authorised({private, Certs}, {ok, Cert}) ->
+    case cert_issued_by_any(Cert, Certs) of
+        {ok, Issuer} -> lager:info("successful auth: ~p", [Issuer]),
+                        authorised;
+        fail -> {error_code, cert_not_authorised}
+    end.
 
 
-client_cert_info(Request) ->
-    #{ client_cert := Cert } = Request,
-    blizanci_x509:peercert_cn(Cert).
+-spec cert_issued_by_any(map(), [string()]) ->
+          {'ok', string()} | 'fail'.
+cert_issued_by_any(_Cert, []) -> fail;
+cert_issued_by_any(Cert, [Issuer|Tail]) when is_list(Issuer) -> 
+    case cert_issued_by(Cert, Issuer) of
+        ok -> {ok, Issuer};
+        not_issuer -> cert_issued_by_any(Cert, Tail)
+    end.
+
+-spec cert_issued_by(term(), Issuer::string()) ->
+          'ok' | 'not_issuer'.
+cert_issued_by(Cert, Issuer) ->
+    lager:info("Trying cert against issuer ~p", [Issuer]),
+    IssuerCert = certificate_from_file(Issuer),
+    case public_key:pkix_is_issuer(Cert, IssuerCert) of
+        false -> not_issuer;
+        true -> ok
+    end.
+
+certificate_from_file(Filename) ->
+    lager:info("Path: ~p", [Filename]),
+    CertDir = "/home/mk270/Src/blizanci/ssl/", 
+    Path = filename:join(CertDir, Filename),
+    lager:info("Path: ~p", [Path]),
+    {ok, Data} = file:read_file(Path),
+    PEM_Entries = public_key:pem_decode(Data),
+    {value, CertEntry} = lists:keysearch('Certificate', 1, PEM_Entries),
+    {_, DerCert, _} = CertEntry,
+    CACert = public_key:pkix_decode_cert(DerCert, otp),
+    CACert.

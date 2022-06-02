@@ -89,7 +89,8 @@ gemini_status(gateway_busy)          -> {40, <<"Gateway too busy">>};
 gemini_status(cgi_exec_error)        -> {40, <<"Gateway error">>};
 gemini_status(file_not_found)        -> {51, <<"File not found">>};
 gemini_status(cert_required)         -> {60, <<"Client certificate required">>};
-gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>}.
+gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>};
+gemini_status(cert_not_authorised)   -> {60, <<"Client certificate unauthorised">>}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

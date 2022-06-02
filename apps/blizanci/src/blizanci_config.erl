@@ -87,10 +87,12 @@ routing_table(Docroot, CGIroot) ->
            bare_mimetype => <<"text/gemini">>,
            authorisation => public
          },
+    CAs = ["cacert0.pem"],
     [
-     {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,     CGI_Opts},
-     {"(?<PATH>restricted.*)", blizanci_static, restricted, Static_Opts},
-     {"(?<PATH>.*)",           blizanci_static, public,     Static_Opts}
+     {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,         CGI_Opts},
+     {"(?<PATH>private.*)",    blizanci_static, {private, CAs}, Static_Opts},
+     {"(?<PATH>restricted.*)", blizanci_static, restricted,     Static_Opts},
+     {"(?<PATH>.*)",           blizanci_static, public,         Static_Opts}
     ].
 
 
