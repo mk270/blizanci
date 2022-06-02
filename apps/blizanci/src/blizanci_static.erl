@@ -12,7 +12,7 @@
 
 -include("blizanci_types.hrl").
 
--export([serve/4, cancel/1, request/4]).
+-export([serve/4, cancel/1, request/4, default_options/0]).
 
 -type options() :: #{ bare_mimetype := binary(),
                       unknown_mimetype := binary(),
@@ -25,6 +25,10 @@
 -define(BARE_MIMETYPE, <<"text/gemini">>).
 -define(UNKNOWN_MIMETYPE, <<"application/octet-stream">>).
 -define(DEFAULT_DOCROOT, <<"./public_gemini">>).
+
+-spec default_options() -> map().
+default_options() ->
+    #{}.
 
 -spec cancel(pid()) -> ok.
 cancel(_) ->

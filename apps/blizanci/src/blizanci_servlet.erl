@@ -34,3 +34,5 @@
 %% relates to a running process, and promptly terminate.
 -callback cancel(pid()) -> 'ok'.
 
+
+-callback default_options() -> map().

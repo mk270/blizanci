@@ -45,7 +45,7 @@
 -include("gen_server.hrl").
 
 %% API
--export([serve/4, start/0, cancel/1, request/4]).
+-export([serve/4, start/0, cancel/1, request/4, default_options/0]).
 -export([start_link/1]).
 
 %% gen_server callbacks
@@ -73,6 +73,10 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+-spec default_options() -> map().
+default_options() ->
+    #{}.
 
 % Called by the ppool queue manager; passes the arguments straight through
 -spec start_link(term()) -> {ok, Pid :: pid()} |
