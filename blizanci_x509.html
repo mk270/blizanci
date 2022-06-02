@@ -19,7 +19,8 @@ This module handles most of the certificate-related functionality.</p>
  
   Herein, RDN means "relative distinguished name".
 <h2><a name="index">Function Index</a></h2>
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#certificate_from_file-1">certificate_from_file/1</a></td><td></td></tr>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#certificate_from_file-1">certificate_from_file/1</a></td><td>
+  Return the decoded certificate from a PEM-encoded file.</td></tr>
 <tr><td valign="top"><a href="#peercert_cn-1">peercert_cn/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#validate_pem_file-1">validate_pem_file/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#verify_cert-3">verify_cert/3</a></td><td></td></tr>
@@ -31,7 +32,10 @@ This module handles most of the certificate-related functionality.</p>
 <div class="spec">
 <p><tt>certificate_from_file(Path::string()) -&gt; #'Certificate'{}</tt><br></p>
 <p> </p>
-</div>
+</div><p>
+  Return the decoded certificate from a PEM-encoded file.
+  This returns only the first certificate available in the file, and likely
+  crashes when run on a file not containing any PEM-encoded certificates.</p>
 
 <h3 class="function"><a name="peercert_cn-1">peercert_cn/1</a></h3>
 <div class="spec">
