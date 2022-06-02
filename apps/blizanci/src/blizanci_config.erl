@@ -78,23 +78,19 @@ proto_opts() ->
 -type route_entry() :: {string(), atom(), atom(), map()}.
 -spec routing_table(string(), string(), [string()]) -> [route_entry()].
 routing_table(Docroot, CGIroot, CACerts) ->
-    CGI_Default_Opts = blizanci_cgi:default_options(),
-    CGI_Opts = maps:merge(
-                 CGI_Default_Opts,
-                 #{ cgiroot => CGIroot }
-                ),
-    Static_Default_Opts = blizanci_static:default_options(),
-    Static_Opts = maps:merge(
-                    Static_Default_Opts,
-                    #{ docroot => Docroot }
-                   ),
+    CGI_Opts = #{ cgiroot => CGIroot },
+    Static_Opts = #{ docroot => Docroot },
     CAs = CACerts, % e.g., CAs = ["./ssl/cacert0.pem"]
-    [
+    Default_Route_Specs = [
      {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,         CGI_Opts},
      {"(?<PATH>private.*)",    blizanci_static, {private, CAs}, Static_Opts},
      {"(?<PATH>restricted.*)", blizanci_static, restricted,     Static_Opts},
      {"(?<PATH>.*)",           blizanci_static, public,         Static_Opts}
-    ].
+    ],
+    [ {Pattern, Module, AuthPolicy,
+       maps:merge(Module:default_options(), Opts)
+      }
+      || {Pattern, Module, AuthPolicy, Opts} <- Default_Route_Specs ].
 
 
 -spec get_pem_file_from_environment(atom(), atom(), string()) ->
