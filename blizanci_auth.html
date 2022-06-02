@@ -16,6 +16,7 @@
 <h2><a name="index">Function Index</a></h2>
 <table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#authorisation_policy-1">authorisation_policy/1</a></td><td>Derive the authorisation policy of a given routing table entry.</td></tr>
 <tr><td valign="top"><a href="#authorised-2">authorised/2</a></td><td>Check if a route's authorisation policy permits a given request.</td></tr>
+<tr><td valign="top"><a href="#valid_authz_policy-1">valid_authz_policy/1</a></td><td>Check if the argument represents a valid authorisation policy.</td></tr>
 </table>
 
 <h2><a name="functions">Function Details</a></h2>
@@ -34,6 +35,12 @@
 <tt>Request</tt>: the Gemini request<br>
 </p>
 </div><p>Check if a route's authorisation policy permits a given request</p>
+
+<h3 class="function"><a name="valid_authz_policy-1">valid_authz_policy/1</a></h3>
+<div class="spec">
+<p><tt>valid_authz_policy(X1::term()) -&gt; {ok, <a href="#type-authorisation">authorisation()</a>} | {error, atom()}</tt><br></p>
+<p> </p>
+</div><p>Check if the argument represents a valid authorisation policy</p>
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>

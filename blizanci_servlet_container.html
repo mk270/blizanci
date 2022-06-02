@@ -22,7 +22,7 @@ Gemini requests. Currently it is somewhat hardwired to use CGI to
 fulfil these.</p>
 
  <p>One blizanci_servlet_container process is generated per deferred 
-request. This is done by calling blizanci_servlet_container:request/4, 
+request. This is done by calling blizanci_servlet_container:request/5, 
 which has the side-effect of caching the caller's Pid and passing it to 
 the servlet process it creates.</p>
 
@@ -34,22 +34,22 @@ sending a message in the following form:</p>
 | {servlet_complete, Output :: binary()}</p>
 
  <p>It is likely unnecessary for a handler module to provide substantive 
-implementations of both Module:serve/3 and Module:request/3. This is 
+implementations of both Module:serve/4 and Module:request/4. This is 
 because a handler module will likely behave wholly synchronously or 
 wholly asychronously.</p>
 
  A synchrononous handler module should have a substantive implementation
- of Module:request/3 which returns a gemini response marked with the
- atom 'immediate'; this means its implementation of Module:serve/3 will
+ of Module:request/4 which returns a gemini response marked with the
+ atom 'immediate'; this means its implementation of Module:serve/4 will
  never be called and may be left as a stub. Conversely, an asychronous
- handler module would have a trivial implementation of Module:request/3,
+ handler module would have a trivial implementation of Module:request/4,
  returning the atom 'defer', and the substantive implementation would be
- afforded via its Module:serve/3 implementation instead.
+ afforded via its Module:serve/4 implementation instead.
 
 <h2><a name="index">Function Index</a></h2>
 <table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#cancel-1">cancel/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#gateway_exit-2">gateway_exit/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#request-4">request/4</a></td><td>Called by the router to dispatch a request to a specific handler.</td></tr>
+<tr><td valign="top"><a href="#request-5">request/5</a></td><td>Called by the router to dispatch a request to a specific handler.</td></tr>
 </table>
 
 <h2><a name="functions">Function Details</a></h2>
@@ -66,20 +66,21 @@ wholly asychronously.</p>
 <p> </p>
 </div>
 
-<h3 class="function"><a name="request-4">request/4</a></h3>
+<h3 class="function"><a name="request-5">request/5</a></h3>
 <div class="spec">
-<p><tt>request(Module::module(), Matches::<a href="#type-path_matches">path_matches()</a>, Request::any(), Config::any()) -&gt; <a href="#type-gemini_response">gemini_response()</a></tt><br></p>
+<p><tt>request(Module::module(), Matches::<a href="#type-path_matches">path_matches()</a>, Request::any(), ServerConfig::<a href="#type-server_config">server_config()</a>, RouteOpts::any()) -&gt; <a href="#type-gemini_response">gemini_response()</a></tt><br></p>
 <p><tt>Module</tt>: the module implementing the handler<br>
 <tt>Matches</tt>: a list of binary key-value pairs representing the manner in which the request matched the pattern associated with the route<br>
 <tt>Request</tt>: the request<br>
-<tt>Config</tt>: <p>the configuration to be passed to the servlet module</p>
+<tt>ServerConfig</tt>: the configuration for the Gemini server<br>
+<tt>RouteOpts</tt>: <p>the configuration to be passed to the servlet module</p>
  
   The function calls Module:request(Matches, Request, Config), which may
   return either an immediate Gemini response or the atom 'defer'. Where it
   is indicated that the response will be deferred, a new process is started
   and Module:serve(Matches, Req, Config) is called. This sets things up
   for the results of the request to be notified back to the caller
-  (of request/4), which is a ranch handler for the Gemini protocol.<br>
+  (of request/5), which is a ranch handler for the Gemini protocol.<br>
 </p>
 </div><p>Called by the router to dispatch a request to a specific handler.</p>
 <hr>

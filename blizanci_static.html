@@ -17,13 +17,14 @@
 <h2><a name="types">Data Types</a></h2>
 
 <h3 class="typedecl"><a name="type-options">options()</a></h3>
-<p><tt>options() = #{bare_mimetype := binary(), unknown_mimetype := binary(), docroot := string(), index := string(), authorisation := public | restricted | secret}</tt></p>
+<p><tt>options() = #{bare_mimetype := binary(), unknown_mimetype := binary(), docroot := string(), index := string()}</tt></p>
 
 
 <h2><a name="index">Function Index</a></h2>
 <table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#cancel-1">cancel/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#request-3">request/3</a></td><td></td></tr>
-<tr><td valign="top"><a href="#serve-3">serve/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#default_options-0">default_options/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#request-4">request/4</a></td><td></td></tr>
+<tr><td valign="top"><a href="#serve-4">serve/4</a></td><td></td></tr>
 </table>
 
 <h2><a name="functions">Function Details</a></h2>
@@ -34,15 +35,21 @@
 <p> </p>
 </div>
 
-<h3 class="function"><a name="request-3">request/3</a></h3>
+<h3 class="function"><a name="default_options-0">default_options/0</a></h3>
 <div class="spec">
-<p><tt>request(Matches::<a href="#type-path_matches">path_matches()</a>, Req::<a href="#type-request_details">request_details()</a>, Options::<a href="#type-options">options()</a>) -&gt; {immediate, <a href="#type-gemini_response">gemini_response()</a>} | defer</tt><br></p>
+<p><tt>default_options() -&gt; map()</tt><br></p>
 <p> </p>
 </div>
 
-<h3 class="function"><a name="serve-3">serve/3</a></h3>
+<h3 class="function"><a name="request-4">request/4</a></h3>
 <div class="spec">
-<p><tt>serve(X1::<a href="#type-path_matches">path_matches()</a>, X2::<a href="#type-request_details">request_details()</a>, X3::<a href="#type-options">options()</a>) -&gt; <a href="#type-gateway_result">gateway_result()</a></tt><br></p>
+<p><tt>request(Matches::<a href="#type-path_matches">path_matches()</a>, Req::<a href="#type-request_details">request_details()</a>, ServerConfig::<a href="#type-server_config">server_config()</a>, RouteOpts::<a href="#type-options">options()</a>) -&gt; {immediate, <a href="#type-gemini_response">gemini_response()</a>} | defer</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="serve-4">serve/4</a></h3>
+<div class="spec">
+<p><tt>serve(X1::<a href="#type-path_matches">path_matches()</a>, X2::<a href="#type-request_details">request_details()</a>, X3::<a href="#type-server_config">server_config()</a>, X4::<a href="#type-options">options()</a>) -&gt; <a href="#type-gateway_result">gateway_result()</a></tt><br></p>
 <p> </p>
 </div>
 <hr>
