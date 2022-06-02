@@ -18,6 +18,7 @@
 -export([cert_rdns/1, dump_rdn/1, report_peercert/1]).
 -export([peercert_cn/1]).
 -export([verify_cert/3]).
+-export([certificate_from_file/1]).
 
 -spec peercert_cn(term()) -> client_cert().
 peercert_cn({ok, Cert}) ->
@@ -95,3 +96,13 @@ oid_alias(_) -> unknown.
             {'unknown', UserState :: term()}.
 verify_cert(_Cert, _Event, _InitialUserState) ->
     {valid, unknown_user}.
+
+
+-spec certificate_from_file(string()) -> #'Certificate'{}.
+certificate_from_file(Filename) ->
+    CertDir = "/home/mk270/Src/blizanci/ssl/",
+    Path = filename:join(CertDir, Filename),
+    {ok, Data} = file:read_file(Path),
+    PEM_Entries = public_key:pem_decode(Data),
+    {value, {_, DerCert, _}} = lists:keysearch('Certificate', 1, PEM_Entries),
+    public_key:pkix_decode_cert(DerCert, otp).
