@@ -75,7 +75,7 @@ proto_opts() ->
      {routing, Routing}
     ].
 
--type route_entry() :: {string(), atom(), atom(), map()}.
+-type route_entry() :: {atom(), string(), atom(), atom(), map()}.
 -spec routing_table(string(), string(), [string()]) -> [route_entry()].
 routing_table(Docroot, CGIroot, CACerts) ->
     CGI_Opts = #{ cgiroot => CGIroot },
@@ -87,7 +87,7 @@ routing_table(Docroot, CGIroot, CACerts) ->
      {"(?<PATH>restricted.*)", blizanci_static, restricted,     Static_Opts},
      {"(?<PATH>.*)",           blizanci_static, public,         Static_Opts}
     ],
-    [ {Pattern, Module, AuthPolicy,
+    [ {gemini, Pattern, Module, AuthPolicy,
        maps:merge(Module:default_options(), Opts)
       }
       || {Pattern, Module, AuthPolicy, Opts} <- Default_Route_Specs ].

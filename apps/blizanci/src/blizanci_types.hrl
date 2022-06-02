@@ -15,7 +15,8 @@
 -type route_option() :: {atom(), any()}.
 
 -record(route,
-        {pattern     :: mp(),
+        {proto       :: atom(),
+         pattern     :: mp(),
          module      :: module(),
          auth_policy :: authorisation(),
          options     :: [route_option()]}).

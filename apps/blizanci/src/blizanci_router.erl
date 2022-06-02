@@ -30,12 +30,13 @@ prepare(RouteInfo) ->
 make_routes(RouteInfo) ->
     [ make_route(R) || R <- RouteInfo ].
 
--spec make_route({binary(), module(), authorisation(), [route_option()]})
+-spec make_route({atom(), binary(), module(), authorisation(), [route_option()]})
                 -> route().
-make_route({Regex, Module, AuthPolicy, Opts}) ->
+make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
     {ok, RE} = re:compile(Regex),
     case blizanci_auth:valid_authz_policy(AuthPolicy) of
-        {ok, _} -> #route{pattern=RE,
+        {ok, _} -> #route{proto=Proto,
+                          pattern=RE,
                           module=Module,
                           auth_policy=AuthPolicy,
                           options=Opts};
