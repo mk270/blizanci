@@ -88,6 +88,11 @@ verify_cert(_Cert, _Event, _InitialUserState) ->
 
 
 -spec certificate_from_file(string()) -> #'Certificate'{}.
+%% @doc
+%% Return the decoded certificate from a PEM-encoded file.
+%% This returns only the first certificate available in the file, and likely
+%% crashes when run on a file not containing any PEM-encoded certificates.
+%% @end
 certificate_from_file(Path) ->
     {ok, Data} = file:read_file(Path),
     PEM_Entries = public_key:pem_decode(Data),
