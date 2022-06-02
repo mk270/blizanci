@@ -382,40 +382,44 @@ handle_parsed_url(URI, Config, Cert) ->
 handle_url(#{ scheme := <<"gopher">> }, _) -> {error_code, proxy_refused};
 handle_url(#{ scheme := <<"https">> }, _) -> {error_code, proxy_refused};
 handle_url(#{ scheme := <<"http">> }, _) -> {error_code, proxy_refused};
-handle_url(#{ scheme := ?PROTO } = URL, Config) ->
-    handle_gemini_url(URL, Config);
-handle_url(URI, _Config) ->
-    lager:info("unrec: ~p", [URI]),
-    {error_code, unrecognised_protocol}.
+handle_url(#{ scheme := Scheme } = Request, Config) ->
+    case protocol_supported(Scheme) of
+        {true, Proto} -> handle_gemini_url(Proto, Request, Config);
+        {false, _} -> lager:info("unrecognised protocol: ~p", [Request]),
+                      {error_code, unrecognised_protocol}
+    end.
+
+-spec protocol_supported(binary()) -> {boolean(), atom()}.
+protocol_supported(?PROTO)      -> {true, gemini};
+protocol_supported(<<"titan">>) -> {true, titan};
+protocol_supported(_)           -> {false, none}.
 
 
 % Handle a request which has been determined to be a Gemini URL, but not
 % necessarily one which should have come to this server (e.g., a proxy
 % request)
--spec handle_gemini_url(map(), server_config()) -> gemini_response().
-handle_gemini_url(Req=#{ host := Host,
+-spec handle_gemini_url(atom(), map(), server_config()) -> gemini_response().
+handle_gemini_url(Proto,
+                  Req=#{ host := Host,
                          port := Port,
-                         path := Path,
-                         scheme := Scheme},
+                         path := Path },
                   Config=#server_config{hostname=Host, port=Port}) ->
-    Scheme = <<"gemini">>,
-    Proto = gemini,
     handle_path(Proto, uri_string:normalize(Path), Req, Config);
 
-handle_gemini_url(#{ host := <<>>, port := Port },
+handle_gemini_url(_Proto, #{ host := <<>>, port := Port },
                   #server_config{port=Port}) ->
     {error_code, bad_hostname};
 
-handle_gemini_url(#{ port := Port },
+handle_gemini_url(_Proto, #{ port := Port },
                   #server_config{port=Port}) ->
     {error_code, host_unrecognised};
 
-handle_gemini_url(#{ port := ReqPort },
+handle_gemini_url(_Proto, #{ port := ReqPort },
                   #server_config{port=Port})
   when ReqPort =/= Port ->
     {error_code, port_unrecognised};
 
-handle_gemini_url(_, _) -> {error_code, host_unrecognised}.
+handle_gemini_url(_, _, _) -> {error_code, host_unrecognised}.
 
 
 
