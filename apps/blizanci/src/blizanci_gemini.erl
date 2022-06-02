@@ -393,9 +393,14 @@ handle_url(URI, _Config) ->
 % necessarily one which should have come to this server (e.g., a proxy
 % request)
 -spec handle_gemini_url(map(), server_config()) -> gemini_response().
-handle_gemini_url(Req=#{ host := Host, port := Port, path := Path},
+handle_gemini_url(Req=#{ host := Host,
+                         port := Port,
+                         path := Path,
+                         scheme := Scheme},
                   Config=#server_config{hostname=Host, port=Port}) ->
-    handle_path(uri_string:normalize(Path), Req, Config);
+    Scheme = <<"gemini">>,
+    Proto = gemini,
+    handle_path(Proto, uri_string:normalize(Path), Req, Config);
 
 handle_gemini_url(#{ host := <<>>, port := Port },
                   #server_config{port=Port}) ->
@@ -415,26 +420,28 @@ handle_gemini_url(_, _) -> {error_code, host_unrecognised}.
 
 
 % Strip leading slash(es) from URL
--spec handle_path(binary(), map(), server_config()) -> gemini_response().
-handle_path(<<$/, Trailing/binary>>, Req, Config) ->
-    handle_path(Trailing, Req, Config);
-handle_path(Path, Req, Config) ->
-    handle_file(Path, Req, Config).
+-spec handle_path(atom(), binary(), map(), server_config())
+                 -> gemini_response().
+handle_path(Proto, <<$/, Trailing/binary>>, Req, Config) ->
+    handle_path(Proto, Trailing, Req, Config);
+handle_path(Proto, Path, Req, Config) ->
+    handle_file(Proto, Path, Req, Config).
 
 
 % Deal with ".." attempts
--spec handle_file(binary(), map(), server_config()) -> gemini_response().
-handle_file(Path, Req, Config) when is_binary(Path) ->
+-spec handle_file(atom(), binary(), map(), server_config())
+                 -> gemini_response().
+handle_file(Proto, Path, Req, Config) when is_binary(Path) ->
     case string:split(Path, "..") of
-        [_] -> serve(Path, Req, Config);
+        [_] -> serve(Proto, Path, Req, Config);
         [_, _] -> {error_code, bad_filename}
     end.
 
 
 % Separate out CGI
--spec serve(binary(), map(), server_config()) -> gemini_response().
-serve(Path, Req, Config) ->
-    blizanci_router:route(Path, Req, Config).
+-spec serve(atom(), binary(), map(), server_config()) -> gemini_response().
+serve(Proto, Path, Req, Config) ->
+    blizanci_router:route(Proto, Path, Req, Config).
 
 
 -spec format_headers(integer(), binary()) -> iolist().

@@ -8,7 +8,7 @@
 -module(blizanci_router).
 
 -export([prepare/1]).
--export([route/3]).
+-export([route/4]).
 
 -include("blizanci_types.hrl").
 
@@ -46,7 +46,7 @@ make_route(_) ->
     throw(invalid_route).
 
 
--spec route(binary(), map(), server_config()) -> gemini_response().
+-spec route(atom(), binary(), map(), server_config()) -> gemini_response().
 %% @doc
 %% Route a Gemini request to a handler.
 %% The Config provides a routing table, which is an ordered list of regular
@@ -54,11 +54,13 @@ make_route(_) ->
 %% the Request matches any of these routes, and if so dispatches it to the
 %% appropriate handler module.
 %%
+%% @param The atom 'gemini' or similar
 %% @param Path the Path in the Gemini request
 %% @param Request the Gemini request
 %% @param Config the server configuration, including the routing table
 %% @end
-route(Path, Request, Config=#server_config{routing=Routes}) ->
+route(Proto, Path, Request, Config=#server_config{routing=Routes}) ->
+    Proto = gemini,
     try_route(Path, Request, Config, Routes).
 
 -spec try_route(binary(), map(), server_config(), [route()]) -> any().
