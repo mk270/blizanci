@@ -62,7 +62,7 @@ cert_authorised({private, Certs}, {ok, Cert}) ->
 -spec cert_issued_by_any(map(), [string()]) ->
           {'ok', string()} | 'fail'.
 cert_issued_by_any(_Cert, []) -> fail;
-cert_issued_by_any(Cert, [Issuer|Tail]) when is_list(Issuer) -> 
+cert_issued_by_any(Cert, [Issuer|Tail]) when is_list(Issuer) ->
     case cert_issued_by(Cert, Issuer) of
         ok -> {ok, Issuer};
         not_issuer -> cert_issued_by_any(Cert, Tail)
@@ -76,4 +76,3 @@ cert_issued_by(Cert, Issuer) ->
         false -> not_issuer;
         true -> ok
     end.
-
