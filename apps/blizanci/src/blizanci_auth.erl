@@ -30,7 +30,7 @@ authorisation_policy(Options) when is_map(Options) ->
 %% @end
 valid_authz_policy(public) -> {ok, public};
 valid_authz_policy(restricted) -> {ok, restricted};
-valid_authz_policy(private) -> {ok, private};
+valid_authz_policy({private, Keys}) -> {ok, {private, Keys}};
 valid_authz_policy(_) -> {error, invalid_authz_policy}.
 
 -spec authorised(AuthPolicy::authorisation(), Request::map()) ->

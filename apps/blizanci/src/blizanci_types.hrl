@@ -10,7 +10,7 @@
 
 -type mp() :: {re_pattern, _, _, _, _}.
 
--type authorisation() :: public | restricted | private.
+-type authorisation() :: public | restricted | {private, [string()]}.
 
 -type route_option() :: {atom(), any()}.
 
