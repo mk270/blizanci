@@ -34,7 +34,13 @@ make_routes(RouteInfo) ->
                 -> route().
 make_route({Regex, Module, AuthPolicy, Opts}) ->
     {ok, RE} = re:compile(Regex),
-    #route{pattern=RE, module=Module, auth_policy=AuthPolicy, options=Opts};
+    case blizanci_auth:valid_authz_policy(AuthPolicy) of
+        {ok, _} -> #route{pattern=RE,
+                          module=Module,
+                          auth_policy=AuthPolicy,
+                          options=Opts};
+        {error, _} -> throw(invalid_route)
+    end;
 make_route(_) ->
     throw(invalid_route).
 

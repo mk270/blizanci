@@ -14,7 +14,7 @@
 -module(blizanci_auth).
 -include("blizanci_types.hrl").
 
--export([authorisation_policy/1, authorised/2]).
+-export([authorisation_policy/1, authorised/2, valid_authz_policy/1]).
 
 -spec authorisation_policy(map()) ->
           {'ok', authorisation()} | {'error', atom()}.
@@ -25,6 +25,9 @@ authorisation_policy(Options) when is_map(Options) ->
     #{ authorisation := Auth } = Options,
     valid_authz_policy(Auth).
 
+-spec valid_authz_policy(term()) -> {ok, authorisation()} | {error, atom()}.
+%% @doc Check if the argument represents a valid authorisation policy
+%% @end
 valid_authz_policy(public) -> {ok, public};
 valid_authz_policy(restricted) -> {ok, restricted};
 valid_authz_policy(private) -> {ok, private};
