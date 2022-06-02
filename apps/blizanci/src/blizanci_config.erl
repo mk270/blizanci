@@ -100,20 +100,4 @@ routing_table(Docroot, CGIroot) ->
           {ok, string()} | {fail, atom()}.
 get_pem_file_from_environment(App, Key, Default_Filename) ->
     Value = application:get_env(App, Key, Default_Filename),
-    validate_pem_file(Value).
-
-
--spec validate_pem_file(string()) -> {ok, string()} | {fail, atom()}.
-validate_pem_file(Filename) ->
-    case file:read_file(Filename) of
-        {ok, PemBin} ->
-            case public_key:pem_decode(PemBin) of
-                [] ->
-                    lager:warning("File ~p not a PEM cert.", [Filename]),
-                    {fail, not_a_cert};
-                _ -> {ok, Filename}
-            end;
-        _ ->
-            lager:warning("Couldn't open ~p", [Filename]),
-            {fail, couldnt_open_pem_file}
-    end.
+    blizanci_x509:validate_pem_file(Value).
