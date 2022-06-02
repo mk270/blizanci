@@ -99,9 +99,7 @@ verify_cert(_Cert, _Event, _InitialUserState) ->
 
 
 -spec certificate_from_file(string()) -> #'Certificate'{}.
-certificate_from_file(Filename) ->
-    CertDir = "/home/mk270/Src/blizanci/ssl/",
-    Path = filename:join(CertDir, Filename),
+certificate_from_file(Path) ->
     {ok, Data} = file:read_file(Path),
     PEM_Entries = public_key:pem_decode(Data),
     {value, {_, DerCert, _}} = lists:keysearch('Certificate', 1, PEM_Entries),
