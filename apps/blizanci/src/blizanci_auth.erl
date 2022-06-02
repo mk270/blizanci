@@ -44,12 +44,14 @@ authorised(AuthPolicy, Request) ->
     CertInfo = client_cert_info(Request),
     cert_authorised(AuthPolicy, CertInfo).
 
+-spec cert_authorised(authorisation(), term()) ->
+          'authorised' | {'error_code', atom()}.
 cert_authorised(_, error) ->
     {error_code, cert_required};
 cert_authorised(restricted, {ok, Cert}) ->
     lager:info("Cert required: ~p", [Cert]),
     authorised;
-cert_authorised(private, {ok, Cert}) ->
+cert_authorised({private, _Certs}, {ok, Cert}) ->
     #{ common_name := Subject,
        issuer_common_name := Issuer } = Cert,
     lager:info("object requested, cert: ~p/~p", [Subject, Issuer]),
