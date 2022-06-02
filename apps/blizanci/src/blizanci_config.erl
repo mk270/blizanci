@@ -62,8 +62,9 @@ proto_opts() ->
     Hostname = application:get_env(App, hostname, Default_Hostname),
     Docroot = application:get_env(App, docroot, "./public_gemini"),
     CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
+    CACerts = application:get_env(App, ca_certs, []),
     Port = application:get_env(App, port, ?PORT),
-    Default_Routing = routing_table(Docroot, CGIroot),
+    Default_Routing = routing_table(Docroot, CGIroot, CACerts),
     Routes = application:get_env(App, routing, Default_Routing),
     {ok, Routing} = blizanci_router:prepare(Routes),
 
@@ -75,8 +76,8 @@ proto_opts() ->
     ].
 
 -type route_entry() :: {string(), atom(), atom(), map()}.
--spec routing_table(string(), string()) -> [route_entry()].
-routing_table(Docroot, CGIroot) ->
+-spec routing_table(string(), string(), [string()]) -> [route_entry()].
+routing_table(Docroot, CGIroot, CACerts) ->
     CGI_Opts =
         #{ cgiroot => CGIroot,
            cgiprefix => "/cgi-bin/" },
@@ -87,7 +88,7 @@ routing_table(Docroot, CGIroot) ->
            bare_mimetype => <<"text/gemini">>,
            authorisation => public
          },
-    CAs = [], % e.g., ["./ssl/cacert0.pem"].
+    CAs = CACerts, % e.g., CAs = ["./ssl/cacert0.pem"]
     [
      {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,         CGI_Opts},
      {"(?<PATH>private.*)",    blizanci_static, {private, CAs}, Static_Opts},
