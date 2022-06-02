@@ -101,6 +101,9 @@ certificate_from_file(Path) ->
 
 
 -spec validate_pem_file(string()) -> {ok, string()} | {fail, atom()}.
+%% @doc
+%% Check that a file containts (at least) one PEM-encoded certificate.
+%% @end
 validate_pem_file(Filename) ->
     case file:read_file(Filename) of
         {ok, PemBin} ->
