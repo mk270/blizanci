@@ -15,7 +15,6 @@
 -include_lib("public_key/include/public_key.hrl").
 -include("blizanci_types.hrl").
 
--export([report_peercert/1]).
 -export([peercert_cn/1]).
 -export([verify_cert/3]).
 -export([validate_pem_file/1, certificate_from_file/1]).
@@ -35,20 +34,6 @@ peercert_cn({ok, Cert}) ->
 peercert_cn(_) ->
     error.
 
--spec report_peercert(term()) -> 'ok'.
-report_peercert({ok, Cert}) ->
-    Res = public_key:pkix_decode_cert(Cert, otp),
-    {_Issuer, Subject} = cert_rdns(Res),
-    lager:info("RDN: ~p", [dump_rdn(Subject)]),
-    ok;
-
-report_peercert({error, no_peercert}) ->
-    lager:info("No peer cert"),
-    ok;
-
-report_peercert(_) ->
-    lager:info("No peer cert, unknown error"),
-    ok.
 
 %% TBD: types
 cert_rdns(Cert) ->
