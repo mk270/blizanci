@@ -36,6 +36,9 @@ peercert_cn(_) ->
 
 
 -spec cert_rdns(#'OTPCertificate'{}) -> {term(), term()}.
+%% @doc Return a tuple of the Common Names of the issuer and handler of a
+%% certificate.
+%% @end
 cert_rdns(Cert) ->
     {'OTPCertificate', Data, _, _} = Cert,
     {'OTPTBSCertificate',
