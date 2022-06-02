@@ -17,8 +17,7 @@
 -type options() :: #{ bare_mimetype := binary(),
                       unknown_mimetype := binary(),
                       docroot := string(),
-                      index := string(),
-                      authorisation := 'public' | 'restricted' | 'secret'
+                      index := string()
                     }.
 
 -define(INDEX, "index.gemini").
@@ -30,8 +29,7 @@
 default_options() ->
     #{ index => "index.gemini",
        unknown_mimetype => <<"application/octet-stream">>,
-       bare_mimetype => <<"text/gemini">>,
-       authorisation => public
+       bare_mimetype => <<"text/gemini">>
      }.
 
 -spec cancel(pid()) -> ok.
