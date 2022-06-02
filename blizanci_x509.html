@@ -22,7 +22,8 @@ This module handles most of the certificate-related functionality.</p>
 <table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#certificate_from_file-1">certificate_from_file/1</a></td><td>
   Return the decoded certificate from a PEM-encoded file.</td></tr>
 <tr><td valign="top"><a href="#peercert_cn-1">peercert_cn/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#validate_pem_file-1">validate_pem_file/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#validate_pem_file-1">validate_pem_file/1</a></td><td>
+  Check that a file containts (at least) one PEM-encoded certificate.</td></tr>
 <tr><td valign="top"><a href="#verify_cert-3">verify_cert/3</a></td><td></td></tr>
 </table>
 
@@ -47,7 +48,8 @@ This module handles most of the certificate-related functionality.</p>
 <div class="spec">
 <p><tt>validate_pem_file(Filename::string()) -&gt; {ok, string()} | {fail, atom()}</tt><br></p>
 <p> </p>
-</div>
+</div><p>
+  Check that a file containts (at least) one PEM-encoded certificate.</p>
 
 <h3 class="function"><a name="verify_cert-3">verify_cert/3</a></h3>
 <div class="spec">
