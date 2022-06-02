@@ -35,7 +35,7 @@ peercert_cn(_) ->
     error.
 
 
-%% TBD: types
+-spec cert_rdns(#'OTPCertificate'{}) -> {term(), term()}.
 cert_rdns(Cert) ->
     {'OTPCertificate', Data, _, _} = Cert,
     {'OTPTBSCertificate',
@@ -51,13 +51,14 @@ cert_rdns(Cert) ->
      _X3} = Data,
     {IssuerRDN, SubjectRDN}.
 
-%% TBD: types
+
+-spec dump_rdn(term()) -> {ok, term()}.
 dump_rdn({rdnSequence, Data}) ->
     {ok, [ {oid_alias(Oid), munge_utf8(Value) } ||
         [{'AttributeTypeAndValue', Oid, Value}] <- Data ]
     };
 dump_rdn(_X) ->
-    {error, rdn_parse_failure}.
+    throw(rdn_parse_failure).
 
 munge_utf8(S) when is_list(S)                 -> list_to_binary(S);
 munge_utf8({utf8String, B}) when is_binary(B) -> B.
