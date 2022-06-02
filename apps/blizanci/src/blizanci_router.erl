@@ -60,8 +60,10 @@ make_route(_) ->
 %% @param Config the server configuration, including the routing table
 %% @end
 route(Proto, Path, Request, Config=#server_config{routing=Routes}) ->
-    Proto = gemini,
-    try_route(Path, Request, Config, Routes).
+    Relevant_Routes =
+        lists:filter(fun (Route) -> Route#route.proto =:= Proto end,
+                     Routes),
+    try_route(Path, Request, Config, Relevant_Routes).
 
 -spec try_route(binary(), map(), server_config(), [route()]) -> any().
 try_route(_Path, _Request, _Config, []) ->
