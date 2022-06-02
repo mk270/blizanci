@@ -78,16 +78,16 @@ proto_opts() ->
 -type route_entry() :: {string(), atom(), atom(), map()}.
 -spec routing_table(string(), string(), [string()]) -> [route_entry()].
 routing_table(Docroot, CGIroot, CACerts) ->
-    CGI_Opts =
-        #{ cgiroot => CGIroot,
-           cgiprefix => "/cgi-bin/" },
-    Static_Opts =
-        #{ index => "index.gemini",
-           docroot => Docroot,
-           unknown_mimetype => <<"application/octet-stream">>,
-           bare_mimetype => <<"text/gemini">>,
-           authorisation => public
-         },
+    CGI_Default_Opts = blizanci_cgi:default_options(),
+    CGI_Opts = maps:merge(
+                 CGI_Default_Opts,
+                 #{ cgiroot => CGIroot }
+                ),
+    Static_Default_Opts = blizanci_static:default_options(),
+    Static_Opts = maps:merge(
+                    Static_Default_Opts,
+                    #{ docroot => Docroot }
+                   ),
     CAs = CACerts, % e.g., CAs = ["./ssl/cacert0.pem"]
     [
      {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,         CGI_Opts},

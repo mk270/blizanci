@@ -28,7 +28,11 @@
 
 -spec default_options() -> map().
 default_options() ->
-    #{}.
+    #{ index => "index.gemini",
+       unknown_mimetype => <<"application/octet-stream">>,
+       bare_mimetype => <<"text/gemini">>,
+       authorisation => public
+     }.
 
 -spec cancel(pid()) -> ok.
 cancel(_) ->

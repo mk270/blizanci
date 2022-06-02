@@ -76,7 +76,7 @@
 
 -spec default_options() -> map().
 default_options() ->
-    #{}.
+    #{ cgiprefix => "/cgi-bin/" }.
 
 % Called by the ppool queue manager; passes the arguments straight through
 -spec start_link(term()) -> {ok, Pid :: pid()} |
