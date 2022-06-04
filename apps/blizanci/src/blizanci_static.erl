@@ -12,7 +12,8 @@
 
 -include("blizanci_types.hrl").
 
--export([serve/4, cancel/1, request/4, default_options/0]).
+-export([serve/4, cancel/1, request/4, default_options/0,
+         handle_client_data/1]).
 
 -type options() :: #{ bare_mimetype := binary(),
                       unknown_mimetype := binary(),
@@ -87,3 +88,5 @@ mime_type(Path, Opts) when is_binary(Path) ->
                           {ok, Result} -> Result
                       end
     end.
+
+handle_client_data(_) -> none.

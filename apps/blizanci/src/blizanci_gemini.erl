@@ -304,7 +304,9 @@ respond({redirect, Path}, State=#state{transport=Transport, socket=Socket}) ->
                     -> {binary(), gemini_response()}.
 handle_request(Payload, #state{buffer=Buffer,
                                config=Config,
-                               client_cert=Cert}) ->
+                               client_cert=Cert,
+                               servlet_proc=no_proc
+                              }) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
     case binary:split(AllInput, ?CRLF) of
         [S] when size(S) > ?MAX_REQUEST_BYTES ->
@@ -317,7 +319,14 @@ handle_request(Payload, #state{buffer=Buffer,
         _ ->
             lager:warning("Shouldn't get here"),
             {<<>>, hangup}
-    end.
+    end;
+handle_request(Payload, #state{buffer=Buffer,
+                               servlet_proc={proc, Proc}
+                              }) when is_pid(Proc) ->
+    AllInput = erlang:iolist_to_binary([Buffer, Payload]),
+    blizanci_servlet_container:handle_client_data(Proc, AllInput),
+    {<<>>, none}.
+
 
 
 %% @doc

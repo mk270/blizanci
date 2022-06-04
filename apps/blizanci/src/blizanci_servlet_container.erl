@@ -44,7 +44,7 @@
 -include("gen_server.hrl").
 
 %% API
--export([request/5, cancel/1, gateway_exit/2]).
+-export([request/5, cancel/1, gateway_exit/2, handle_client_data/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -81,6 +81,13 @@ cancel({proc, Pid}) ->
 gateway_exit(Pid, Result) when is_pid(Pid) ->
     case is_process_alive(Pid) of
         true -> gen_server:call(Pid, {gateway_result, Result});
+        _ -> ok
+    end.
+
+
+handle_client_data(Pid, Payload) ->
+    case is_process_alive(Pid) of
+        true -> gen_server:call(Pid, {client_data, Payload});
         _ -> ok
     end.
 
@@ -157,6 +164,11 @@ handle_call({gateway_result, Result}, _From,
                     end,
     report_result(Parent, ServletResult),
     {reply, ok, State};
+
+handle_call({client_data, Payload}, _From,
+            State=#servlet_state{gateway_module=Module}) ->
+    Reply = Module:handle_client_input(Payload),
+    {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
