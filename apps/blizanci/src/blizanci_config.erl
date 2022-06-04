@@ -86,7 +86,7 @@ routing_table(Docroot, CGIroot, CACerts) ->
      {gemini, "(?<PATH>private.*)",    blizanci_static, {private, CAs}, Static_Opts},
      {gemini, "(?<PATH>restricted.*)", blizanci_static, restricted,     Static_Opts},
      {gemini, "(?<PATH>.*)",           blizanci_static, public,         Static_Opts},
-     {titan,  "(?<PATH>.*)",           blizanci_titan,  {private, CAs}, #{}}
+     {titan,  "(?<PATH>.*)",           blizanci_titan,  public, #{}}
     ],
     [ {Proto, Pattern, Module, AuthPolicy,
        maps:merge(Module:default_options(), Opts)
