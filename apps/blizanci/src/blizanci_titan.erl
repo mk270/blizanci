@@ -38,7 +38,9 @@ cancel(_) ->
 -spec request(path_matches(), request_details(), server_config(), options()) ->
                          {'immediate', gemini_response()} |
                          'defer'.
-request(_Matches, _Req, _ServerConfig, _RouteOpts) ->
+request(Matches, Req, ServerConfig, RouteOpts) ->
+    lager:info("servlet request received: ~p ~p ~p ~p",
+               [Matches, Req, ServerConfig, RouteOpts]),
     {immediate, {error_code, unrecognised_protocol}}.
 
 
