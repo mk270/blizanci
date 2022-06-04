@@ -85,11 +85,13 @@ routing_table(Docroot, CGIroot, CACerts) ->
      {gemini, "cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,         CGI_Opts},
      {gemini, "(?<PATH>private.*)",    blizanci_static, {private, CAs}, Static_Opts},
      {gemini, "(?<PATH>restricted.*)", blizanci_static, restricted,     Static_Opts},
-     {gemini, "(?<PATH>.*)",           blizanci_static, public,         Static_Opts}
+     {gemini, "(?<PATH>.*)",           blizanci_static, public,         Static_Opts},
+     {titan,  "(?<PATH>.*)",           blizanci_titan,  {private, CAs}, #{}}
     ],
-    [ {Pattern, Module, AuthPolicy, maps:merge(Module:default_options(), Opts)
+    [ {Proto, Pattern, Module, AuthPolicy,
+       maps:merge(Module:default_options(), Opts)
       }
-      || {Pattern, Module, AuthPolicy, Opts} <- Default_Route_Specs ].
+      || {Proto, Pattern, Module, AuthPolicy, Opts} <- Default_Route_Specs ].
 
 
 -spec get_pem_file_from_environment(atom(), atom(), string()) ->
