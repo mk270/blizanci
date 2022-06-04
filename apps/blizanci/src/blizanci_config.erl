@@ -82,13 +82,12 @@ routing_table(Docroot, CGIroot, CACerts) ->
     Static_Opts = #{ docroot => Docroot },
     CAs = CACerts, % e.g., CAs = ["./ssl/cacert0.pem"]
     Default_Route_Specs = [
-     {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,         CGI_Opts},
-     {"(?<PATH>private.*)",    blizanci_static, {private, CAs}, Static_Opts},
-     {"(?<PATH>restricted.*)", blizanci_static, restricted,     Static_Opts},
-     {"(?<PATH>.*)",           blizanci_static, public,         Static_Opts}
+     {gemini, "cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,         CGI_Opts},
+     {gemini, "(?<PATH>private.*)",    blizanci_static, {private, CAs}, Static_Opts},
+     {gemini, "(?<PATH>restricted.*)", blizanci_static, restricted,     Static_Opts},
+     {gemini, "(?<PATH>.*)",           blizanci_static, public,         Static_Opts}
     ],
-    [ {gemini, Pattern, Module, AuthPolicy,
-       maps:merge(Module:default_options(), Opts)
+    [ {Pattern, Module, AuthPolicy, maps:merge(Module:default_options(), Opts)
       }
       || {Pattern, Module, AuthPolicy, Opts} <- Default_Route_Specs ].
 
