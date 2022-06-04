@@ -163,7 +163,8 @@ handle_info({ssl, Socket, Payload}, State) ->
                               {stop, normal, NewState};
                   {expect_servlet, Pid} ->
                       NewerState = NewState#state{servlet_proc={proc, Pid}},
-                      {noreply, NewerState}
+                      flush_input(NewState),
+                      {noreply, NewerState#state{buffer= <<"">>}}
               end;
         {error, closed} ->
             {stop, normal, State};
@@ -251,6 +252,11 @@ activate(Transport, Socket) ->
 close_session(State) ->
     ServletProc = State#state.servlet_proc,
     blizanci_servlet_container:cancel(ServletProc).
+
+
+flush_input(_State=#state{servlet_proc={proc, ServletProc},
+                         buffer=Buffer}) ->
+    blizanci_servlet_container:handle_client_data(ServletProc, Buffer).
 
 
 % Send a response back to the client, generally closing the connection
