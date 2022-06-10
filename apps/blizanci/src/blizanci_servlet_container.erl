@@ -168,7 +168,7 @@ handle_call({gateway_result, Result}, _From,
 
 handle_call({client_data, Payload}, _From,
             State=#servlet_state{gateway_module=Module}) ->
-    Reply = Module:handle_client_input(Payload),
+    Reply = Module:handle_client_data(Payload),
     {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
