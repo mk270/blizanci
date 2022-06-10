@@ -69,13 +69,14 @@
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini">>).
 -define(CRLF, <<"\r\n">>).
--define(TIMEOUT_MS, 10000).
+-define(TIMEOUT_MS, 30000).
 -define(MAX_REQUEST_BYTES, 4000).
 -define(CGI_MODULE, blizanci_cgi).
 
 -spec gemini_status(atom()) -> {integer(), binary()}.
 gemini_status(request_too_long)      -> {59, <<"Request too long">>};
 gemini_status(request_not_parsed)    -> {59, <<"Request not parsed">>};
+gemini_status(bad_query_string)      -> {59, <<"Bad query string">>};
 gemini_status(proxy_refused)         -> {53, <<"Proxy request refused">>};
 gemini_status(host_unrecognised)     -> {53, <<"Host unrecognised">>};
 gemini_status(port_unrecognised)     -> {53, <<"Port unrecognised">>};
