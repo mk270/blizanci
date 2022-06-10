@@ -20,8 +20,8 @@ listen() ->
     ok = application:ensure_started(ranch),
 
     % TBD: call the start methods from the config phase
-    ok = blizanci_cgi:start(),
-    ok = blizanci_titan:start(),
+    Servlets = [blizanci_cgi, blizanci_titan],
+    [ ok = Servlet:start() || Servlet <- Servlets ],
 
     SSL_Opts   = blizanci_config:ssl_opts(),
     Proto_Opts = blizanci_config:proto_opts(),
