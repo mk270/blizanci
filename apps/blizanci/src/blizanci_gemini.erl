@@ -197,6 +197,7 @@ handle_info(Msg, State) ->
     lager:info("Received unrecognised message: ~p~n", [Msg]),
     {stop, normal, State}.
 
+%% TBD: respond + error_code + self ! finis.. etc ought to be a library
 %% @doc
 %% @hidden
 %% @end
