@@ -141,8 +141,8 @@ init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
     proc_lib:init_ack({ok, self()}),
     case Module:serve(Matches, Req, ServerConfig, RouteOpts) of
         {gateway_error, Error} ->
-            report_result(Parent, {servlet_failed, Error}),
-            {stop, normal};
+            %% TBD: this should be a utility fn in the container
+            exit({shutdown, {gateway_init_error, self(), Error}});
         {gateway_started, Pid} ->
             State = #servlet_state{parent=Parent,
                            matches=Matches,
