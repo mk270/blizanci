@@ -77,6 +77,7 @@
 gemini_status(request_too_long)      -> {59, <<"Request too long">>};
 gemini_status(request_not_parsed)    -> {59, <<"Request not parsed">>};
 gemini_status(bad_query_string)      -> {59, <<"Bad query string">>};
+gemini_status(request_timeout)       -> {59, <<"Timeout">>};
 gemini_status(proxy_refused)         -> {53, <<"Proxy request refused">>};
 gemini_status(host_unrecognised)     -> {53, <<"Host unrecognised">>};
 gemini_status(port_unrecognised)     -> {53, <<"Port unrecognised">>};
@@ -179,14 +180,18 @@ handle_info({tcp_error, _, _Reason}, State) ->
     {stop, normal, State};
 
 handle_info(timeout, State=#state{servlet_proc={proc, ServletProc}}) ->
-    lager:debug("Proc Timeout ~p", [ServletProc]),
+    lager:info("Proc Timeout ~p", [ServletProc]),
+    respond({error_code, request_timeout}, State),
+    self() ! finished,
     {stop, normal, State};
 
 handle_info(timeout, State) ->
-    lager:debug("NoProc Timeout: ~p", [State]),
+    lager:info("NoProc Timeout: ~p", [State]),
+    %% TBD finished this too?
     {stop, normal, State};
 
 handle_info(finished, State) ->
+    %% TBD cleanly close SSL?
     {stop, normal, State};
 
 handle_info({ssl_closed, _SocketInfo}, State) ->
