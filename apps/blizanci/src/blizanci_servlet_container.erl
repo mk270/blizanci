@@ -124,6 +124,7 @@ request(Module, Matches, Request, ServerConfig, RouteOpts) ->
 defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
     Args = [self(), Module, Matches, Req, ServerConfig, RouteOpts],
     process_flag(trap_exit, true),
+    %% TBD: set a timeout
     case proc_lib:start_link(?MODULE, init, [Args]) of
         {ok, Pid} -> {init_servlet, Pid};
         {error, _} -> {error_code, internal_server_error}
