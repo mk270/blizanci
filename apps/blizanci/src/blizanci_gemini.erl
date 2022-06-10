@@ -54,7 +54,7 @@
 %% API to be called by other blizanci modules
 -export([start_link/3]).
 -export([servlet_result/2]).
--export([handle_line/3]).     % temporarily enabled for testing
+-export([handle_line/4]).     % temporarily enabled for testing
 
 %% API expected by gen_server callback behaviour
 -export([init/1]).
@@ -163,8 +163,7 @@ handle_info({ssl, Socket, Payload}, State) ->
                               {stop, normal, NewState};
                   {expect_servlet, Pid} ->
                       NewerState = NewState#state{servlet_proc={proc, Pid}},
-                      flush_input(NewState),
-                      {noreply, NewerState#state{buffer= <<"">>}}
+                      {noreply, NewerState}
               end;
         {error, closed} ->
             {stop, normal, State};
@@ -254,11 +253,6 @@ close_session(State) ->
     blizanci_servlet_container:cancel(ServletProc).
 
 
-flush_input(_State=#state{servlet_proc={proc, ServletProc},
-                         buffer=Buffer}) ->
-    blizanci_servlet_container:handle_client_data(ServletProc, Buffer).
-
-
 % Send a response back to the client, generally closing the connection
 % if it is finished. If the client hasn't managed to send a whole request,
 % do nothing.
@@ -320,8 +314,8 @@ handle_request(Payload, #state{buffer=Buffer,
         [_] ->
             {AllInput, none};
         [Line, Rest] ->
-            R = handle_line(Line, Config, Cert),
-            {Rest, R};
+            R = handle_line(Line, Config, Cert, Rest),
+            {<<"">>, R};
         _ ->
             lager:warning("Shouldn't get here"),
             {<<>>, hangup}
@@ -343,13 +337,13 @@ handle_request(Payload, #state{buffer=Buffer,
 
 % Take the request line which has been received in full from the client
 % and check that it's valid UTF8; if so, break it down into its URL parts
--spec handle_line(binary(), server_config(), term())
+-spec handle_line(binary(), server_config(), term(), binary())
                  -> gemini_response().
-handle_line(Cmd, _Config, _Cert) when is_binary(Cmd),
-                                      size(Cmd) > 1024 ->
+handle_line(Cmd, _Config, _Cert, _Rest) when is_binary(Cmd),
+                                             size(Cmd) > 1024 ->
     {error_code, request_too_long};
 
-handle_line(Cmd, Config, Cert) when is_binary(Cmd) ->
+handle_line(Cmd, Config, Cert, Rest) when is_binary(Cmd) ->
     Recoded = unicode:characters_to_binary(<<Cmd/binary>>, utf8),
     case Recoded of
         {error, _, _}      -> {error_code, bad_unicode};
@@ -358,15 +352,16 @@ handle_line(Cmd, Config, Cert) when is_binary(Cmd) ->
             blizanci_access:info("Request: ~p", [S]),
             case uri_string:parse(S) of
                 {error, _, _} -> {error_code, request_not_parsed};
-                URI -> handle_parsed_url(URI, Config, Cert)
+                URI -> handle_parsed_url(URI, Config, Cert, Rest)
             end
     end.
 
 % Extract the parts of the URL, providing defaults where necessary
--spec handle_parsed_url(map(), server_config(), term()) -> gemini_response().
-handle_parsed_url(#{ userinfo := _U}, _Config, _Cert) ->
+-spec handle_parsed_url(map(), server_config(), term(), binary())
+                       -> gemini_response().
+handle_parsed_url(#{ userinfo := _U}, _Config, _Cert, _Rest) ->
     {error_code, userinfo_supplied};
-handle_parsed_url(URI, Config, Cert) ->
+handle_parsed_url(URI, Config, Cert, Rest) ->
     try
         ReqHost = maps:get(host, URI, <<>>),
         Path = maps:get(path, URI, <<"/">>),
@@ -377,12 +372,14 @@ handle_parsed_url(URI, Config, Cert) ->
                       P -> P
                   end,
         Query = maps:get(query, URI, <<>>),
+        %% TBD: make this a struct
         #{ scheme => Scheme,
            host => ReqHost,
            port => ReqPort,
            path => ReqPath,
            query => Query,
-           client_cert => Cert
+           client_cert => Cert,
+           rest_of_input => Rest
          }
     of
         Matches -> handle_url(Matches, Config)
@@ -512,5 +509,5 @@ handle_line_test_() ->
                                              hostname= <<"this.host.dev">>,
                                              port= 1965,
                                              routing=[]},
-                                          {error, no_peercert})) ||
+                                          {error, no_peercert}, <<"">>)) ||
         {Expected, TestInput} <- handle_line_test_data() ].

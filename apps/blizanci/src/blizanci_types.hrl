@@ -72,6 +72,8 @@
 -type client_cert() :: 'error' | {'ok', cert_details()}.
 
 -type request_details() :: #{ client_cert := client_cert(),
-                              query := binary() }.
+                              query := binary(),
+                              rest_of_input := binary()
+                            }.
 
 -type path_matches() :: #{ binary() => binary() }.
