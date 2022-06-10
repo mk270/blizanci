@@ -187,6 +187,14 @@ handle_info(finished, State) ->
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
+handle_info({'EXIT', Pid, {shutdown, {gateway_init_error, RPid, Reason}}},
+            State=#state{servlet_proc={proc, ProcPid}})
+  when Pid =:= RPid, Pid =:= ProcPid ->
+    lager:info("Gateway init failure: ~p", [Reason]),
+    respond({error_code, internal_server_error}, State),
+    self() ! finished,
+    {noreply, State};
+
 handle_info({'EXIT', Pid, Reason}, State) ->
     lager:info("Abend of process ~p ~p", [Pid, Reason]),
     respond({error_code, internal_server_error}, State),
