@@ -177,8 +177,12 @@ handle_info({tcp_closed, _Socket}, State) ->
 handle_info({tcp_error, _, _Reason}, State) ->
     {stop, normal, State};
 
+handle_info(timeout, State=#state{servlet_proc={proc, ServletProc}}) ->
+    lager:debug("Proc Timeout ~p", [ServletProc]),
+    {stop, normal, State};
+
 handle_info(timeout, State) ->
-    lager:debug("Timeout ~p", [State]),
+    lager:debug("NoProc Timeout: ~p", [State]),
     {stop, normal, State};
 
 handle_info(finished, State) ->
