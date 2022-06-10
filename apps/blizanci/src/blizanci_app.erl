@@ -19,7 +19,9 @@ listen() ->
     ok = application:ensure_started(mime_lookup),
     ok = application:ensure_started(ranch),
 
+    % TBD: call the start methods from the config phase
     ok = blizanci_cgi:start(),
+    ok = blizanci_titan:start(),
 
     SSL_Opts   = blizanci_config:ssl_opts(),
     Proto_Opts = blizanci_config:proto_opts(),
