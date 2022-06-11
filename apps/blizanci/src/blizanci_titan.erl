@@ -93,7 +93,7 @@ serve(Matches, Req, _ServerConfig, _RouteOpts) ->
             {gateway_finished, {error_code, Err}}
     end.
 
-
+-spec handle_client_data(pid(), binary()) -> gemini_response().
 handle_client_data(Pid, Data) ->
     ok = gen_server:call(Pid, {client_data, Data}),
     none.
