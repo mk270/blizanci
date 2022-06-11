@@ -25,7 +25,7 @@
 
 -module(blizanci_config).
 
--export([ssl_opts/0, proto_opts/0]).
+-export([ssl_opts/0, proto_opts/0, active_servlets/0]).
 
 -define(PORT, 1965).
 
@@ -92,6 +92,11 @@ routing_table(Docroot, CGIroot, CACerts) ->
        maps:merge(Module:default_options(), Opts)
       }
       || {Proto, Pattern, Module, AuthPolicy, Opts} <- Default_Route_Specs ].
+
+
+% TBD: obviously this should actually be derived from the routing table
+active_servlets() ->
+    [blizanci_cgi, blizanci_titan].
 
 
 -spec get_pem_file_from_environment(atom(), atom(), string()) ->
