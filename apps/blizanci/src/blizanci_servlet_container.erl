@@ -142,6 +142,9 @@ init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
     case Module:serve(Matches, Req, ServerConfig, RouteOpts) of
         {gateway_finished, Response} ->
             exit({shutdown, {gateway_complete, self(), Response}});
+        {gateway_error, gateway_busy} ->
+            exit({shutdown, {gateway_complete, self(), {error_code,
+                                                        gateway_busy}}});
         {gateway_error, Error} ->
             %% TBD: this should be a utility fn in the container
             exit({shutdown, {gateway_init_error, self(), Error}});
