@@ -36,6 +36,7 @@
                       bytes_recv,
                       tmp_file,
                       target_path,
+                      work_dir,
                       stream}).
 %-type titan_state() :: #titan_state{}.
 
@@ -139,6 +140,7 @@ init({Parent, Config}) ->
                bytes_recv=BytesRecv,
                tmp_file=TmpPath,
                target_path=TargetPath,
+               work_dir=WorkDir,
                stream=Stream
               },
     {ok, State}.
@@ -175,9 +177,8 @@ handle_info(Info, State) ->
 terminate(normal, State) ->
     lager:info("titan terminating normally: ~p", [State]),
     ok;
-terminate(Reason, #titan_state{tmp_file=TmpPath}) ->
+terminate(Reason, #titan_state{tmp_file=TmpPath, work_dir=WorkDir}) ->
     lager:info("Titan queue worker ~p terminating: [[~p]]", [self(), Reason]),
-    WorkDir = <<"titan-temp">>, %% FIXME
     purge(TmpPath, WorkDir),
     ok.
 
