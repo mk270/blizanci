@@ -140,6 +140,8 @@ defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
 init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
     proc_lib:init_ack({ok, self()}),
     case Module:serve(Matches, Req, ServerConfig, RouteOpts) of
+        {gateway_finished, Response} ->
+            exit({shutdown, {gateway_complete, self(), Response}});
         {gateway_error, Error} ->
             %% TBD: this should be a utility fn in the container
             exit({shutdown, {gateway_init_error, self(), Error}});

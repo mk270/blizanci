@@ -205,6 +205,15 @@ handle_info({'EXIT', Pid, {shutdown, {gateway_init_error, RPid, Reason}}},
     self() ! finished,
     {noreply, State};
 
+%% TBD: factor together with previous function definition
+handle_info({'EXIT', Pid, {shutdown, {gateway_complete, RPid, Response}}},
+            State=#state{servlet_proc={proc, ProcPid}})
+  when Pid =:= RPid, Pid =:= ProcPid ->
+    respond(Response, State),
+    self() ! finished,
+    {noreply, State};
+
+
 handle_info({'EXIT', Pid, Reason}, State) ->
     lager:info("Abend of process ~p ~p", [Pid, Reason]),
     respond({error_code, internal_server_error}, State),

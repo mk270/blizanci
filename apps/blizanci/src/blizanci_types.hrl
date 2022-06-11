@@ -59,6 +59,7 @@
                    | 'unimplemented'.
 
 -type gateway_result() :: {'gateway_output', binary()}
+                        | {'gateway_finished', gemini_response() }
                         | {'gateway_error', cgi_error()}
                         | {'gateway_started', pid()}.
 
