@@ -89,7 +89,6 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
     case parse_titan_request(Fragment) of
         {ok, TitanReq} ->
             Config = {TitanReq, Rest, RootDir, WorkDir},
-            lager:info("titan config: ~p", [Config]),
             case ppool:run(?QUEUE, [{self(), Config}]) of
                 {ok, Pid} -> {gateway_started, Pid};
                 noalloc -> {gateway_error, gateway_busy}
@@ -128,7 +127,6 @@ parse_titan_qs(Path, Query) ->
 
 init({Parent, Config}) ->
     process_flag(trap_exit, true),
-    lager:info("in titan gs: ~p ~p", [Parent, Config]),
     {TitanReq, Rest, RootDir, WorkDir} = Config,
     {titan_request, Path, Size, MimeType} = TitanReq,
     BytesRecv = byte_size(Rest),
@@ -179,8 +177,7 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 
-terminate(normal, State) ->
-    lager:info("titan terminating normally: ~p", [State]),
+terminate(normal, _State) ->
     ok;
 terminate(Reason, #titan_state{tmp_file=TmpPath, work_dir=WorkDir}) ->
     lager:info("Titan queue worker ~p terminating: [[~p]]", [self(), Reason]),
@@ -199,7 +196,6 @@ tmp_file_name() ->
     integer_to_list(Hash).
 
 recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
-    lager:info("Titan proc recv: ~p", [Data]),
     Len = byte_size(Data),
     file:write(Stream, Data),
     NewSize = OldBytesRecv + Len,
@@ -211,7 +207,6 @@ recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
     end.
 
 finish_file(Stream, TargetPath, TmpPath, Size) ->
-    lager:info("Finished receiving data for ~p", [TargetPath]),
     truncate(Stream, Size),
     ok = file:close(Stream),
     ok = delete(TargetPath),
