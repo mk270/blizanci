@@ -46,7 +46,7 @@
 
 %% API
 -export([serve/4, start/0, cancel/1, request/4, default_options/0,
-        handle_client_data/1]).
+        handle_client_data/2]).
 -export([start_link/1]).
 
 %% gen_server callbacks
@@ -289,4 +289,4 @@ make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
     end.
 
 
-handle_client_data(_) -> none.
+handle_client_data(_, _) -> none.

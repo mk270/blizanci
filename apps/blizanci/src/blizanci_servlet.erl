@@ -39,4 +39,5 @@
 -callback default_options() -> map().
 
 %% TBD
--callback handle_client_data(Payload::binary()) -> gemini_response().
+-callback handle_client_data(Pid::pid(), Payload::binary()) ->
+    gemini_response().
