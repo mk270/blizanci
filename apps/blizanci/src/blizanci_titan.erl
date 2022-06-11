@@ -24,7 +24,8 @@
          terminate/2, code_change/3, format_status/2]).
 
 -type options() :: #{
-                      docroot := string()
+                     docroot := string(),
+                     work_dir := binary()
                     }.
 
 -define(QUEUE, ?MODULE).
@@ -47,7 +48,8 @@
 -spec default_options() -> map().
 default_options() ->
     #{
-      work_dir => <<"titan-temp">>
+      work_dir => <<"titan-temp">>,
+      docroot => "docroot"
      }.
 
 start() ->
@@ -79,12 +81,14 @@ request(_, _, _, _) ->
 
 -spec serve(path_matches(), request_details(), server_config(), options()) ->
                    gateway_result().
-serve(Matches, Req, _ServerConfig, _RouteOpts) ->
+serve(Matches, Req, _ServerConfig, RouteOpts) ->
     #{ <<"PATH">> := Fragment } = Matches,
     #{ rest_of_input := Rest } = Req,
+    #{ work_dir := WorkDir,
+       docroot := RootDir } = RouteOpts,
     case parse_titan_request(Fragment) of
         {ok, TitanReq} ->
-            Config = {TitanReq, Rest},
+            Config = {TitanReq, Rest, RootDir, WorkDir},
             lager:info("titan config: ~p", [Config]),
             case ppool:run(?QUEUE, [{self(), Config}]) of
                 {ok, Pid} -> {gateway_started, Pid};
@@ -123,12 +127,10 @@ parse_titan_qs(Path, Query) ->
 init({Parent, Config}) ->
     process_flag(trap_exit, true),
     lager:info("in titan gs: ~p ~p", [Parent, Config]),
-    {TitanReq, Rest} = Config,
+    {TitanReq, Rest, RootDir, WorkDir} = Config,
     {titan_request, Path, Size, MimeType} = TitanReq,
     BytesRecv = byte_size(Rest),
     TmpFile = tmp_file_name(),
-    WorkDir = <<"titan-temp">>, %% get from cfg
-    RootDir = <<"docroot">>, %% get from cfg
     TmpPath = filename:join(WorkDir, TmpFile),
     TargetPath = filename:join(RootDir, Path),
     {ok, Stream} = file:open(TmpPath, [write]),
