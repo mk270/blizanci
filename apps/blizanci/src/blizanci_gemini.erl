@@ -77,6 +77,7 @@
 gemini_status(request_too_long)      -> {59, <<"Request too long">>};
 gemini_status(request_not_parsed)    -> {59, <<"Request not parsed">>};
 gemini_status(bad_query_string)      -> {59, <<"Bad query string">>};
+gemini_status(success)               -> {20, <<"Success">>};
 gemini_status(request_timeout)       -> {59, <<"Timeout">>};
 gemini_status(proxy_refused)         -> {53, <<"Proxy request refused">>};
 gemini_status(host_unrecognised)     -> {53, <<"Host unrecognised">>};
@@ -352,8 +353,8 @@ handle_request(Payload, #state{buffer=Buffer,
                                servlet_proc={proc, Proc}
                               }) when is_pid(Proc) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
-    blizanci_servlet_container:handle_client_data(Proc, AllInput),
-    {<<>>, none}.
+    Result = blizanci_servlet_container:handle_client_data(Proc, AllInput),
+    {<<>>, Result}.
 
 
 

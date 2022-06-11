@@ -87,9 +87,13 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
 
 handle_client_data(Pid, Payload) ->
     case is_process_alive(Pid) of
-        true -> gen_server:call(Pid, {client_data, Payload});
+        true -> actually_handle_client_data(Pid, Payload);
         _ -> ok
     end.
+
+actually_handle_client_data(Pid, Payload) ->
+    Result = gen_server:call(Pid, {client_data, Payload}),
+    Result.
 
 
 -spec request(module(), path_matches(), any(), server_config(), any()) ->

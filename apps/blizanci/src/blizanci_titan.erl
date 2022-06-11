@@ -100,8 +100,10 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
 
 -spec handle_client_data(pid(), binary()) -> gemini_response().
 handle_client_data(Pid, Data) ->
-    ok = gen_server:call(Pid, {client_data, Data}),
-    none.
+    case gen_server:call(Pid, {client_data, Data}) of
+        {ok, in_progress} -> none;
+        {gateway_finished, {error_code, Err}} -> {error_code, Err}
+    end.
 
 
 %%%===================================================================
@@ -155,9 +157,10 @@ handle_call({client_data, Data}, _From,
                                bytes_recv=OldBytesRecv}) ->
     case recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) of
         titan_finished ->
-            {stop, normal, State};
+            Reply = {gateway_finished, {error_code, success}},
+            {stop, normal, Reply, State};
         {titan_updated, NewSize} ->
-            Reply = ok,
+            Reply = {ok, in_progress},
             {reply, Reply, State#titan_state{bytes_recv=NewSize}}
     end;
 
