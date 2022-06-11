@@ -180,13 +180,13 @@ handle_info({tcp_error, _, _Reason}, State) ->
     {stop, normal, State};
 
 handle_info(timeout, State=#state{servlet_proc={proc, ServletProc}}) ->
-    lager:info("Proc Timeout ~p", [ServletProc]),
+    lager:debug("Proc Timeout ~p", [ServletProc]),
     respond({error_code, request_timeout}, State),
     self() ! finished,
     {stop, normal, State};
 
 handle_info(timeout, State) ->
-    lager:info("NoProc Timeout: ~p", [State]),
+    lager:debug("NoProc Timeout: ~p", [State]),
     %% TBD finished this too?
     {stop, normal, State};
 
