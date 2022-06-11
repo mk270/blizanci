@@ -95,7 +95,7 @@ serve(Matches, Req, _ServerConfig, _RouteOpts) ->
 
 
 handle_client_data(Pid, Data) ->
-    ok = gen_server:cast(Pid, {client_data, Data}),
+    ok = gen_server:call(Pid, {client_data, Data}),
     none.
 
 
@@ -143,16 +143,24 @@ init({Parent, Config}) ->
               },
     {ok, State}.
 
+handle_call({client_data, Data}, _From,
+            State=#titan_state{stream=Stream,
+                               size=Size,
+                               target_path=TargetPath,
+                               tmp_file=TmpPath,
+                               bytes_recv=OldBytesRecv}) ->
+    case recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) of
+        titan_finished ->
+            {stop, normal, State};
+        {titan_updated, NewSize} ->
+            Reply = ok,
+            {reply, Reply, State#titan_state{bytes_recv=NewSize}}
+    end;
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
-handle_cast({client_data, Data}, State) ->
-    lager:info("Titan proc recv: ~p @ ~p", [Data, State]),
-    file:write(State#titan_state.stream, Data),
-    Len = byte_size(Data),
-    NewSize = State#titan_state.bytes_recv + Len,
-    {noreply, State#titan_state{bytes_recv=NewSize}};
 handle_cast(titan_quit, State) ->
     {stop, normal, State};
 handle_cast(_Request, State) ->
@@ -164,10 +172,13 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 
-terminate(normal, _State) ->
+terminate(normal, State) ->
+    lager:info("titan terminating normally: ~p", [State]),
     ok;
-terminate(Reason, _State) ->
+terminate(Reason, #titan_state{tmp_file=TmpPath}) ->
     lager:info("Titan queue worker ~p terminating: [[~p]]", [self(), Reason]),
+    WorkDir = <<"titan-temp">>, %% FIXME
+    purge(TmpPath, WorkDir),
     ok.
 
 
@@ -180,3 +191,38 @@ format_status(_Opt, Status) ->
 tmp_file_name() ->
     Hash = erlang:phash2(make_ref()),
     integer_to_list(Hash).
+
+recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
+    lager:info("Titan proc recv: ~p", [Data]),
+    Len = byte_size(Data),
+    file:write(Stream, Data),
+    NewSize = OldBytesRecv + Len,
+    case NewSize >= Size of
+        true ->
+            finish_file(Stream, TargetPath, TmpPath, Size);
+        _ ->
+            {titan_updated, NewSize}
+    end.
+
+finish_file(Stream, TargetPath, TmpPath, Size) ->
+    lager:info("Finished receiving data for ~p", [TargetPath]),
+    truncate(Stream, Size),
+    ok = file:close(Stream),
+    ok = delete(TargetPath),
+    ok = file:make_link(TmpPath, TargetPath),
+    ok = delete(TmpPath),
+    titan_finished.
+
+delete(Path) ->
+    case file:delete(Path) of
+        ok -> ok;
+        {error, enoent} -> ok;
+        Error -> Error
+    end.
+
+truncate(Stream, Position) ->
+    {ok, _Pos} = file:position(Stream, Position),
+    ok = file:truncate(Stream).
+
+purge(Path, _WorkDir) ->
+    delete(Path).
