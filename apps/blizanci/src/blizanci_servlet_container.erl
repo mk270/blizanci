@@ -151,7 +151,7 @@ init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
             exit({shutdown, {gateway_complete, self(), {error_code,
                                                         gateway_busy}}});
         {gateway_error, Error} ->
-            %% TBD: this should be a utility fn in the container
+            %% TBD: this should be factored into a utility fn in the container
             exit({shutdown, {gateway_init_error, self(), Error}});
         {gateway_started, Pid} ->
             State = #servlet_state{parent=Parent,
