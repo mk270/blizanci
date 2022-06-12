@@ -128,9 +128,10 @@ request(Module, Matches, Request, ServerConfig, RouteOpts) ->
 defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
     Args = [self(), Module, Matches, Req, ServerConfig, RouteOpts],
     process_flag(trap_exit, true),
-    %% TBD: set a timeout
     %% TBD: there should also be a timeout not on startup but on completion
-    case proc_lib:start_link(?MODULE, init, [Args]) of
+    %%      though the protocol handler timeout might make this redundant
+    Timeout = 2000, % i.e., two seconds
+    case proc_lib:start_link(?MODULE, init, [Args], Timeout) of
         {ok, Pid} -> {init_servlet, Pid};
         {error, _} -> {error_code, internal_server_error}
     end.
