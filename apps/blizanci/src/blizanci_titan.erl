@@ -235,6 +235,7 @@ truncate(Stream, Position) ->
     {ok, _Pos} = file:position(Stream, Position),
     ok = file:truncate(Stream).
 
+%% TBD: purge work dir of obviously left-over old files
 purge(Path, _WorkDir) ->
     delete(Path).
 
