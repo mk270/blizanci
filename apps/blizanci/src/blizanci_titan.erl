@@ -41,6 +41,8 @@
                       stream}).
 %-type titan_state() :: #titan_state{}.
 
+-type titan_request() :: {titan_request, binary(), integer(), binary()}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -52,6 +54,7 @@ default_options() ->
       docroot => "docroot"
      }.
 
+-spec start() -> ok.
 start() ->
     case ppool:start_pool(?QUEUE, ?MAX_TITAN,
                           {?MODULE, start_link, []}) of
@@ -59,6 +62,8 @@ start() ->
         {ok, _Pid} -> ok
     end.
 
+-spec start_link(any()) ->
+          'ignore' | {'error',_} | {'ok',pid() | {pid(),reference()}}.
 start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
@@ -127,6 +132,8 @@ parse_titan_request(Fragment) ->
         _ -> {error, internal_server_error}
     end.
 
+-spec parse_titan_qs(binary(), binary()) ->
+          {ok, titan_request()}.
 parse_titan_qs(Path, Query) ->
     Q2 = binary:replace(Query, <<";">>, <<"&">>, [global]),
     KVPs = maps:from_list(uri_string:dissect_query(Q2)),
