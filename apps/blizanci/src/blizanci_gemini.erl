@@ -320,8 +320,14 @@ respond({redirect, Path}, State=#state{transport=Transport, socket=Socket}) ->
     {Code, _} = gemini_status(permanent_redirect),
     Msg = format_headers(Code, Meta),
     Transport:send(Socket, Msg),
-    finished.
+    finished;
 
+respond({success, MimeType, Data}, #state{transport=Transport,
+                                          socket=Socket}) ->
+    Header = format_headers(20, MimeType),
+    Transport:send(Socket, Header),
+    Transport:send(Socket, Data),
+    finished.
 
 % Theoretically, a client could send its request very slowly, with
 % parts of the URL arriving piecemeal; it could also send a massive

@@ -89,9 +89,20 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
     case parse_titan_request(Fragment) of
         {ok, TitanReq} ->
             Config = {TitanReq, Rest, RootDir, WorkDir},
-            case ppool:run(?QUEUE, [{self(), Config}]) of
-                {ok, Pid} -> {gateway_started, Pid};
-                noalloc -> {gateway_error, gateway_busy}
+            {titan_request, Path, Size, _MimeType} = TitanReq,
+            RestSize = byte_size(Rest),
+            case RestSize >= Size of
+                true ->
+                    {ok, Stream, TmpPath, TargetPath} =
+                        create_tmp_file(WorkDir, RootDir, Path, Rest),
+                    finish_file(Stream, TargetPath, TmpPath, Size),
+                    {gateway_finished, {success, <<"text/plain">>,
+                                       <<"# Uploaded.\r\n">>}};
+                false ->
+                    case ppool:run(?QUEUE, [{self(), Config}]) of
+                        {ok, Pid} -> {gateway_started, Pid};
+                        noalloc -> {gateway_error, gateway_busy}
+                    end
             end;
         {error, Err} ->
             {gateway_finished, {error_code, Err}}
@@ -130,11 +141,8 @@ init({Parent, Config}) ->
     {TitanReq, Rest, RootDir, WorkDir} = Config,
     {titan_request, Path, Size, MimeType} = TitanReq,
     BytesRecv = byte_size(Rest),
-    TmpFile = tmp_file_name(),
-    TmpPath = filename:join(WorkDir, TmpFile),
-    TargetPath = filename:join(RootDir, Path),
-    {ok, Stream} = file:open(TmpPath, [write]),
-    ok = file:write(Stream, Rest),
+    {ok, Stream, TmpPath, TargetPath} = create_tmp_file(
+                                          WorkDir, RootDir, Path, Rest),
     State = #titan_state{
                parent=Parent,
                size=Size,
@@ -155,7 +163,9 @@ handle_call({client_data, Data}, _From,
                                bytes_recv=OldBytesRecv}) ->
     case recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) of
         titan_finished ->
-            Reply = {gateway_finished, {error_code, success}},
+            % TBD: factor together
+            Reply = {gateway_finished, {success, <<"text/plain">>,
+                                       <<"Uploaded.\r\n">>}},
             {stop, normal, Reply, State};
         {titan_updated, NewSize} ->
             Reply = {ok, in_progress},
@@ -227,3 +237,11 @@ truncate(Stream, Position) ->
 
 purge(Path, _WorkDir) ->
     delete(Path).
+
+create_tmp_file(WorkDir, RootDir, Path, Rest) ->
+    TmpFile = tmp_file_name(),
+    TmpPath = filename:join(WorkDir, TmpFile),
+    TargetPath = filename:join(RootDir, Path),
+    {ok, Stream} = file:open(TmpPath, [write]),
+    ok = file:write(Stream, Rest),
+    {ok, Stream, TmpPath, TargetPath}.
