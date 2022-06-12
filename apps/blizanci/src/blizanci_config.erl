@@ -95,6 +95,7 @@ routing_table(Docroot, CGIroot, CACerts) ->
 
 
 % TBD: obviously this should actually be derived from the routing table
+-spec active_servlets() -> [module()].
 active_servlets() ->
     [blizanci_cgi, blizanci_titan].
 
