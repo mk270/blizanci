@@ -189,7 +189,8 @@ handle_info(timeout, State=#state{servlet_proc={proc, ServletProc}}) ->
 
 handle_info(timeout, State) ->
     lager:debug("NoProc Timeout: ~p", [State]),
-    %% TBD finished this too?
+    respond({error_code, response_timeout}, State),
+    self() ! finished,
     {stop, normal, State};
 
 handle_info(finished, State) ->
