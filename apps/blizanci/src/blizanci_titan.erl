@@ -91,8 +91,10 @@ request(_, _, _, _) ->
 serve(Matches, Req, _ServerConfig, RouteOpts) ->
     #{ <<"PATH">> := Fragment } = Matches,
     #{ rest_of_input := Rest } = Req,
-    #{ work_dir := WorkDir,
-       docroot := RootDir } = RouteOpts,
+    #{ work_dir := WorkDirBase,
+       docroot := RootDirBase } = RouteOpts,
+    WorkDir = filename:absname(WorkDirBase),
+    RootDir = filename:absname(RootDirBase),
     case parse_titan_request(Fragment) of
         {ok, TitanReq} ->
             Config = {TitanReq, Rest, RootDir, WorkDir},
