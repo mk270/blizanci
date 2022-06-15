@@ -119,7 +119,7 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
 handle_client_data(Pid, Data) ->
     case gen_server:call(Pid, {client_data, Data}) of
         {ok, in_progress} -> none;
-        {gateway_finished, {error_code, Err}} -> {error_code, Err}
+        {gateway_finished, Response} -> Response
     end.
 
 
