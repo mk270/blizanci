@@ -8,6 +8,8 @@ Features:
 
 * [TLS client certificate](https://en.wikipedia.org/wiki/Public_key_certificate#TLS/SSL_client_certificate) support
 * single-user [CGI](https://en.wikipedia.org/wiki/Common_Gateway_Interface)
+* distributed PKI: authorisation by subject or *issuer* of certificates
+* Titan protocol uploads
 
 Prerequisites
 -------------
@@ -44,3 +46,8 @@ Trivia
 ------
 
 "blizanci" / "близанци" is Serbo-Croatian for "twins" (i.e., Gemini).
+
+Documentation
+-------------
+
+A work in progress at [https://mk270.github.io/blizanci/](https://mk270.github.io/blizanci/).
