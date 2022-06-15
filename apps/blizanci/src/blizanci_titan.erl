@@ -259,6 +259,8 @@ create_tmp_file(WorkDir, RootDir, Path, Rest) ->
     TmpFile = tmp_file_name(),
     TmpPath = filename:join(WorkDir, TmpFile),
     TargetPath = filename:join(RootDir, Path),
+    lager:debug("titan path: ~p", [Path]),
+    lager:debug("titan tmp: ~p, target: ~p", [TmpPath, TargetPath]),
     {ok, Stream} = file:open(TmpPath, [write]),
     ok = file:write(Stream, Rest),
     {ok, Stream, TmpPath, TargetPath}.
