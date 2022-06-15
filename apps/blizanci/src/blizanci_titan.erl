@@ -196,7 +196,8 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 
-terminate(normal, _State) ->
+terminate(normal, #titan_state{tmp_file=TmpPath, work_dir=WorkDir}) ->
+    purge(TmpPath, WorkDir),
     ok;
 terminate(Reason, #titan_state{tmp_file=TmpPath, work_dir=WorkDir}) ->
     lager:info("Titan queue worker ~p terminating: [[~p]]", [self(), Reason]),
@@ -244,9 +245,10 @@ truncate(Stream, Position) ->
     {ok, _Pos} = file:position(Stream, Position),
     ok = file:truncate(Stream).
 
-%% TBD: purge work dir of obviously left-over old files
+%% purge work dir of obviously left-over old files
 purge(Path, WorkDir) ->
     delete(Path),
+    lager:debug("Purging: ~p, ~p", [Path, WorkDir]),
     [ delete(F) || F <- stale(WorkDir) ].
 
 -spec create_tmp_file(binary(), binary(), binary(), binary()) ->
@@ -260,7 +262,7 @@ create_tmp_file(WorkDir, RootDir, Path, Rest) ->
     {ok, Stream, TmpPath, TargetPath}.
 
 
-stale(Dir) when is_list(Dir) ->
+stale(Dir) ->
     %{ok, Cwd} = file:get_cwd(),
     %FullDir = filename:join(Cwd, Dir),
     FullDir = Dir,
