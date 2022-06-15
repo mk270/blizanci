@@ -44,7 +44,7 @@
 -include("gen_server.hrl").
 
 %% API
--export([request/5, cancel/1, gateway_exit/2]).
+-export([request/5, cancel/1, gateway_exit/2, handle_client_data/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -85,6 +85,17 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
     end.
 
 
+handle_client_data(Pid, Payload) ->
+    case is_process_alive(Pid) of
+        true -> actually_handle_client_data(Pid, Payload);
+        _ -> ok
+    end.
+
+actually_handle_client_data(Pid, Payload) ->
+    Result = gen_server:call(Pid, {client_data, Payload}),
+    Result.
+
+
 -spec request(module(), path_matches(), any(), server_config(), any()) ->
           gemini_response().
 %% @doc Called by the router to dispatch a request to a specific handler.
@@ -117,7 +128,10 @@ request(Module, Matches, Request, ServerConfig, RouteOpts) ->
 defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
     Args = [self(), Module, Matches, Req, ServerConfig, RouteOpts],
     process_flag(trap_exit, true),
-    case proc_lib:start_link(?MODULE, init, [Args]) of
+    %% TBD: there should also be a timeout not on startup but on completion
+    %%      though the protocol handler timeout might make this redundant
+    Timeout = 2000, % i.e., two seconds
+    case proc_lib:start_link(?MODULE, init, [Args], Timeout) of
         {ok, Pid} -> {init_servlet, Pid};
         {error, _} -> {error_code, internal_server_error}
     end.
@@ -132,9 +146,14 @@ defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
 init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
     proc_lib:init_ack({ok, self()}),
     case Module:serve(Matches, Req, ServerConfig, RouteOpts) of
+        {gateway_finished, Response} ->
+            exit({shutdown, {gateway_complete, self(), Response}});
+        {gateway_error, gateway_busy} ->
+            exit({shutdown, {gateway_complete, self(), {error_code,
+                                                        gateway_busy}}});
         {gateway_error, Error} ->
-            report_result(Parent, {servlet_failed, Error}),
-            {stop, normal};
+            %% TBD: this should be factored into a utility fn in the container
+            exit({shutdown, {gateway_init_error, self(), Error}});
         {gateway_started, Pid} ->
             State = #servlet_state{parent=Parent,
                            matches=Matches,
@@ -157,6 +176,12 @@ handle_call({gateway_result, Result}, _From,
                     end,
     report_result(Parent, ServletResult),
     {reply, ok, State};
+
+handle_call({client_data, Payload}, _From,
+            State=#servlet_state{gateway_module=Module,
+                                 gateway_pid=Pid}) ->
+    Reply = Module:handle_client_data(Pid, Payload),
+    {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,

@@ -54,7 +54,7 @@
 %% API to be called by other blizanci modules
 -export([start_link/3]).
 -export([servlet_result/2]).
--export([handle_line/3]).     % temporarily enabled for testing
+-export([handle_line/4]).     % temporarily enabled for testing
 
 %% API expected by gen_server callback behaviour
 -export([init/1]).
@@ -69,13 +69,16 @@
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini">>).
 -define(CRLF, <<"\r\n">>).
--define(TIMEOUT_MS, 10000).
+-define(TIMEOUT_MS, 30000).
 -define(MAX_REQUEST_BYTES, 4000).
 -define(CGI_MODULE, blizanci_cgi).
 
 -spec gemini_status(atom()) -> {integer(), binary()}.
 gemini_status(request_too_long)      -> {59, <<"Request too long">>};
 gemini_status(request_not_parsed)    -> {59, <<"Request not parsed">>};
+gemini_status(bad_query_string)      -> {59, <<"Bad query string">>};
+gemini_status(success)               -> {20, <<"Success">>};
+gemini_status(request_timeout)       -> {59, <<"Request timeout">>};
 gemini_status(proxy_refused)         -> {53, <<"Proxy request refused">>};
 gemini_status(host_unrecognised)     -> {53, <<"Host unrecognised">>};
 gemini_status(port_unrecognised)     -> {53, <<"Port unrecognised">>};
@@ -87,6 +90,7 @@ gemini_status(userinfo_supplied)     -> {59, <<"Illegal username">>};
 gemini_status(internal_server_error) -> {40, <<"Internal server error">>};
 gemini_status(gateway_busy)          -> {40, <<"Gateway too busy">>};
 gemini_status(cgi_exec_error)        -> {40, <<"Gateway error">>};
+gemini_status(response_timeout)      -> {40, <<"Timeout">>};
 gemini_status(file_not_found)        -> {51, <<"File not found">>};
 gemini_status(cert_required)         -> {60, <<"Client certificate required">>};
 gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>};
@@ -177,15 +181,41 @@ handle_info({tcp_closed, _Socket}, State) ->
 handle_info({tcp_error, _, _Reason}, State) ->
     {stop, normal, State};
 
+handle_info(timeout, State=#state{servlet_proc={proc, ServletProc}}) ->
+    lager:debug("Proc Timeout ~p", [ServletProc]),
+    respond({error_code, request_timeout}, State),
+    self() ! finished,
+    {stop, normal, State};
+
 handle_info(timeout, State) ->
-    lager:debug("Timeout ~p", [State]),
+    lager:debug("NoProc Timeout: ~p", [State]),
+    respond({error_code, response_timeout}, State),
+    self() ! finished,
     {stop, normal, State};
 
 handle_info(finished, State) ->
+    %% TBD cleanly close SSL?
     {stop, normal, State};
 
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
+
+handle_info({'EXIT', Pid, {shutdown, {gateway_init_error, RPid, Reason}}},
+            State=#state{servlet_proc={proc, ProcPid}})
+  when Pid =:= RPid, Pid =:= ProcPid ->
+    lager:info("Gateway init failure: ~p", [Reason]),
+    respond({error_code, internal_server_error}, State),
+    self() ! finished,
+    {noreply, State};
+
+%% TBD: factor together with previous function definition
+handle_info({'EXIT', Pid, {shutdown, {gateway_complete, RPid, Response}}},
+            State=#state{servlet_proc={proc, ProcPid}})
+  when Pid =:= RPid, Pid =:= ProcPid ->
+    respond(Response, State),
+    self() ! finished,
+    {noreply, State};
+
 
 handle_info({'EXIT', Pid, Reason}, State) ->
     lager:info("Abend of process ~p ~p", [Pid, Reason]),
@@ -197,6 +227,8 @@ handle_info(Msg, State) ->
     lager:info("Received unrecognised message: ~p~n", [Msg]),
     {stop, normal, State}.
 
+%% TBD: respond + error_code + self ! finis.. etc ought to be factored into
+%%      a library
 %% @doc
 %% @hidden
 %% @end
@@ -291,8 +323,14 @@ respond({redirect, Path}, State=#state{transport=Transport, socket=Socket}) ->
     {Code, _} = gemini_status(permanent_redirect),
     Msg = format_headers(Code, Meta),
     Transport:send(Socket, Msg),
-    finished.
+    finished;
 
+respond({success, MimeType, Data}, #state{transport=Transport,
+                                          socket=Socket}) ->
+    Header = format_headers(20, MimeType),
+    Transport:send(Socket, Header),
+    Transport:send(Socket, Data),
+    finished.
 
 % Theoretically, a client could send its request very slowly, with
 % parts of the URL arriving piecemeal; it could also send a massive
@@ -304,7 +342,9 @@ respond({redirect, Path}, State=#state{transport=Transport, socket=Socket}) ->
                     -> {binary(), gemini_response()}.
 handle_request(Payload, #state{buffer=Buffer,
                                config=Config,
-                               client_cert=Cert}) ->
+                               client_cert=Cert,
+                               servlet_proc=no_proc
+                              }) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
     case binary:split(AllInput, ?CRLF) of
         [S] when size(S) > ?MAX_REQUEST_BYTES ->
@@ -312,12 +352,19 @@ handle_request(Payload, #state{buffer=Buffer,
         [_] ->
             {AllInput, none};
         [Line, Rest] ->
-            R = handle_line(Line, Config, Cert),
-            {Rest, R};
+            R = handle_line(Line, Config, Cert, Rest),
+            {<<"">>, R};
         _ ->
             lager:warning("Shouldn't get here"),
             {<<>>, hangup}
-    end.
+    end;
+handle_request(Payload, #state{buffer=Buffer,
+                               servlet_proc={proc, Proc}
+                              }) when is_pid(Proc) ->
+    AllInput = erlang:iolist_to_binary([Buffer, Payload]),
+    Result = blizanci_servlet_container:handle_client_data(Proc, AllInput),
+    {<<>>, Result}.
+
 
 
 %% @doc
@@ -328,30 +375,31 @@ handle_request(Payload, #state{buffer=Buffer,
 
 % Take the request line which has been received in full from the client
 % and check that it's valid UTF8; if so, break it down into its URL parts
--spec handle_line(binary(), server_config(), term())
+-spec handle_line(binary(), server_config(), term(), binary())
                  -> gemini_response().
-handle_line(Cmd, _Config, _Cert) when is_binary(Cmd),
-                                      size(Cmd) > 1024 ->
+handle_line(Cmd, _Config, _Cert, _Rest) when is_binary(Cmd),
+                                             size(Cmd) > 1024 ->
     {error_code, request_too_long};
 
-handle_line(Cmd, Config, Cert) when is_binary(Cmd) ->
+handle_line(Cmd, Config, Cert, Rest) when is_binary(Cmd) ->
     Recoded = unicode:characters_to_binary(<<Cmd/binary>>, utf8),
     case Recoded of
         {error, _, _}      -> {error_code, bad_unicode};
         {incomplete, _, _} -> {error_code, bad_unicode};
         S ->
-            blizanci_access:info("Request: ~p", [S]),
+            lager:debug("Request: ~p", [S]),
             case uri_string:parse(S) of
                 {error, _, _} -> {error_code, request_not_parsed};
-                URI -> handle_parsed_url(URI, Config, Cert)
+                URI -> handle_parsed_url(URI, Config, Cert, Rest)
             end
     end.
 
 % Extract the parts of the URL, providing defaults where necessary
--spec handle_parsed_url(map(), server_config(), term()) -> gemini_response().
-handle_parsed_url(#{ userinfo := _U}, _Config, _Cert) ->
+-spec handle_parsed_url(map(), server_config(), term(), binary())
+                       -> gemini_response().
+handle_parsed_url(#{ userinfo := _U}, _Config, _Cert, _Rest) ->
     {error_code, userinfo_supplied};
-handle_parsed_url(URI, Config, Cert) ->
+handle_parsed_url(URI, Config, Cert, Rest) ->
     try
         ReqHost = maps:get(host, URI, <<>>),
         Path = maps:get(path, URI, <<"/">>),
@@ -362,12 +410,14 @@ handle_parsed_url(URI, Config, Cert) ->
                       P -> P
                   end,
         Query = maps:get(query, URI, <<>>),
+        %% TBD: make this a struct
         #{ scheme => Scheme,
            host => ReqHost,
            port => ReqPort,
            path => ReqPath,
            query => Query,
-           client_cert => Cert
+           client_cert => Cert,
+           rest_of_input => Rest
          }
     of
         Matches -> handle_url(Matches, Config)
@@ -497,5 +547,5 @@ handle_line_test_() ->
                                              hostname= <<"this.host.dev">>,
                                              port= 1965,
                                              routing=[]},
-                                          {error, no_peercert})) ||
+                                          {error, no_peercert}, <<"">>)) ||
         {Expected, TestInput} <- handle_line_test_data() ].

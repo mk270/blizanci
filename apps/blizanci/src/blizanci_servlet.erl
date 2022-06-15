@@ -34,5 +34,10 @@
 %% relates to a running process, and promptly terminate.
 -callback cancel(pid()) -> 'ok'.
 
-
+%% Called during configuration; allows the servlet to provide a map of
+%% default options for any route with which it is associated.
 -callback default_options() -> map().
+
+%% TBD
+-callback handle_client_data(Pid::pid(), Payload::binary()) ->
+    gemini_response().

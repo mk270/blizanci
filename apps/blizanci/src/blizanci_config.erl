@@ -25,7 +25,7 @@
 
 -module(blizanci_config).
 
--export([ssl_opts/0, proto_opts/0]).
+-export([ssl_opts/0, proto_opts/0, active_servlets/0]).
 
 -define(PORT, 1965).
 
@@ -82,15 +82,22 @@ routing_table(Docroot, CGIroot, CACerts) ->
     Static_Opts = #{ docroot => Docroot },
     CAs = CACerts, % e.g., CAs = ["./ssl/cacert0.pem"]
     Default_Route_Specs = [
-     {"cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,         CGI_Opts},
-     {"(?<PATH>private.*)",    blizanci_static, {private, CAs}, Static_Opts},
-     {"(?<PATH>restricted.*)", blizanci_static, restricted,     Static_Opts},
-     {"(?<PATH>.*)",           blizanci_static, public,         Static_Opts}
+     {gemini, "cgi-bin/(?<PATH>.*)",   blizanci_cgi,    public,         CGI_Opts},
+     {gemini, "(?<PATH>private.*)",    blizanci_static, {private, CAs}, Static_Opts},
+     {gemini, "(?<PATH>restricted.*)", blizanci_static, restricted,     Static_Opts},
+     {gemini, "(?<PATH>.*)",           blizanci_static, public,         Static_Opts},
+     {titan,  "(?<PATH>.*)",           blizanci_titan,  {private, CAs}, #{}}
     ],
-    [ {gemini, Pattern, Module, AuthPolicy,
+    [ {Proto, Pattern, Module, AuthPolicy,
        maps:merge(Module:default_options(), Opts)
       }
-      || {Pattern, Module, AuthPolicy, Opts} <- Default_Route_Specs ].
+      || {Proto, Pattern, Module, AuthPolicy, Opts} <- Default_Route_Specs ].
+
+
+% TBD: obviously this should actually be derived from the routing table
+-spec active_servlets() -> [module()].
+active_servlets() ->
+    [blizanci_cgi, blizanci_titan].
 
 
 -spec get_pem_file_from_environment(atom(), atom(), string()) ->
