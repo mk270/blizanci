@@ -31,6 +31,8 @@
 -define(QUEUE, ?MODULE).
 -define(MAX_TITAN, 10).
 
+-define(MAX_AGE, 3600). % for expiring files
+
 -record(titan_state, {parent,
                       size,
                       mime_type,
@@ -243,9 +245,12 @@ truncate(Stream, Position) ->
     ok = file:truncate(Stream).
 
 %% TBD: purge work dir of obviously left-over old files
-purge(Path, _WorkDir) ->
-    delete(Path).
+purge(Path, WorkDir) ->
+    delete(Path),
+    [ delete(F) || F <- stale(WorkDir) ].
 
+-spec create_tmp_file(binary(), binary(), binary(), binary()) ->
+          {ok, term(), binary(), binary()}.
 create_tmp_file(WorkDir, RootDir, Path, Rest) ->
     TmpFile = tmp_file_name(),
     TmpPath = filename:join(WorkDir, TmpFile),
@@ -253,3 +258,26 @@ create_tmp_file(WorkDir, RootDir, Path, Rest) ->
     {ok, Stream} = file:open(TmpPath, [write]),
     ok = file:write(Stream, Rest),
     {ok, Stream, TmpPath, TargetPath}.
+
+
+stale(Dir) when is_list(Dir) ->
+    %{ok, Cwd} = file:get_cwd(),
+    %FullDir = filename:join(Cwd, Dir),
+    FullDir = Dir,
+    {ok, Files} = file:list_dir_all(FullDir),
+    FullFilenames = [ filename:join(FullDir, F) || F <- Files ],
+    [ F || F <- FullFilenames, older_than(F, ?MAX_AGE) ].
+
+older_than(Filename, MaxAge) ->
+    {ok, Stat} = file:read_file_info(Filename),
+    Stamp = erlang:element(5, Stat),
+
+    Now = calendar:now_to_local_time(erlang:timestamp()),
+    {Days, Time} = calendar:time_difference(Stamp, Now),
+    Secs = calendar:time_to_seconds(Time),
+
+    case {Days >= 0, Secs >= MaxAge} of
+        {true, false} -> false;
+        {false, _} -> true; % just write it off - filestamp in future?
+        {true, true} -> true
+    end.
