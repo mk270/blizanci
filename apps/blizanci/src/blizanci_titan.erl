@@ -222,11 +222,11 @@ handle_info(Info, State) ->
 
 
 terminate(normal, #titan_state{tmp_file=TmpPath, work_dir=WorkDir}) ->
-    purge(TmpPath, WorkDir),
+    ok = purge(TmpPath, WorkDir),
     ok;
 terminate(Reason, #titan_state{tmp_file=TmpPath, work_dir=WorkDir}) ->
     lager:info("Titan queue worker ~p terminating: [[~p]]", [self(), Reason]),
-    purge(TmpPath, WorkDir),
+    ok = purge(TmpPath, WorkDir),
     ok.
 
 
@@ -274,7 +274,8 @@ truncate(Stream, Position) ->
 purge(Path, WorkDir) ->
     delete(Path),
     lager:debug("Purging: ~p, ~p", [Path, WorkDir]),
-    [ delete(F) || F <- blizanci_tmpdir:stale(WorkDir, ?MAX_AGE) ].
+    [ delete(F) || F <- blizanci_tmpdir:stale(WorkDir, ?MAX_AGE) ],
+    ok.
 
 -spec create_tmp_file(binary(), binary(), binary(), binary()) ->
           {ok, term(), binary(), binary()}.
