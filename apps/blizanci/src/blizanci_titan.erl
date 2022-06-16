@@ -265,7 +265,7 @@ truncate(Stream, Position) ->
 purge(Path, WorkDir) ->
     delete(Path),
     lager:debug("Purging: ~p, ~p", [Path, WorkDir]),
-    [ delete(F) || F <- stale(WorkDir) ].
+    [ delete(F) || F <- stale(WorkDir, ?MAX_AGE) ].
 
 -spec create_tmp_file(binary(), binary(), binary(), binary()) ->
           {ok, term(), binary(), binary()}.
@@ -280,8 +280,7 @@ create_tmp_file(WorkDir, RootDir, Path, Rest) ->
     {ok, Stream, TmpPath, TargetPath}.
 
 
-stale(Dir) ->
-    MaxAge = ?MAX_AGE,
+stale(Dir, MaxAge) ->
     FullDir = Dir,
     {ok, Files} = file:list_dir_all(FullDir),
     FullFilenames = [ filename:join(FullDir, F) || F <- Files ],
