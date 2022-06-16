@@ -281,12 +281,11 @@ create_tmp_file(WorkDir, RootDir, Path, Rest) ->
 
 
 stale(Dir) ->
-    %{ok, Cwd} = file:get_cwd(),
-    %FullDir = filename:join(Cwd, Dir),
+    MaxAge = ?MAX_AGE,
     FullDir = Dir,
     {ok, Files} = file:list_dir_all(FullDir),
     FullFilenames = [ filename:join(FullDir, F) || F <- Files ],
-    [ F || F <- FullFilenames, older_than(F, ?MAX_AGE) ].
+    [ F || F <- FullFilenames, older_than(F, MaxAge) ].
 
 older_than(Filename, MaxAge) ->
     {ok, Stat} = file:read_file_info(Filename),
