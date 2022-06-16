@@ -29,6 +29,7 @@
                     }.
 
 -type io_device() :: pid().
+-type filepath() :: binary().
 
 -define(QUEUE, ?MODULE).
 -define(MAX_TITAN, 10).
@@ -100,7 +101,7 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
     RootDir = filename:absname(ensure_binary(RootDirBase)),
     serve_titan_request(Fragment, Rest, WorkDir, RootDir).
 
-%-spec serve_titan_request(binary(), binary(), binary(), binary()) ->
+%-spec serve_titan_request(binary(), binary(), filepath(), filepath()) ->
 %          gemini_response().
 serve_titan_request(Fragment, Rest, WorkDir, RootDir)
   when is_binary(Rest), is_binary(WorkDir), is_binary(RootDir)->
@@ -129,7 +130,7 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             {gateway_finished, {error_code, Err}}
     end.
 
--spec enqueue_titan_job({titan_request(), binary(), binary(), binary()}) ->
+-spec enqueue_titan_job({titan_request(), binary(), filepath(), filepath()}) ->
           gateway_result().
 enqueue_titan_job(Config) ->
     case ppool:run(?QUEUE, [{self(), Config}]) of
@@ -243,8 +244,11 @@ code_change(_OldVsn, State, _Extra) ->
 format_status(_Opt, Status) ->
     Status.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
 -spec recv_data(io_device(), binary(), integer(),
-                binary(), binary(), integer())
+                filepath(), filepath(), integer())
                ->
           titan_finished | titan_enotdir | {titan_updated, integer()}.
 recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
@@ -258,7 +262,7 @@ recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
             {titan_updated, NewSize}
     end.
 
--spec finish_file(io_device(), binary(), binary(), integer()) ->
+-spec finish_file(io_device(), filepath(), filepath(), integer()) ->
           titan_finished | titan_enotdir.
 finish_file(Stream, TargetPath, TmpPath, Size) ->
     truncate(Stream, Size),
@@ -284,7 +288,7 @@ truncate(Stream, Position) ->
     {ok, _Pos} = file:position(Stream, Position),
     ok = file:truncate(Stream).
 
--spec purge(binary(), binary()) -> ok.
+-spec purge(filepath(), filepath()) -> ok.
 %% purge work dir of obviously left-over old files
 purge(Path, WorkDir) ->
     delete(Path),
@@ -292,8 +296,8 @@ purge(Path, WorkDir) ->
     [ delete(F) || F <- blizanci_tmpdir:stale(WorkDir, ?MAX_AGE) ],
     ok.
 
--spec create_tmp_file(binary(), binary(), binary(), binary()) ->
-          {ok, term(), binary(), binary()}.
+-spec create_tmp_file(filepath(), filepath(), filepath(), binary()) ->
+          {ok, term(), filepath(), filepath()}.
 create_tmp_file(WorkDir, RootDir, Path, Rest) ->
     TmpFile = blizanci_tmpdir:tmp_file_name(),
     TmpPath = filename:join(WorkDir, TmpFile),
