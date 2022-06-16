@@ -93,8 +93,10 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
     #{ rest_of_input := Rest } = Req,
     #{ work_dir := WorkDirBase,
        docroot := RootDirBase } = RouteOpts,
-    WorkDir = filename:absname(WorkDirBase),
-    RootDir = filename:absname(RootDirBase),
+
+    WorkDir = filename:absname(ensure_binary(WorkDirBase)),
+    RootDir = filename:absname(ensure_binary(RootDirBase)),
+
     case parse_titan_request(Fragment) of
         {ok, TitanReq} ->
             Config = {TitanReq, Rest, RootDir, WorkDir},
@@ -123,6 +125,12 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
         {error, Err} ->
             {gateway_finished, {error_code, Err}}
     end.
+
+-spec ensure_binary(list()) -> binary();
+                   (binary()) -> binary().
+ensure_binary(X) when is_list(X) -> binary:list_to_bin(X);
+ensure_binary(X) when is_binary(X) -> X.
+
 
 -spec handle_client_data(pid(), binary()) -> gemini_response().
 handle_client_data(Pid, Data) ->
