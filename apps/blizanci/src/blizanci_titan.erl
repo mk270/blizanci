@@ -115,23 +115,25 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             {titan_request, Path, Size, _MimeType} = TitanReq,
             RestSize = byte_size(Rest),
             case RestSize >= Size of
-                true ->
-                    {ok, Stream, TmpPath, TargetPath} =
-                        create_tmp_file(WorkDir, RootDir, Path, Rest),
-
-                    case finish_file(Stream, TargetPath, TmpPath, Size) of
-                        titan_finished ->
-                            {gateway_finished, {success, <<"text/plain">>,
-                                                <<"# Uploaded.\r\n">>}};
-                        titan_enotdir ->
-                            {gateway_finished, {error_code,
-                                                cannot_overwrite}}
-                    end;
-
+                true -> handle_all_in_one_request(WorkDir, RootDir, Path,
+                                                  Rest, Size);
                 false -> enqueue_titan_job(Config)
             end;
         {error, Err} ->
             {gateway_finished, {error_code, Err}}
+    end.
+
+handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) ->
+    {ok, Stream, TmpPath, TargetPath} =
+        create_tmp_file(WorkDir, RootDir, Path, Rest),
+
+    case finish_file(Stream, TargetPath, TmpPath, Size) of
+        titan_finished ->
+            {gateway_finished, {success, <<"text/plain">>,
+                                <<"# Uploaded.\r\n">>}};
+        titan_enotdir ->
+            {gateway_finished, {error_code,
+                                cannot_overwrite}}
     end.
 
 -spec enqueue_titan_job({titan_request(), binary(), filepath(), filepath()}) ->
