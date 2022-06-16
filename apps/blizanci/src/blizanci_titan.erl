@@ -105,8 +105,8 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
     RootDir = filename:absname(ensure_binary(RootDirBase)),
     serve_titan_request(Fragment, Rest, WorkDir, RootDir).
 
-%-spec serve_titan_request(binary(), binary(), filepath(), filepath()) ->
-%          gemini_response().
+-spec serve_titan_request(binary(), binary(), filepath(), filepath()) ->
+          gateway_result().
 serve_titan_request(Fragment, Rest, WorkDir, RootDir)
   when is_binary(Rest), is_binary(WorkDir), is_binary(RootDir)->
     case parse_titan_request(Fragment) of
@@ -123,6 +123,9 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             {gateway_finished, {error_code, Err}}
     end.
 
+-spec handle_all_in_one_request(filepath(), filepath(), binary(),
+                                binary(), integer()) ->
+          gateway_result().
 handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) ->
     {ok, Stream, TmpPath, TargetPath} =
         create_tmp_file(WorkDir, RootDir, Path, Rest),
