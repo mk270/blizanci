@@ -96,7 +96,12 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
 
     WorkDir = filename:absname(ensure_binary(WorkDirBase)),
     RootDir = filename:absname(ensure_binary(RootDirBase)),
+    serve_titan_request(Fragment, Rest, WorkDir, RootDir).
 
+%-spec serve_titan_request(binary(), binary(), binary(), binary()) ->
+%          gemini_response().
+serve_titan_request(Fragment, Rest, WorkDir, RootDir)
+  when is_binary(Rest), is_binary(WorkDir), is_binary(RootDir)->
     case parse_titan_request(Fragment) of
         {ok, TitanReq} ->
             Config = {TitanReq, Rest, RootDir, WorkDir},
