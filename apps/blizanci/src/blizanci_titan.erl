@@ -265,7 +265,7 @@ truncate(Stream, Position) ->
 purge(Path, WorkDir) ->
     delete(Path),
     lager:debug("Purging: ~p, ~p", [Path, WorkDir]),
-    [ delete(F) || F <- stale(WorkDir, ?MAX_AGE) ].
+    [ delete(F) || F <- blizanci_tmpdir:stale(WorkDir, ?MAX_AGE) ].
 
 -spec create_tmp_file(binary(), binary(), binary(), binary()) ->
           {ok, term(), binary(), binary()}.
@@ -278,24 +278,3 @@ create_tmp_file(WorkDir, RootDir, Path, Rest) ->
     {ok, Stream} = file:open(TmpPath, [write]),
     ok = file:write(Stream, Rest),
     {ok, Stream, TmpPath, TargetPath}.
-
-
-stale(Dir, MaxAge) ->
-    FullDir = Dir,
-    {ok, Files} = file:list_dir_all(FullDir),
-    FullFilenames = [ filename:join(FullDir, F) || F <- Files ],
-    [ F || F <- FullFilenames, older_than(F, MaxAge) ].
-
-older_than(Filename, MaxAge) ->
-    {ok, Stat} = file:read_file_info(Filename),
-    Stamp = erlang:element(5, Stat),
-
-    Now = calendar:now_to_local_time(erlang:timestamp()),
-    {Days, Time} = calendar:time_difference(Stamp, Now),
-    Secs = calendar:time_to_seconds(Time),
-
-    case {Days >= 0, Secs >= MaxAge} of
-        {true, false} -> false;
-        {false, _} -> true; % just write it off - filestamp in future?
-        {true, true} -> true
-    end.

@@ -1,6 +1,6 @@
 {application, blizanci,
  [{description, "A Gemini protocol server"},
-  {vsn, "5.0.0"},
+  {vsn, "5.1.0"},
   {registered, [blizanci_sup]},
   {mod, {blizanci_app, []}},
   {applications,
@@ -29,6 +29,7 @@
              blizanci_static,
              blizanci_sup,
              blizanci_titan,
+             blizanci_tmpdir,
              blizanci_x509
             ]},
   {licenses, ["Apache 2.0"]},
