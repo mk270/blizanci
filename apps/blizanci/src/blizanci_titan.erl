@@ -28,6 +28,8 @@
                      work_dir := binary()
                     }.
 
+-type io_device() :: pid().
+
 -define(QUEUE, ?MODULE).
 -define(MAX_TITAN, 10).
 
@@ -236,6 +238,10 @@ code_change(_OldVsn, State, _Extra) ->
 format_status(_Opt, Status) ->
     Status.
 
+-spec recv_data(io_device(), binary(), integer(),
+                binary(), binary(), integer())
+               ->
+          titan_finished | titan_enotdir | {titan_updated, integer()}.
 recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
     Len = byte_size(Data),
     file:write(Stream, Data),
@@ -247,6 +253,8 @@ recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
             {titan_updated, NewSize}
     end.
 
+-spec finish_file(io_device(), binary(), binary(), integer()) ->
+          titan_finished | titan_enotdir.
 finish_file(Stream, TargetPath, TmpPath, Size) ->
     truncate(Stream, Size),
     ok = file:close(Stream),
@@ -266,10 +274,12 @@ delete(Path) ->
         Error -> Error
     end.
 
+-spec truncate(io_device(), integer()) -> ok.
 truncate(Stream, Position) ->
     {ok, _Pos} = file:position(Stream, Position),
     ok = file:truncate(Stream).
 
+-spec purge(binary(), binary()) -> ok.
 %% purge work dir of obviously left-over old files
 purge(Path, WorkDir) ->
     delete(Path),
