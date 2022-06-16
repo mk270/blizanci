@@ -104,9 +104,16 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
                 true ->
                     {ok, Stream, TmpPath, TargetPath} =
                         create_tmp_file(WorkDir, RootDir, Path, Rest),
-                    finish_file(Stream, TargetPath, TmpPath, Size),
-                    {gateway_finished, {success, <<"text/plain">>,
-                                       <<"# Uploaded.\r\n">>}};
+
+                    case finish_file(Stream, TargetPath, TmpPath, Size) of
+                        titan_finished ->
+                            {gateway_finished, {success, <<"text/plain">>,
+                                                <<"# Uploaded.\r\n">>}};
+                        titan_enotdir ->
+                            {gateway_finished, {error_code,
+                                                cannot_overwrite}}
+                    end;
+
                 false ->
                     case ppool:run(?QUEUE, [{self(), Config}]) of
                         {ok, Pid} -> {gateway_started, Pid};
@@ -178,6 +185,9 @@ handle_call({client_data, Data}, _From,
             Reply = {gateway_finished, {success, <<"text/plain">>,
                                        <<"Uploaded.\r\n">>}},
             {stop, normal, Reply, State};
+        titan_enotdir ->
+            Reply = {gateway_finished, {error_code, cannot_overwrite}},
+            {stop, normal, Reply, State};
         {titan_updated, NewSize} ->
             Reply = {ok, in_progress},
             {reply, Reply, State#titan_state{bytes_recv=NewSize}}
@@ -231,15 +241,19 @@ recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
 finish_file(Stream, TargetPath, TmpPath, Size) ->
     truncate(Stream, Size),
     ok = file:close(Stream),
-    ok = delete(TargetPath),
-    ok = file:make_link(TmpPath, TargetPath),
-    ok = delete(TmpPath),
-    titan_finished.
+    case delete(TargetPath) of
+        {fail, enotdir} -> titan_enotdir;
+        ok ->
+            ok = file:make_link(TmpPath, TargetPath),
+            ok = delete(TmpPath),
+            titan_finished
+    end.
 
 delete(Path) ->
     case file:delete(Path) of
         ok -> ok;
         {error, enoent} -> ok;
+        {error, enotdir} -> {fail, enotdir};
         Error -> Error
     end.
 

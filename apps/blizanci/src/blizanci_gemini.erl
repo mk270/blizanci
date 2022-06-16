@@ -91,6 +91,7 @@ gemini_status(internal_server_error) -> {40, <<"Internal server error">>};
 gemini_status(gateway_busy)          -> {40, <<"Gateway too busy">>};
 gemini_status(cgi_exec_error)        -> {40, <<"Gateway error">>};
 gemini_status(response_timeout)      -> {40, <<"Timeout">>};
+gemini_status(cannot_overwrite)      -> {40, <<"Cannot overwrite file">>};
 gemini_status(file_not_found)        -> {51, <<"File not found">>};
 gemini_status(cert_required)         -> {60, <<"Client certificate required">>};
 gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>};
