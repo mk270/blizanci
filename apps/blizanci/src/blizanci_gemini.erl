@@ -363,9 +363,17 @@ handle_request(Payload, #state{buffer=Buffer,
                                servlet_proc={proc, Proc}
                               }) when is_pid(Proc) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
-    Result = blizanci_servlet_container:handle_client_data(Proc, AllInput),
-    {<<>>, Result}.
+    lager:debug("~p about to send client data ~p", [self(), Payload]),
 
+    try blizanci_servlet_container:handle_client_data(Proc, AllInput) of
+        Result ->
+            lager:debug("client data sent"),
+            {<<>>, Result}
+    catch
+        Err1:Err2 ->
+            lager:info("error sending client data: ~p ~p", [Err1, Err2]),
+            {<<>>, {error_code, internal_server_error}}
+    end.
 
 
 %% @doc

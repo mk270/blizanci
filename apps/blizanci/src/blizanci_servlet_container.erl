@@ -180,8 +180,14 @@ handle_call({gateway_result, Result}, _From,
 handle_call({client_data, Payload}, _From,
             State=#servlet_state{gateway_module=Module,
                                  gateway_pid=Pid}) ->
-    Reply = Module:handle_client_data(Pid, Payload),
-    {reply, Reply, State};
+    try Module:handle_client_data(Pid, Payload) of
+        Reply -> {reply, Reply, State}
+    catch
+        E1:E2 -> lager:info("unmatched error in servlet: ~p", [{E1, E2}]),
+            Response = {error_code, internal_server_error},
+            exit({shutdown, {gateway_complete, self(), Response}})
+    end;
+
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
