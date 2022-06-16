@@ -92,7 +92,6 @@ cancel(Pid) ->
 request(_, _, _, _) ->
     defer.
 
-%% TBD: break up this excessively long/complicated fn
 -spec serve(path_matches(), request_details(), server_config(), options()) ->
                    gateway_result().
 serve(Matches, Req, _ServerConfig, RouteOpts) ->
