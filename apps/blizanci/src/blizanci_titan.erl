@@ -123,15 +123,20 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
                                                 cannot_overwrite}}
                     end;
 
-                false ->
-                    case ppool:run(?QUEUE, [{self(), Config}]) of
-                        {ok, Pid} -> {gateway_started, Pid};
-                        noalloc -> {gateway_error, gateway_busy}
-                    end
+                false -> enqueue_titan_job(Config)
             end;
         {error, Err} ->
             {gateway_finished, {error_code, Err}}
     end.
+
+-spec enqueue_titan_job({titan_request(), binary(), binary(), binary()}) ->
+          gateway_result().
+enqueue_titan_job(Config) ->
+    case ppool:run(?QUEUE, [{self(), Config}]) of
+        {ok, Pid} -> {gateway_started, Pid};
+        noalloc -> {gateway_error, gateway_busy}
+    end.
+
 
 -spec ensure_binary(list()) -> binary();
                    (binary()) -> binary().
