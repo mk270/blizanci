@@ -223,10 +223,6 @@ code_change(_OldVsn, State, _Extra) ->
 format_status(_Opt, Status) ->
     Status.
 
-tmp_file_name() ->
-    Hash = erlang:phash2(make_ref()),
-    integer_to_list(Hash).
-
 recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
     Len = byte_size(Data),
     file:write(Stream, Data),
@@ -270,7 +266,7 @@ purge(Path, WorkDir) ->
 -spec create_tmp_file(binary(), binary(), binary(), binary()) ->
           {ok, term(), binary(), binary()}.
 create_tmp_file(WorkDir, RootDir, Path, Rest) ->
-    TmpFile = tmp_file_name(),
+    TmpFile = blizanci_tmpdir:tmp_file_name(),
     TmpPath = filename:join(WorkDir, TmpFile),
     TargetPath = filename:join(RootDir, Path),
     lager:debug("titan path: ~p", [Path]),

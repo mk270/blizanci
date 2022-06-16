@@ -7,9 +7,14 @@
 
 -module(blizanci_tmpdir).
 
--export([stale/2]).
+-export([tmp_file_name/0, stale/2]).
 
 % TBD
+tmp_file_name() ->
+    Hash = erlang:phash2(make_ref()),
+    integer_to_list(Hash).
+
+%TBD
 stale(Dir, MaxAge) ->
     FullDir = Dir,
     {ok, Files} = file:list_dir_all(FullDir),
