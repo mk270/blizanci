@@ -48,6 +48,10 @@
 
 -type titan_request() :: {titan_request, binary(), integer(), binary()}.
 
+-type upload_status() :: titan_finished
+                       | titan_enotdir
+                       | {titan_updated, integer()}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -250,7 +254,7 @@ format_status(_Opt, Status) ->
 -spec recv_data(io_device(), binary(), integer(),
                 filepath(), filepath(), integer())
                ->
-          titan_finished | titan_enotdir | {titan_updated, integer()}.
+          upload_status().
 recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
     Len = byte_size(Data),
     file:write(Stream, Data),
@@ -263,7 +267,7 @@ recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
     end.
 
 -spec finish_file(io_device(), filepath(), filepath(), integer()) ->
-          titan_finished | titan_enotdir.
+          upload_status().
 finish_file(Stream, TargetPath, TmpPath, Size) ->
     truncate(Stream, Size),
     ok = file:close(Stream),
@@ -297,7 +301,7 @@ purge(Path, WorkDir) ->
     ok.
 
 -spec create_tmp_file(filepath(), filepath(), filepath(), binary()) ->
-          {ok, term(), filepath(), filepath()}.
+          {ok, io_device(), filepath(), filepath()}.
 create_tmp_file(WorkDir, RootDir, Path, Rest) ->
     TmpFile = blizanci_tmpdir:tmp_file_name(),
     TmpPath = filename:join(WorkDir, TmpFile),
