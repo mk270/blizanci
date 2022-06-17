@@ -44,7 +44,7 @@
                       target_path,
                       work_dir,
                       stream}).
-%-type titan_state() :: #titan_state{}.
+-type titan_state() :: #titan_state{}.
 
 -type titan_request() :: {titan_request, binary(), integer(), binary()}.
 
@@ -122,6 +122,12 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             {gateway_finished, {error_code, Err}}
     end.
 
+
+% deal with the following case:
+%  a valid Titan request has been submitted, but the network data arrives
+%  concurrently with the payload; that is, the Titan request specifies
+%  that a certain number of bytes of payload will follow, and sufficient
+%  bytes are already available.
 -spec handle_all_in_one_request(filepath(), filepath(), binary(),
                                 binary(), integer()) ->
           gateway_result().
@@ -129,15 +135,15 @@ handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) ->
     {ok, Stream, TmpPath, TargetPath} =
         create_tmp_file(WorkDir, RootDir, Path, Rest),
 
-    case finish_file(Stream, TargetPath, TmpPath, Size) of
-        titan_finished ->
-            {gateway_finished, {success, <<"text/plain">>,
-                                <<"# Uploaded.\r\n">>}};
-        titan_enotdir ->
-            {gateway_finished, {error_code,
-                                cannot_overwrite}}
-    end.
+    UploadStatus = finish_file(Stream, TargetPath, TmpPath, Size),
+    handle_upload_status(UploadStatus).
 
+
+% the alternative case (to the previous function) is that a valid Titan
+% request has been received, but there is either no concurrent payload
+% data, or insufficient such data to fulfil the request; this entails
+% waiting for more data, therefore we put a Titan worker into the worker
+% pool to handle this
 -spec enqueue_titan_job({titan_request(), binary(), filepath(), filepath()}) ->
           gateway_result().
 enqueue_titan_job(Config) ->
@@ -156,7 +162,7 @@ ensure_binary(X) when is_binary(X) -> X.
 -spec handle_client_data(pid(), binary()) -> gemini_response().
 handle_client_data(Pid, Data) ->
     case gen_server:call(Pid, {client_data, Data}) of
-        {ok, in_progress} -> none;
+        {ok, in_progress, _NewSize} -> none;
         {gateway_finished, Response} -> Response
     end.
 
@@ -202,23 +208,13 @@ init({Parent, Config}) ->
               },
     {ok, State}.
 
-handle_call({client_data, Data}, _From,
-            State=#titan_state{stream=Stream,
-                               size=Size,
-                               target_path=TargetPath,
-                               tmp_file=TmpPath,
-                               bytes_recv=OldBytesRecv}) ->
-    case recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) of
-        titan_finished ->
-            % TBD: factor together
-            Reply = {gateway_finished, {success, <<"text/plain">>,
-                                       <<"Uploaded.\r\n">>}},
+handle_call({client_data, Data}, _From, State) ->
+    UploadStatus = recv_data(Data, State),
+    Reply = handle_upload_status(UploadStatus),
+    case Reply of
+        {gateway_finished, _GatewayStatus} ->
             {stop, normal, Reply, State};
-        titan_enotdir ->
-            Reply = {gateway_finished, {error_code, cannot_overwrite}},
-            {stop, normal, Reply, State};
-        {titan_updated, NewSize} ->
-            Reply = {ok, in_progress},
+        {ok, in_progress, NewSize} ->
             {reply, Reply, State#titan_state{bytes_recv=NewSize}}
     end;
 
@@ -254,12 +250,22 @@ format_status(_Opt, Status) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+-spec handle_upload_status(upload_status()) ->
+          gateway_result() | {ok, in_progress, integer()}.
+handle_upload_status(titan_finished) ->
+    {gateway_finished, {success, <<"text/plain">>, <<"Uploaded.\r\n">>}};
+handle_upload_status(titan_enotdir) ->
+    {gateway_finished, {error_code, cannot_overwrite}};
+handle_upload_status({titan_updated, NewSize}) ->
+    {ok, in_progress, NewSize}.
 
--spec recv_data(io_device(), binary(), integer(),
-                filepath(), filepath(), integer())
-               ->
-          upload_status().
-recv_data(Stream, Data, Size, TargetPath, TmpPath, OldBytesRecv) ->
+
+-spec recv_data(binary(), titan_state()) -> upload_status().
+recv_data(Data, #titan_state{stream=Stream,
+                             size=Size,
+                             target_path=TargetPath,
+                             tmp_file=TmpPath,
+                             bytes_recv=OldBytesRecv}) ->
     Len = byte_size(Data),
     file:write(Stream, Data),
     NewSize = OldBytesRecv + Len,
