@@ -160,7 +160,7 @@ ensure_binary(X) when is_binary(X) -> X.
 
 
 -spec handle_client_data(pid(), binary()) -> gemini_response().
-handle_client_data(Pid, Data) ->
+handle_client_data(Pid, Data) when is_pid(Pid) and is_binary(Data) ->
     case gen_server:call(Pid, {client_data, Data}) of
         {ok, in_progress, _NewSize} -> none;
         {gateway_finished, Response} -> Response
