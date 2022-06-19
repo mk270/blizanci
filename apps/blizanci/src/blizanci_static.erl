@@ -34,7 +34,7 @@ default_options() ->
      }.
 
 -spec cancel(pid()) -> ok.
-cancel(_) ->
+cancel(Pid) when is_pid(Pid) ->
     ok.
 
 % Called by the servlet

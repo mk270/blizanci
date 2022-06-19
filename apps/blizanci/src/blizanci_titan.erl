@@ -28,8 +28,8 @@
                      work_dir := binary()
                     }.
 
--type io_device() :: pid().
--type filepath() :: binary().
+-type io_device() :: pid() | {'file_descriptor', atom(), any()}.
+-type filepath() :: binary() | string().
 
 -define(QUEUE, ?MODULE).
 -define(MAX_TITAN, 10).
@@ -180,14 +180,18 @@ parse_titan_request(Fragment) ->
 
 -spec parse_titan_qs(binary(), binary()) ->
           {ok, titan_request()}.
-parse_titan_qs(Path, Query) ->
+parse_titan_qs(Path, Query)
+  when is_binary(Path) and is_binary(Query)
+ ->
     Q2 = binary:replace(Query, <<";">>, <<"&">>, [global]),
-    KVPs = maps:from_list(uri_string:dissect_query(Q2)),
+    AllParams = uri_string:dissect_query(Q2),
+    BinParams = [{K,V} || {K,V} <- AllParams, is_binary(V)],
+    KVPs = maps:from_list(BinParams),
     SizeS = maps:get(<<"size">>, KVPs),
     MimeType = maps:get(<<"mime">>, KVPs),
     Size = erlang:binary_to_integer(SizeS),
-    Params = {titan_request, Path, Size, MimeType},
-    {ok, Params}.
+    TitanRequest = {titan_request, Path, Size, MimeType},
+    {ok, TitanRequest}.
 
 init({Parent, Config}) ->
     process_flag(trap_exit, true),
@@ -298,13 +302,13 @@ delete(Path) ->
     end.
 
 -spec truncate(io_device(), integer()) -> ok.
-truncate(Stream, Position) ->
+truncate(Stream, Position) when is_integer(Position) ->
     {ok, _Pos} = file:position(Stream, Position),
     ok = file:truncate(Stream).
 
 -spec purge(filepath(), filepath()) -> ok.
 %% purge work dir of obviously left-over old files
-purge(Path, WorkDir) ->
+purge(Path, WorkDir) when is_binary(Path) and is_binary(WorkDir) ->
     delete(Path),
     lager:debug("Purging: ~p, ~p", [Path, WorkDir]),
     [ delete(F) || F <- blizanci_tmpdir:stale(WorkDir, ?MAX_AGE) ],
@@ -312,7 +316,10 @@ purge(Path, WorkDir) ->
 
 -spec create_tmp_file(filepath(), filepath(), filepath(), binary()) ->
           {ok, io_device(), filepath(), filepath()}.
-create_tmp_file(WorkDir, RootDir, Path, Rest) ->
+create_tmp_file(WorkDir, RootDir, Path, Rest)
+  when is_binary(WorkDir) and is_binary(RootDir) and
+       is_binary(Path) and is_binary(Rest)
+ ->
     TmpFile = blizanci_tmpdir:tmp_file_name(),
     TmpPath = filename:join(WorkDir, TmpFile),
     TargetPath = filename:join(RootDir, Path),
