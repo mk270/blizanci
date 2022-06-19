@@ -10,6 +10,7 @@ Features:
 * single-user [CGI](https://en.wikipedia.org/wiki/Common_Gateway_Interface)
 * distributed PKI: authorisation by subject or *issuer* of certificates
 * Titan protocol uploads
+* servlet interface for in-process dynamic page generation
 
 Prerequisites
 -------------
