@@ -51,7 +51,7 @@ cert_authorised(_, {error, no_peercert}) ->
     {error_code, cert_required};
 cert_authorised(restricted, {ok, _AnyCert}) ->
     authorised;
-cert_authorised({private, Certs}, {ok, Cert}) ->
+cert_authorised({private, Certs}, {ok, Cert}) when is_map(Cert) ->
     case cert_issued_by_any(Cert, Certs) of
         {ok, Issuer} -> lager:debug("successful auth: ~p", [Issuer]),
                         authorised;
@@ -61,16 +61,17 @@ cert_authorised({private, Certs}, {ok, Cert}) ->
 
 -spec cert_issued_by_any(map(), [string()]) ->
           {'ok', string()} | 'fail'.
-cert_issued_by_any(_Cert, []) -> fail;
-cert_issued_by_any(Cert, [Issuer|Tail]) when is_list(Issuer) ->
+cert_issued_by_any(Cert, []) when is_map(Cert) -> fail;
+cert_issued_by_any(Cert, [Issuer|Tail]) when is_list(Issuer) and
+                                             is_map(Cert) ->
     case cert_issued_by(Cert, Issuer) of
         ok -> {ok, Issuer};
         not_issuer -> cert_issued_by_any(Cert, Tail)
     end.
 
--spec cert_issued_by(term(), Issuer::string()) ->
+-spec cert_issued_by(map(), Issuer::string()) ->
           'ok' | 'not_issuer'.
-cert_issued_by(Cert, Issuer) ->
+cert_issued_by(Cert, Issuer) when is_map(Cert) ->
     IssuerCert = blizanci_x509:certificate_from_file(Issuer),
     case public_key:pkix_is_issuer(Cert, IssuerCert) of
         false -> not_issuer;

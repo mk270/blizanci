@@ -35,23 +35,23 @@
 %% on unreasonable input.
 %% @end
 sanitise(Env) ->
-    [ sanitise_kv(K, V) || {K, V} <- Env ].
+    [ sanitise_kv(K, V) || {K, V} <- Env, is_list(K) ].
 
 
 -spec sanitise_kv(string(), term()) -> {string(), string()}.
-sanitise_kv(Key, <<"">>) ->
+sanitise_kv(Key, <<"">>) when is_list(Key) ->
     {Key, <<"">>}; % exec:run apparently objects to null-strings as lists
 
-sanitise_kv(Key, Value) when is_binary(Value) ->
+sanitise_kv(Key, Value) when is_binary(Value) and is_list(Key) ->
     {Key, binary_to_list(Value)};
 
-sanitise_kv(Key, Value) when is_integer(Value) ->
+sanitise_kv(Key, Value) when is_integer(Value) and is_list(Key) ->
     {Key, integer_to_list(Value)};
 
-sanitise_kv(Key, undefined) ->
+sanitise_kv(Key, undefined) when is_list(Key) ->
     {Key, "undefined"};
 
-sanitise_kv(Key, Value) ->
+sanitise_kv(Key, Value) when is_list(Key) and is_list(Value) ->
     {Key, Value}.
 
 
