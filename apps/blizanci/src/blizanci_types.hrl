@@ -25,7 +25,8 @@
 -record(server_config,
         {hostname   :: binary(),
          port       :: integer(),
-         routing    :: [route()]}).
+         routing    :: [route()],
+         docroot    :: string()}).
 -type server_config() :: #server_config{}.
 
 -record(state,

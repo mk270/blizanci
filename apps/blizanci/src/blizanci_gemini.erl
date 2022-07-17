@@ -133,10 +133,12 @@ init({Ref, Transport, Opts}) ->
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     Port = proplists:get_value(port, Opts),
     Routing = proplists:get_value(routing, Opts),
+    Docroot = proplists:get_value(docroot, Opts),
     Config = #server_config{
                 hostname=Hostname,
                 port=Port,
-                routing=Routing},
+                routing=Routing,
+                docroot=Docroot},
     State = #state{
                transport=Transport,
                socket=Socket,
@@ -555,6 +557,8 @@ handle_line_test_() ->
                                           #server_config{
                                              hostname= <<"this.host.dev">>,
                                              port= 1965,
-                                             routing=[]},
+                                             routing=[],
+                                             docroot="/tmp"
+                                            },
                                           {error, no_peercert}, <<"">>)) ||
         {Expected, TestInput} <- handle_line_test_data() ].
