@@ -52,3 +52,10 @@ Documentation
 -------------
 
 A work in progress at [https://mk270.github.io/blizanci/](https://mk270.github.io/blizanci/).
+
+Status
+------
+
+The source code of Blizanci is largely "finished". There are no plans to add new features.
+
+But software is more than just programs. There is already some documentation of blizanci's internal APIs - eventually a manual will be produced and some installation advice and packaging / tooling.
