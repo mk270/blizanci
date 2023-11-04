@@ -7,8 +7,7 @@
 
 %% @doc
 % This module provides a mechanism for dynamic content generation for
-% Gemini requests. Currently it is somewhat hardwired to use CGI to
-% fulfil these.
+% Gemini requests.
 %
 % One blizanci_servlet_container process is generated per deferred
 % request. This is done by calling blizanci_servlet_container:request/5,
