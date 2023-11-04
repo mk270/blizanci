@@ -73,30 +73,6 @@
 -define(MAX_REQUEST_BYTES, 4000).
 -define(CGI_MODULE, blizanci_cgi).
 
--spec gemini_status(atom()) -> {integer(), binary()}.
-gemini_status(request_too_long)      -> {59, <<"Request too long">>};
-gemini_status(request_not_parsed)    -> {59, <<"Request not parsed">>};
-gemini_status(bad_query_string)      -> {59, <<"Bad query string">>};
-gemini_status(success)               -> {20, <<"Success">>};
-gemini_status(request_timeout)       -> {59, <<"Request timeout">>};
-gemini_status(proxy_refused)         -> {53, <<"Proxy request refused">>};
-gemini_status(host_unrecognised)     -> {53, <<"Host unrecognised">>};
-gemini_status(port_unrecognised)     -> {53, <<"Port unrecognised">>};
-gemini_status(unrecognised_protocol) -> {59, <<"Protocol not recognised">>};
-gemini_status(bad_unicode)           -> {59, <<"Bad unicode in request">>};
-gemini_status(bad_filename)          -> {59, <<"Illegal filename">>};
-gemini_status(bad_hostname)          -> {59, <<"Illegal hostname">>};
-gemini_status(userinfo_supplied)     -> {59, <<"Illegal username">>};
-gemini_status(internal_server_error) -> {40, <<"Internal server error">>};
-gemini_status(gateway_busy)          -> {40, <<"Gateway too busy">>};
-gemini_status(cgi_exec_error)        -> {40, <<"Gateway error">>};
-gemini_status(response_timeout)      -> {40, <<"Timeout">>};
-gemini_status(cannot_overwrite)      -> {40, <<"Cannot overwrite file">>};
-gemini_status(file_not_found)        -> {51, <<"File not found">>};
-gemini_status(cert_required)         -> {60, <<"Client certificate required">>};
-gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>};
-gemini_status(cert_not_authorised)   -> {60, <<"Client certificate unauthorised">>}.
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% API.
@@ -323,7 +299,7 @@ respond({error_code, Code}, #state{transport=Transport, socket=Socket}) ->
 respond({redirect, Path}, State=#state{transport=Transport, socket=Socket}) ->
     Config = State#state.config,
     Meta = construct_local_url(Config, Path),
-    {Code, _} = gemini_status(permanent_redirect),
+    {Code, _} = gemini_status:gemini_status(permanent_redirect),
     Msg = format_headers(Code, Meta),
     Transport:send(Socket, Msg),
     finished;
@@ -517,7 +493,7 @@ format_headers(Code, Meta) when is_integer(Code), is_binary(Meta) ->
 
 -spec format_error(atom()) -> {'ok', iolist()}.
 format_error(Code) when is_atom(Code) ->
-    {GeminiStatus, Explanation} = gemini_status(Code),
+    {GeminiStatus, Explanation} = gemini_status:gemini_status(Code),
     Headers = format_headers(GeminiStatus, Explanation),
     {ok, Headers}.
 
