@@ -21,6 +21,34 @@
 %% which responds to a relevant Gemini request. However, future versions
 %% of blizanci will become increasingly strict about verifying that the
 %% configuration is valid at application start time.
+%%
+%% Configuration items:
+%%
+%% <dl>
+%%   <dt><code>{ca_certs, [CACertPath::string()}]</code></dt>
+%%   <dd>the path(s) to the certificate authority certificate(s)
+%%       to be used for verifying client certificates;
+%%       may be the empty list.</dd>
+%%   <dt><code>{certfile, CertPath::string()}</code></dt>
+%%   <dd>the path to the server's certificate</dd>
+%%   <dt><code>{cgiroot, CGIRootPath::string()}</code></dt>
+%%   <dd>the path to the root directory for CGI scripts; normally there would only be a single, top-level directory with no subdirectories</dd>
+%%   <dt><code>{docroot, DocrootPath::string()}</code></dt>
+%%   <dd>the path to the root of the documents to be served</dd>
+%%   <dt><code>{hostname, Hostname::string()}</code></dt>
+%%   <dd>the hostname (defaults to system hostname)</dd>
+%%   <dt><code>{keyfile, PrivKeyPath::string()}</code></dt>
+%%   <dd>the path to the server's private key</dd>
+%%   <dt><code>{port, Port::integer()}</code></dt>
+%%   <dd>the port to listen on (defaults to 1965)</dd>
+%%   <dt><code>{routing, [Route]}</code></dt>
+%%   <dd>the routing table (for the format of which, currently,
+%%       see the source code)</dd>
+%% </dl>
+%%
+%% Relative paths are allowed in all configuration items other than
+%% <code>routing</code>
+%%
 %% @end
 
 -module(blizanci_config).
