@@ -299,7 +299,7 @@ respond({error_code, Code}, #state{transport=Transport, socket=Socket}) ->
 respond({redirect, Path}, State=#state{transport=Transport, socket=Socket}) ->
     Config = State#state.config,
     Meta = construct_local_url(Config, Path),
-    {Code, _} = gemini_status:gemini_status(permanent_redirect),
+    {Code, _} = blizanci_status:gemini_status(permanent_redirect),
     Msg = format_headers(Code, Meta),
     Transport:send(Socket, Msg),
     finished;
@@ -493,7 +493,7 @@ format_headers(Code, Meta) when is_integer(Code), is_binary(Meta) ->
 
 -spec format_error(atom()) -> {'ok', iolist()}.
 format_error(Code) when is_atom(Code) ->
-    {GeminiStatus, Explanation} = gemini_status:gemini_status(Code),
+    {GeminiStatus, Explanation} = blizanci_status:gemini_status(Code),
     Headers = format_headers(GeminiStatus, Explanation),
     {ok, Headers}.
 
