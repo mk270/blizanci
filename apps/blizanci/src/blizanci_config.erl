@@ -49,6 +49,7 @@ ssl_opts() ->
      {verify, verify_peer},
      {cacertfile, "/dev/null"},
      {verify_fun, {VerifyFn, []}},
+     {fail_if_no_peer_cert, false},
      {versions, ['tlsv1.3']}
     ].
 
