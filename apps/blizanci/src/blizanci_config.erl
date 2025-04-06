@@ -43,7 +43,10 @@
 %%   <dd>the port to listen on (defaults to 1965)</dd>
 %%   <dt><code>{routing, [Route]}</code></dt>
 %%   <dd>the routing table (for the format of which, currently,
-%%       see the source code)</dd>
+%%       see the source code). Each entry in the table has the form
+%%       {Scheme, Regexp, Module, AuthPolicy, Options}
+%%
+%%   </dd>
 %% </dl>
 %%
 %% Relative paths are allowed in all configuration items other than
