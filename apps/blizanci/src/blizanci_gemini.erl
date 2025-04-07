@@ -521,20 +521,25 @@ construct_url(Scheme, Hostname, Port, Path) ->
 
 handle_line_test_data() ->
     [
-     {{file, <<"text/gemini">>, <<"/bin/which">>},
+     {{file, <<"text/gemini">>, <<"/tmp/which">>},
       <<"gemini://this.host.dev/which">>},
 
-     {{file, <<"text/gemini">>, <<"/bin/which">>},
+     {{file, <<"text/gemini">>, <<"/tmp/which">>},
       <<"gemini://this.host.dev:1965/which">>}
     ].
 
 handle_line_test_() ->
+    Docroot = "/tmp",
+    Static_Opts = #{ docroot => Docroot },
+    Routes = [{gemini, "(?<PATH>.*)", blizanci_static, public, Static_Opts}],
+    {ok, Routing} = blizanci_router:prepare(Routes),
+
     [ ?_assertEqual(Expected, handle_line(TestInput,
                                           #server_config{
                                              hostname= <<"this.host.dev">>,
                                              port= 1965,
-                                             routing=[],
-                                             docroot="/tmp"
+                                             routing=Routing,
+                                             docroot=Docroot
                                             },
                                           {error, no_peercert}, <<"">>)) ||
         {Expected, TestInput} <- handle_line_test_data() ].
