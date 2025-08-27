@@ -107,8 +107,15 @@ proto_opts() ->
      {routing, Routing}
     ].
 
+
 -type route_entry() :: {atom(), string(), atom(), atom(), map()}.
--spec routing_table(string(), string(), [string()]) -> [route_entry()].
+
+-spec routing_table(Docroot, CGIroot, CACerts) -> RoutingTable
+              when Docroot      :: string(),
+                   CGIRoot      :: string(),
+                   CACerts      :: [string()],
+                   RoutingTable :: [route_entry()].
+
 routing_table(Docroot, CGIroot, CACerts) ->
     CGI_Opts = #{ cgiroot => CGIroot },
     Static_Opts = #{ docroot => Docroot },
@@ -132,8 +139,13 @@ active_servlets() ->
     [blizanci_cgi, blizanci_titan].
 
 
--spec get_pem_file_from_environment(atom(), atom(), string()) ->
-          {ok, string()} | {fail, atom()}.
+-spec get_pem_file_from_environment(App, Key, Default_Filename) -> Result
+              when App              :: atom(),
+                   Key              :: atom(),
+                   Default_Filename :: string(),
+                   Result           :: {ok, string()} |
+                                       {fail, atom()}.
+
 get_pem_file_from_environment(App, Key, Default_Filename) ->
     Value = application:get_env(App, Key, Default_Filename),
     blizanci_x509:validate_pem_file(Value).
