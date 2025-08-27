@@ -59,6 +59,8 @@
                         gateway_pid,
                         gateway_module}).
 
+-type servlet_state() :: #servlet_state{}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -167,26 +169,11 @@ init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
 %% @doc
 %% @hidden
 %% @end
-handle_call({gateway_result, Result}, _From,
-            State=#servlet_state{parent=Parent}) ->
-    ServletResult = case Result of
-                        {gateway_output, Output} -> {servlet_complete, Output};
-                        {gateway_error, Error} -> {servlet_failed, Error}
-                    end,
-    report_result(Parent, ServletResult),
-    {reply, ok, State};
+handle_call({gateway_result, Result}, _From, State) ->
+    do_handle_gateway_result(Result, State);
 
-handle_call({client_data, Payload}, _From,
-            State=#servlet_state{gateway_module=Module,
-                                 gateway_pid=Pid}) ->
-    try Module:handle_client_data(Pid, Payload) of
-        Reply -> {reply, Reply, State}
-    catch
-        E1:E2 -> lager:info("unmatched error in servlet: ~p", [{E1, E2}]),
-            Response = {error_code, internal_server_error},
-            exit({shutdown, {gateway_complete, self(), Response}})
-    end;
-
+handle_call({client_data, Payload}, _From, State) ->
+    do_handle_payload(Payload, State);
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -242,12 +229,50 @@ format_status(_Opt, Status) ->
 %%% Internal
 %%%===================================================================
 
--spec report_result(pid(), servlet_result()) -> 'ok'.
+-spec do_handle_gateway_result(GWResult, State) -> Result
+              when GWResult :: gateway_result(),
+                   State    :: servlet_state(),
+                   Result   :: any().
+
+do_handle_gateway_result(GWResult, State=#servlet_state{parent=Parent}) ->
+    ServletResult = case GWResult of
+                        {gateway_output, Output} -> {servlet_complete, Output};
+                        {gateway_error, Error} -> {servlet_failed, Error}
+                    end,
+    report_result(Parent, ServletResult),
+    {reply, ok, State}.
+
+
+-spec do_handle_payload(Payload, State) -> Result
+              when Payload :: binary(),
+                   State   :: servlet_state(),
+                   Result  :: any().
+
+do_handle_payload(Payload, State=#servlet_state{
+                                   gateway_module=Module,
+                                   gateway_pid=Pid
+                                   }) ->
+    try Module:handle_client_data(Pid, Payload) of
+        Reply -> {reply, Reply, State}
+    catch
+        E1:E2 -> lager:info("unmatched error in servlet: ~p", [{E1, E2}]),
+                 Response = {error_code, internal_server_error},
+                 exit({shutdown, {gateway_complete, self(), Response}})
+    end.
+
+
+-spec report_result(ParentPid, Result) -> 'ok'
+              when ParentPid :: pid(),
+                   Result    :: servlet_result().
+
 report_result(Parent, Result) ->
     ok = check_result(Result),
     ServletResult = Result,
     ok = blizanci_gemini:servlet_result(Parent, ServletResult).
 
--spec check_result(servlet_result()) -> 'ok'.
+
+-spec check_result(Result) -> 'ok'
+              when Result :: servlet_result().
+
 check_result({servlet_failed, Atom}) when is_atom(Atom) -> ok;
 check_result({servlet_complete, Output}) when is_binary(Output) -> ok.
