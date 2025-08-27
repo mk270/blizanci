@@ -79,12 +79,18 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
--spec start_link(pid(), any(), [any()]) -> {ok, pid()}.
+-spec start_link(Ref, Transport, Opts) -> Result
+              when Ref       :: pid(),
+                   Transport :: any(),
+                   Opts      :: [any()],
+                   Result    :: {'ok', pid()}.
 start_link(Ref, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [{Ref, Transport, Opts}]).
 
 
--spec servlet_result(pid(), servlet_result()) -> 'ok'.
+-spec servlet_result(Pid, Result) -> 'ok'
+              when Pid    :: pid(),
+                   Result :: servlet_result().
 servlet_result(Pid, Result) when is_pid(Pid) ->
     case is_process_alive(Pid) of
         true ->
@@ -270,7 +276,11 @@ close_session(State) ->
 % Send a response back to the client, generally closing the connection
 % if it is finished. If the client hasn't managed to send a whole request,
 % do nothing.
--spec respond(gemini_response(), state()) -> gemini_session().
+-spec respond(Response, State) -> Session
+              when Response :: gemini_response(),
+                   State    :: state(),
+                   Session  :: gemini_session().
+
 respond(none, _State) ->
     % don't hang up where only part of the URL + CRLF has been received
     continue;
@@ -314,14 +324,18 @@ respond({success, MimeType, Data}, #state{transport=Transport,
     Transport:send(Socket, Data),
     finished.
 
+
 % Theoretically, a client could send its request very slowly, with
 % parts of the URL arriving piecemeal; it could also send a massive
 % blob of data all at once. We buffer data received from the client
 % in State.buffer, and wait until a CRLF appears. The canonical case
 % is of course that the CRLF appears the first time we ever receive
 % data, rendering the buffer redundant.
--spec handle_request(binary(), state())
-                    -> {binary(), gemini_response()}.
+-spec handle_request(Payload, State) -> Result
+              when Payload :: binary(),
+                   State   :: state(),
+                   Result  :: {binary(), gemini_response()}.
+
 handle_request(Payload, #state{buffer=Buffer,
                                config=Config,
                                client_cert=Cert,
@@ -365,8 +379,13 @@ handle_request(Payload, #state{buffer=Buffer,
 
 % Take the request line which has been received in full from the client
 % and check that it's valid UTF8; if so, break it down into its URL parts
--spec handle_line(binary(), server_config(), term(), binary())
-                 -> gemini_response().
+-spec handle_line(Cmd, Config, Cert, Rest) -> Result
+              when Cmd    :: binary(),
+                   Config :: server_config(),
+                   Cert   :: term(),
+                   Rest   :: binary(),
+                   Result :: gemini_response().
+
 handle_line(Cmd, _Config, _Cert, _Rest) when is_binary(Cmd),
                                              size(Cmd) > 1024 ->
     {error_code, request_too_long};
@@ -385,8 +404,13 @@ handle_line(Cmd, Config, Cert, Rest) when is_binary(Cmd) ->
     end.
 
 % Extract the parts of the URL, providing defaults where necessary
--spec handle_parsed_url(map(), server_config(), term(), binary())
-                       -> gemini_response().
+-spec handle_parsed_url(URI, Config, Cert, Rest) -> Result
+              when URI    :: map(),
+                   Config :: server_config(),
+                   Cert   :: term(), % FIXME
+                   Rest   :: binary(),
+                   Result :: gemini_response().
+
 handle_parsed_url(#{ userinfo := _U}, _Config, _Cert, _Rest) ->
     {error_code, userinfo_supplied};
 handle_parsed_url(URI, Config, Cert, Rest) ->
@@ -418,7 +442,11 @@ handle_parsed_url(URI, Config, Cert, Rest) ->
 
 % Handle a request whose URL has been broken up thus:
 %   [Scheme, Hostname, Port, Path]
--spec handle_url(map(), server_config()) -> gemini_response().
+-spec handle_url(Request, Config) -> Result
+              when Request :: map(),
+                   Config  :: server_config(),
+                   Result  :: gemini_response().
+
 handle_url(#{ scheme := <<"gopher">> }, _) -> {error_code, proxy_refused};
 handle_url(#{ scheme := <<"https">> }, _) -> {error_code, proxy_refused};
 handle_url(#{ scheme := <<"http">> }, _) -> {error_code, proxy_refused};
@@ -429,7 +457,11 @@ handle_url(#{ scheme := Scheme } = Request, Config) ->
                       {error_code, unrecognised_protocol}
     end.
 
--spec protocol_supported(binary()) -> {boolean(), atom()}.
+
+-spec protocol_supported(Proto) -> Result
+              when Proto  :: binary(),
+                   Result :: {boolean(), atom()}.
+
 protocol_supported(?PROTO)      -> {true, gemini};
 protocol_supported(<<"titan">>) -> {true, titan};
 protocol_supported(_)           -> {false, none}.
@@ -438,7 +470,12 @@ protocol_supported(_)           -> {false, none}.
 % Handle a request which has been determined to be a Gemini URL, but not
 % necessarily one which should have come to this server (e.g., a proxy
 % request)
--spec handle_gemini_url(atom(), map(), server_config()) -> gemini_response().
+-spec handle_gemini_url(Proto, Req, Config) -> Result
+              when Proto  :: atom(),
+                   Req    :: map(),
+                   Config :: server_config(),
+                   Result :: gemini_response().
+
 handle_gemini_url(Proto,
                   Req=#{ host := Host,
                          port := Port,
@@ -464,8 +501,13 @@ handle_gemini_url(_, _, _) -> {error_code, host_unrecognised}.
 
 
 % Strip leading slash(es) from URL
--spec handle_path(atom(), binary(), map(), server_config())
-                 -> gemini_response().
+-spec handle_path(Proto, Path, Req, Config) -> Result
+              when Proto  :: atom(),
+                   Path   :: binary(),
+                   Req    :: map(),
+                   Config :: server_config(),
+                   Result :: gemini_response().
+
 handle_path(Proto, <<$/, Trailing/binary>>, Req, Config) ->
     handle_path(Proto, Trailing, Req, Config);
 handle_path(Proto, Path, Req, Config) ->
@@ -473,8 +515,13 @@ handle_path(Proto, Path, Req, Config) ->
 
 
 % Deal with ".." attempts
--spec handle_file(atom(), binary(), map(), server_config())
-                 -> gemini_response().
+-spec handle_file(Proto, Path, Req, Config) -> Result
+              when Proto  :: atom(),
+                   Path   :: binary(),
+                   Req    :: map(),
+                   Config :: server_config(),
+                   Result :: gemini_response().
+
 handle_file(Proto, Path, Req, Config) when is_binary(Path) ->
     case string:split(Path, "..") of
         [_] -> serve(Proto, Path, Req, Config);
@@ -483,32 +530,56 @@ handle_file(Proto, Path, Req, Config) when is_binary(Path) ->
 
 
 % Separate out CGI
--spec serve(atom(), binary(), map(), server_config()) -> gemini_response().
+-spec serve(Proto, Path, Req, Config) -> Result
+              when Proto  :: atom(),
+                   Path   :: binary(),
+                   Req    :: map(),
+                   Config :: server_config(),
+                   Result :: gemini_response().
+
 serve(Proto, Path, Req, Config) ->
     blizanci_router:route(Proto, Path, Req, Config).
 
 
--spec format_headers(integer(), binary()) -> iolist().
+-spec format_headers(Code, Meta) -> Result
+              when Code   :: integer(),
+                   Meta   :: binary(),
+                   Result :: iolist().
+
 format_headers(Code, Meta) when is_integer(Code), is_binary(Meta) ->
     Status = list_to_binary(integer_to_list(Code)),
     [Status, <<" ">>, Meta, ?CRLF].
 
 
--spec format_error(atom()) -> {'ok', iolist()}.
+-spec format_error(Code) -> Result
+              when Code   :: atom(),
+                   Result :: {'ok', iolist()}.
+
 format_error(Code) when is_atom(Code) ->
     {GeminiStatus, Explanation} = blizanci_status:gemini_status(Code),
     Headers = format_headers(GeminiStatus, Explanation),
     {ok, Headers}.
 
 
--spec construct_local_url(server_config(), binary()) -> binary().
+-spec construct_local_url(Config, Path) -> URI
+              when Config :: server_config(),
+                   Path   :: binary(),
+                   URI    :: binary().
+
 construct_local_url(Config, Path) ->
     construct_url(?PROTO,
                   Config#server_config.hostname,
                   Config#server_config.port,
                   Path).
 
--spec construct_url(binary(), binary(), integer(), binary()) -> binary().
+
+-spec construct_url(Scheme, Hostname, Port, Path) -> URI
+              when Scheme   :: binary(),
+                   Hostname :: binary(),
+                   Port     :: integer(),
+                   Path     :: binary(),
+                   URI      :: binary().
+
 construct_url(Scheme, Hostname, Port, Path) ->
     uri_string:recompose(#{ scheme => Scheme,
                             host => Hostname,
