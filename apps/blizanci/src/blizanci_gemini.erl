@@ -136,30 +136,7 @@ init({Ref, Transport, Opts}) ->
 %% @hidden
 %% @end
 handle_info({ssl, Socket, Payload}, State) ->
-    {Buffer, Response} =
-        try handle_request(Payload, State) of
-            Result -> Result
-        catch
-            _ -> {<<"">>, {error_code, internal_server_error}}
-        end,
-    NewState = State#state{buffer=Buffer},
-    Transport = State#state.transport,
-
-    case activate(Transport, Socket) of
-        ok -> case respond(Response, State) of
-                  continue -> {noreply, NewState};
-                  finished -> Transport:close(Socket),
-                              {stop, normal, NewState};
-                  {expect_servlet, Pid} ->
-                      NewerState = NewState#state{servlet_proc={proc, Pid}},
-                      {noreply, NewerState}
-              end;
-        {error, closed} ->
-            {stop, normal, State};
-        _ ->
-            {stop, normal, State}
-    end;
-
+    handle_ssl(Socket, Payload, State);
 handle_info({tcp_closed, _Socket}, State) ->
     {stop, normal, State};
 
@@ -256,6 +233,36 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+-spec handle_ssl(Socket, Payload, State) -> Result
+              when Socket  :: ssl:sslsocket(),
+                   Payload :: binary(),
+                   State   :: state(),
+                   Result  :: any(). % usual OTP return style
+
+handle_ssl(Socket, Payload, State) ->
+    {Buffer, Response} =
+        try handle_request(Payload, State) of
+            Result -> Result
+        catch
+            _ -> {<<"">>, {error_code, internal_server_error}}
+        end,
+    NewState = State#state{buffer=Buffer},
+    Transport = State#state.transport,
+
+    case activate(Transport, Socket) of
+        ok -> case respond(Response, State) of
+                  continue -> {noreply, NewState};
+                  finished -> Transport:close(Socket),
+                              {stop, normal, NewState};
+                  {expect_servlet, Pid} ->
+                      NewerState = NewState#state{servlet_proc={proc, Pid}},
+                      {noreply, NewerState}
+              end;
+        {error, closed} ->
+            {stop, normal, State};
+        _ ->
+            {stop, normal, State}
+    end.
 
 % This ceremony is necessary for telling the Erlang VM to monitor
 % the socket for incoming data, and must be called each time the
