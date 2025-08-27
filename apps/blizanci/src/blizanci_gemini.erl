@@ -602,15 +602,18 @@ construct_url(Scheme, Hostname, Port, Path) ->
 
 handle_line_test_data() ->
     [
-     {{file, <<"text/gemini">>, <<"/tmp/which">>},
-      <<"gemini://this.host.dev/which">>},
+     {{file, <<"text/gemini">>, <<"/dir1/index.gemini">>},
+      <<"gemini://this.host.dev/dir1/index.gemini">>},
 
-     {{file, <<"text/gemini">>, <<"/tmp/which">>},
-      <<"gemini://this.host.dev:1965/which">>}
+     {{redirect, <<"dir1/index.gemini">>},
+      <<"gemini://this.host.dev/dir1/">>},
+
+     {{redirect, <<"dir1/index.gemini">>},
+      <<"gemini://this.host.dev:1965/dir1/">>}
     ].
 
-handle_line_test_() ->
-    Docroot = "/tmp",
+test_handle_line() ->
+    Docroot = "test-docroot",
     _Opts = [{docroot, Docroot}],
     Opts = #{ docroot => Docroot },
     Routes = [{gemini, <<"(?<PATH>.*)">>, blizanci_static, public, Opts}],
@@ -625,3 +628,12 @@ handle_line_test_() ->
                                             },
                                           {error, no_peercert}, <<"">>)) ||
         {Expected, TestInput} <- handle_line_test_data() ].
+
+handle_line_test_() ->
+    App = mime_lookup,
+    {
+     setup,
+     fun() -> {ok, _} = application:ensure_all_started(App) end,
+     fun(_) -> ok = application:stop(App) end,
+     fun() -> test_handle_line() end
+    }.
