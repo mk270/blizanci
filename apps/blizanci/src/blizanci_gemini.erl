@@ -422,8 +422,8 @@ handle_parsed_url(#{ userinfo := _U}, _Config, _Cert, _Rest) ->
 handle_parsed_url(URI, Config, Cert, Rest) ->
     try
         ReqHost = maps:get(host, URI, <<>>),
-        Path = maps:get(path, URI, <<"/">>),
-        Scheme = maps:get(scheme, URI, ?PROTO),
+        Path    = maps:get(path, URI, <<"/">>),
+        Scheme  = maps:get(scheme, URI, ?PROTO),
         ReqPort = maps:get(port, URI, Config#server_config.port),
         ReqPath = case Path of
                       <<>> -> <<"/">>;
@@ -431,12 +431,12 @@ handle_parsed_url(URI, Config, Cert, Rest) ->
                   end,
         Query = maps:get(query, URI, <<>>),
         %% TBD: make this a struct
-        #{ scheme => Scheme,
-           host => ReqHost,
-           port => ReqPort,
-           path => ReqPath,
-           query => Query,
-           client_cert => Cert,
+        #{ scheme        => Scheme,
+           host          => ReqHost,
+           port          => ReqPort,
+           path          => ReqPath,
+           query         => Query,
+           client_cert   => Cert,
            rest_of_input => Rest
          }
     of
