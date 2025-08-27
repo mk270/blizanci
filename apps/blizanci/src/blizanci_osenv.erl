@@ -26,7 +26,6 @@
 -export([sanitise/1, unset_os_env_except/1]).
 
 
--spec sanitise([{string(), term()}]) -> env_list().
 %% @doc Sanitise the system environment variables.
 %%
 %% erlexec expects environment variables to be strings, not binaries;
@@ -34,11 +33,18 @@
 %% (such as integers and binaries) into acceptable strings. It crashes
 %% on unreasonable input.
 %% @end
+-spec sanitise(Env) -> Result
+              when Env    :: [{string(), term()}],
+                   Result :: env_list().
 sanitise(Env) ->
     [ sanitise_kv(K, V) || {K, V} <- Env, is_list(K) ].
 
 
--spec sanitise_kv(string(), term()) -> {string(), string()}.
+-spec sanitise_kv(Key, Value) -> Result
+              when Key    :: string(),
+                   Value  :: term(),
+                   Result :: {string(), string()}.
+
 sanitise_kv(Key, <<"">>) when is_list(Key) ->
     {Key, <<"">>}; % exec:run apparently objects to null-strings as lists
 
@@ -55,9 +61,12 @@ sanitise_kv(Key, Value) when is_list(Key) and is_list(Value) ->
     {Key, Value}.
 
 
--spec unset_os_env_except([string()]) -> ok.
 %% @doc Unset all environment variables but those in the Exceptions whitelist.
 %% @end
+-spec unset_os_env_except(Exceptions) -> Result
+              when Exceptions :: [string()],
+                   Result     :: ok.
+
 unset_os_env_except(Exceptions) ->
     Keys = defined_os_env_vars(),
     [ os:unsetenv(Key) ||
@@ -65,6 +74,8 @@ unset_os_env_except(Exceptions) ->
         not lists:member(Key, Exceptions) ],
     ok.
 
--spec defined_os_env_vars() -> [string()].
+
+-spec defined_os_env_vars() -> Result
+              when Result :: [string()].
 defined_os_env_vars() ->
     [ Head || [Head|_] <- [ string:split(Env, "=") || Env <- os:getenv() ] ].

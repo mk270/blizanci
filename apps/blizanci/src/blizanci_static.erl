@@ -59,7 +59,11 @@ serve(_, _, _, _) ->
 % If there's a valid file requested, then get its full path, so that
 % it can be sendfile()'d back to the client. If it's a directory, redirect
 % to an index file.
--spec serve_file(binary(), options()) -> gemini_response().
+-spec serve_file(Path, Opts) -> Response
+              when Path     :: binary(),
+                   Opts     :: options(),
+                   Response :: gemini_response().
+
 serve_file(Path, Opts) ->
     Docroot = maps:get(docroot, Opts, ?DEFAULT_DOCROOT),
     Full = filename:join(Docroot, Path),
@@ -81,7 +85,12 @@ serve_file(Path, Opts) ->
 % Look up the MIME type for a given filename. If the filename doesn't contain
 % a ".", then assume it's text/gemini. If it contains a "." but isn't in
 % the MIME types dataset, then assume it's application/octet-stream.
--spec mime_type(binary(), binary(), binary()) -> binary().
+-spec mime_type(Path, BareMimeType, UnknownMimeType) -> Result
+              when Path            :: binary(),
+                   BareMimeType    :: binary(),
+                   UnknownMimeType :: binary(),
+                   Result          :: binary().
+
 mime_type(Path, BareMimeType, UnknownMimeType)
   when is_binary(Path)
        and is_binary(BareMimeType)
@@ -96,4 +105,9 @@ mime_type(Path, BareMimeType, UnknownMimeType)
                       end
     end.
 
+
+-spec handle_client_data(Pid, Binary) -> Response
+              when Pid      :: pid(),
+                   Binary   :: binary(),
+                   Response :: gemini_response().
 handle_client_data(_, _) -> none.
