@@ -54,7 +54,6 @@
 %% API to be called by other blizanci modules
 -export([start_link/3]).
 -export([servlet_result/2]).
--export([handle_line/4]).     % temporarily enabled for testing
 
 %% API expected by gen_server callback behaviour
 -export([init/1]).
