@@ -21,16 +21,18 @@
                       index := string()
                     }.
 
--define(INDEX, "index.gemini").
--define(BARE_MIMETYPE, <<"text/gemini">>).
+
+-define(INDEX,              "index.gemini").
+-define(BARE_MIMETYPE,    <<"text/gemini">>).
 -define(UNKNOWN_MIMETYPE, <<"application/octet-stream">>).
--define(DEFAULT_DOCROOT, <<"./public_gemini">>).
+-define(DEFAULT_DOCROOT,  <<"./public_gemini">>).
+
 
 -spec default_options() -> map().
 default_options() ->
-    #{ index => "index.gemini",
+    #{ index            => "index.gemini",
        unknown_mimetype => <<"application/octet-stream">>,
-       bare_mimetype => <<"text/gemini">>
+       bare_mimetype    => <<"text/gemini">>
      }.
 
 -spec cancel(pid()) -> ok.
