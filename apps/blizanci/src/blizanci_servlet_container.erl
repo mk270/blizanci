@@ -67,7 +67,9 @@
 
 
 % Called by the gemini protocol server during shutdown of a connection
--spec cancel(servlet_proc()) -> 'ok'.
+-spec cancel(Proc) -> 'ok'
+              when Proc :: servlet_proc().
+
 cancel(no_proc) ->
     ok;
 cancel({proc, Pid}) ->
@@ -78,7 +80,11 @@ cancel({proc, Pid}) ->
 
 
 % Called by the CGI runner
--spec gateway_exit(pid(), gateway_result()) -> 'ok'.
+%-spec gateway_exit(pid(), gateway_result()) -> 'ok'.
+-spec gateway_exit(Pid, Result) -> 'ok'
+              when Pid    :: pid(),
+                   Result :: gateway_result().
+
 gateway_exit(Pid, Result) when is_pid(Pid) ->
     case is_process_alive(Pid) of
         true -> gen_server:call(Pid, {gateway_result, Result});
@@ -86,19 +92,28 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
     end.
 
 
-handle_client_data(Pid, Payload) ->
+-spec handle_client_data(Pid, Payload) -> Result
+              when Pid     :: pid(),
+                   Payload :: binary(),
+                   Result  :: 'ok' | gemini_response().
+
+handle_client_data(Pid, Payload) when is_binary(Payload) ->
     case is_process_alive(Pid) of
         true -> actually_handle_client_data(Pid, Payload);
-        _ -> ok
+        _ -> ok % this seems unprincipled
     end.
+
+
+-spec actually_handle_client_data(Pid, Payload) -> Result
+              when Pid     :: pid(),
+                   Payload :: binary(),
+                   Result  :: gemini_response().
 
 actually_handle_client_data(Pid, Payload) ->
     Result = gen_server:call(Pid, {client_data, Payload}),
     Result.
 
 
--spec request(module(), path_matches(), any(), server_config(), any()) ->
-          gemini_response().
 %% @doc Called by the router to dispatch a request to a specific handler.
 %% @param Module the module implementing the handler
 %% @param Matches a list of binary key-value pairs representing the manner in which the request matched the pattern associated with the route
@@ -113,6 +128,14 @@ actually_handle_client_data(Pid, Payload) ->
 %% for the results of the request to be notified back to the caller
 %% (of request/5), which is a ranch handler for the Gemini protocol.
 %% @end
+-spec request(Module, Matches, Request, ServerConfig, RouteOpts) -> Result
+              when Module       :: module(),
+                   Matches      :: path_matches(),
+                   Request      :: any(),
+                   ServerConfig :: server_config(),
+                   RouteOpts    :: any(),
+                   Result       :: gemini_response().
+
 request(Module, Matches, Request, ServerConfig, RouteOpts) ->
     case Module:request(Matches, Request, ServerConfig, RouteOpts) of
         {immediate, Result} -> Result;
@@ -121,11 +144,14 @@ request(Module, Matches, Request, ServerConfig, RouteOpts) ->
     end.
 
 
--spec defer_request(Module::module(),
-                    Matches::path_matches(),
-                    Req::any(), % should be able to do better
-                    ServerConfig::server_config(),
-                    RouteOpts::any()) -> gemini_response().
+-spec defer_request(Module, Matches, Req, ServerConfig, RouteOpts) -> Result
+          when Module       :: module(),
+               Matches      :: path_matches(),
+               Req          :: any(), % should be able to do better
+               ServerConfig :: server_config(),
+               RouteOpts    :: any(),
+               Result       :: gemini_response().
+
 defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
     Args = [self(), Module, Matches, Req, ServerConfig, RouteOpts],
     process_flag(trap_exit, true),
