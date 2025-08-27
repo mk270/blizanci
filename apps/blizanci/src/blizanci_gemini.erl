@@ -619,14 +619,16 @@ test_handle_line() ->
     Routes = [{gemini, <<"(?<PATH>.*)">>, blizanci_static, public, Opts}],
     {ok, Routing} = blizanci_router:prepare(Routes),
 
-    [ ?_assertEqual(Expected, handle_line(TestInput,
-                                          #server_config{
-                                             hostname= <<"this.host.dev">>,
-                                             port= 1965,
-                                             routing=Routing,
-                                             docroot=Docroot
-                                            },
-                                          {error, no_peercert}, <<"">>)) ||
+    ServerConfig = #server_config{
+                      hostname= <<"this.host.dev">>,
+                      port= 1965,
+                      routing=Routing,
+                      docroot=Docroot
+                     },
+    Cert = {error, no_peercert},
+
+    [ ?_assertEqual(Expected, handle_line(TestInput, ServerConfig,
+                                          Cert, <<"">>)) ||
         {Expected, TestInput} <- handle_line_test_data() ].
 
 handle_line_test_() ->
