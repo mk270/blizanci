@@ -8,7 +8,11 @@
 -module(blizanci_status).
 -export([gemini_status/1]).
 
--spec gemini_status(atom()) -> {integer(), binary()}.
+
+-spec gemini_status(Code) -> Result
+              when Code   :: atom(),
+                   Result :: {integer(), binary()}.
+
 gemini_status(request_too_long)      -> {59, <<"Request too long">>};
 gemini_status(request_not_parsed)    -> {59, <<"Request not parsed">>};
 gemini_status(bad_query_string)      -> {59, <<"Bad query string">>};
