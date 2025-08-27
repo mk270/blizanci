@@ -112,7 +112,7 @@ proto_opts() ->
 
 -spec routing_table(Docroot, CGIroot, CACerts) -> RoutingTable
               when Docroot      :: string(),
-                   CGIRoot      :: string(),
+                   CGIroot      :: string(),
                    CACerts      :: [string()],
                    RoutingTable :: [route_entry()].
 
