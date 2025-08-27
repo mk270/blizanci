@@ -219,13 +219,7 @@ handle_info({'DOWN', OsPid, process, Pid, Reason}, State) ->
     handle_down(OsPid, Pid, Reason, State);
 
 handle_info({stdout, OsPid, Msg}, State) ->
-    {ExpectedPid, ExpectedOsPid, Buffer} = State#worker_state.cgi_status,
-    ExpectedOsPid = OsPid,
-    NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
-    NewState = State#worker_state{
-                 cgi_status={ExpectedPid, ExpectedOsPid, NewBuffer}},
-    {noreply, NewState};
-
+    handle_stdout(OsPid, Msg, State);
 handle_info(Info, State) ->
     lager:info("OOB msg:~p", [Info]),
     {noreply, State}.
@@ -257,6 +251,21 @@ format_status(_Opt, Status) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec handle_stdout(OsPid, Msg, State) -> Result
+              when OsPid  :: integer(),
+                   Msg    :: binary(),
+                   State  :: worker_state(),
+                   Result :: any(). % presumably an OTP style return value
+
+handle_stdout(OsPid, Msg, State) ->
+    {ExpectedPid, ExpectedOsPid, Buffer} = State#worker_state.cgi_status,
+    ExpectedOsPid = OsPid,
+    NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
+    NewState = State#worker_state{
+                 cgi_status={ExpectedPid, ExpectedOsPid, NewBuffer}},
+    {noreply, NewState}.
+
 
 -spec handle_down(OsPid, Pid, Reason, State) -> Result
               when OsPid  :: integer(),
