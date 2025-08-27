@@ -454,8 +454,8 @@ handle_parsed_url(URI, Config, Cert, Rest) ->
                    Result  :: gemini_response().
 
 handle_url(#{ scheme := <<"gopher">> }, _) -> {error_code, proxy_refused};
-handle_url(#{ scheme := <<"https">> }, _) -> {error_code, proxy_refused};
-handle_url(#{ scheme := <<"http">> }, _) -> {error_code, proxy_refused};
+handle_url(#{ scheme := <<"https">>  }, _) -> {error_code, proxy_refused};
+handle_url(#{ scheme := <<"http">>   }, _) -> {error_code, proxy_refused};
 handle_url(#{ scheme := Scheme } = Request, Config) ->
     case protocol_supported(Scheme) of
         {true, Proto} -> handle_gemini_url(Proto, Request, Config);
