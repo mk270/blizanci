@@ -254,7 +254,10 @@ code_change(_OldVsn, State, _Extra) ->
 % This ceremony is necessary for telling the Erlang VM to monitor
 % the socket for incoming data, and must be called each time the
 % socket is to be read from.
--spec activate(atom(), inet:socket()) -> 'ok' | {'error', _}.
+-spec activate(Transport, Socket) -> Result
+              when Transport :: atom(),
+                   Socket    :: any(),
+                   Result    :: 'ok' | {'error', _}.
 activate(Transport, Socket) ->
     Transport:setopts(Socket, [{active, once}]).
 

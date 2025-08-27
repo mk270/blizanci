@@ -31,7 +31,7 @@
 
 -record(state,
         {transport    :: atom(),
-         socket       :: inet:socket(),
+         socket       :: any(),
          buffer       :: binary(),
          config       :: server_config(),
          requested    :: boolean(),
