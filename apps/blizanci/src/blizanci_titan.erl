@@ -34,7 +34,7 @@
 -define(QUEUE, ?MODULE).
 -define(MAX_TITAN, 10).
 
--define(MAX_AGE, 3600). % for expiring files
+-define(MAX_AGE, 3600). % for expiring files; measured in seconds
 
 -record(titan_state, {parent,
                       size,
