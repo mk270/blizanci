@@ -35,23 +35,31 @@ default_options() ->
        bare_mimetype    => <<"text/gemini">>
      }.
 
--spec cancel(pid()) -> ok.
+-spec cancel(Pid) -> ok
+              when Pid :: pid().
 cancel(Pid) when is_pid(Pid) ->
     ok.
 
 % Called by the servlet
 %
--spec request(path_matches(), request_details(), server_config(), options()) ->
-                         {'immediate', gemini_response()} |
-                         'defer'.
+-spec request(Matches, Req, ServerConfig, RouteOpts) -> Result
+              when Matches      :: path_matches(),
+                   Req          :: request_details(),
+                   ServerConfig :: server_config(),
+                   RouteOpts    :: options(),
+                   Result       :: {'immediate', gemini_response()} | 'defer'.
+
 request(Matches, _Req, _ServerConfig, RouteOpts) ->
     #{ <<"PATH">> := Path } = Matches,
     Response = serve_file(Path, RouteOpts),
     {immediate, Response}.
 
 
--spec serve(path_matches(), request_details(), server_config(), options()) ->
-                   gateway_result().
+-spec serve(path_matches(),
+            request_details(),
+            server_config(),
+            options()) ->
+          gateway_result().
 serve(_, _, _, _) ->
     {gateway_error, unimplemented}.
 

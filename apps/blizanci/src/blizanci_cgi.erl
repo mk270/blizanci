@@ -80,13 +80,16 @@ default_options() ->
     #{ cgiprefix => "/cgi-bin/" }.
 
 % Called by the ppool queue manager; passes the arguments straight through
--spec start_link(term()) -> {ok, Pid :: pid()} |
-                      {error, Error :: {already_started, pid()}} |
-                      {error, Error :: term()} |
-                      ignore.
 %% @doc
 %% @hidden
 %% @end
+-spec start_link(Args) -> Result
+              when Args   :: term(),
+                   Result :: {ok, Pid :: pid()} |
+                             {error, Error :: {already_started, pid()}} |
+                             {error, Error :: term()} |
+                             ignore.
+
 start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
@@ -107,7 +110,7 @@ start() ->
 
 % Called by the servlet to cancel a job, e.g., if the TCP connection has
 % been closed by the remote end.
--spec cancel(pid()) -> ok.
+-spec cancel(Pid :: pid()) -> ok.
 cancel(Pid) ->
     case is_process_alive(Pid) of
         true -> gen_server:cast(Pid, cgi_quit);
@@ -117,18 +120,28 @@ cancel(Pid) ->
 
 % Called by the servlet
 %
--spec request(any(), request_details(), server_config(), any()) ->
-                     {'immediate', gemini_response()} |
-                     'defer'.
+-spec request(Path, Req, ServerConfig, RouteOpts) -> Result
+              when Path         :: any(),
+                   Req          :: request_details(),
+                   ServerConfig :: server_config(),
+                   RouteOpts    :: any(),
+                   Result       :: {'immediate', gemini_response()} | 'defer'.
+
 request(_Path, _Req, _ServerConfig, _RouteOpts) ->
     defer.
 
--spec serve(path_matches(), request_details(), server_config(), options()) ->
-          gateway_result().
+
 %% @doc
 %% Validate that a proper CGI request has been received, and if so, submit
 %% a job to the queue. Called by the servlet.
 %% @end
+-spec serve(Matches, Req, ServerConfig, RouteOpts) -> Result
+              when Matches      :: path_matches(),
+                   Req          :: request_details(),
+                   ServerConfig :: server_config(),
+                   RouteOpts    :: options(),
+                   Result       :: gateway_result().
+
 serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
     #{ <<"PATH">> := Path } = Matches,
     #{ cgiprefix := CGIPrefix,
@@ -157,7 +170,12 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
             end
     end.
 
--spec run_cgi([string()], env_list()) -> {'ok', pid()} | noalloc.
+
+-spec run_cgi(Args, Env) -> Result
+              when Args   :: [string()],
+                   Env    :: env_list(),
+                   Result :: {'ok', pid()} | noalloc.
+
 run_cgi(Args, Env) ->
     Options = [monitor, {env, Env}, stdout, stderr],
     ppool:run(?QUEUE, [{self(), {Args, Options}}]).
@@ -197,23 +215,8 @@ handle_cast(cgi_quit, State=#worker_state{cgi_status=CGI_Status}) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', OsPid, process, Pid, Status}, State) ->
-    {ExpectedPid, ExpectedOsPid, Buffer} = State#worker_state.cgi_status,
-    ExpectedPid = Pid,
-    ExpectedOsPid = OsPid,
-    %ExitStatus = exec:status(Status),
-    NewState = State#worker_state{cgi_status=no_proc},
-    case Status of
-        normal ->
-            cgi_finished({gateway_output, Buffer}, NewState);
-        {exit_status, St} ->
-            RV = exec:status(St),
-            lager:info("cgi process ended with non-zero status: ~p", [RV]),
-            cgi_finished({gateway_error, cgi_exec_error}, NewState);
-        St ->
-            lager:info("cgi process terminated anomalously: ~p", [St]),
-            cgi_finished({gateway_error, cgi_exec_error}, NewState)
-    end;
+handle_info({'DOWN', OsPid, process, Pid, Reason}, State) ->
+    handle_down(OsPid, Pid, Reason, State);
 
 handle_info({stdout, OsPid, Msg}, State) ->
     {ExpectedPid, ExpectedOsPid, Buffer} = State#worker_state.cgi_status,
@@ -255,19 +258,67 @@ format_status(_Opt, Status) ->
 %%% Internal functions
 %%%===================================================================
 
--spec cgi_finished(gateway_result(), worker_state()) -> term().
+-spec handle_down(OsPid, Pid, Reason, State) -> Result
+              when OsPid  :: integer(),
+                   Pid    :: pid(),
+                   Reason :: term(),
+                   State  :: worker_state(),
+                   Result :: any().
+
+handle_down(OsPid, Pid, Reason, State) ->
+    {ExpectedPid, ExpectedOsPid, Buffer} = State#worker_state.cgi_status,
+    ExpectedPid = Pid,
+    ExpectedOsPid = OsPid,
+    %ExitStatus = exec:status(Reason),
+    NewState = State#worker_state{cgi_status=no_proc},
+    case Reason of
+        normal ->
+            cgi_finished({gateway_output, Buffer}, NewState);
+        {exit_status, St} ->
+            RV = exec:status(St),
+            lager:info("cgi process ended with non-zero status: ~p", [RV]),
+            cgi_finished({gateway_error, cgi_exec_error}, NewState);
+        St ->
+            lager:info("cgi process terminated anomalously: ~p", [St]),
+            cgi_finished({gateway_error, cgi_exec_error}, NewState)
+    end.
+
+
+-spec cgi_finished(Reason, State) -> Result
+              when Reason :: gateway_result(),
+                   State  :: worker_state(),
+                   Result :: term().
+
 cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     blizanci_servlet_container:gateway_exit(Parent, Reason),
     {stop, normal, State}.
 
--spec cgi_environment(string(), binary(), string(), {binary(), integer()}, binary(), term()) ->
-          env_list().
+
+-spec cgi_environment(CGIPrefix, Path, Bin, HostPort,
+                      QueryString, Cert) -> Result
+              when CGIPrefix   :: string(),
+                   Path        :: binary(),
+                   Bin         :: string(),
+                   HostPort    :: {binary(), integer()},
+                   QueryString :: binary(),
+                   Cert        :: term(),
+                   Result      :: env_list().
+
 cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
     Env0 = make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert),
     blizanci_osenv:sanitise(Env0).
 
--spec make_environment(string(), binary(), string(), {binary(), integer()}, binary(), term()) ->
-          [{string(), term()}].
+
+-spec make_environment(CGIPrefix, Path, Bin, HostPort,
+                       QueryString, Cert) -> Result
+              when CGIPrefix   :: string(),
+                   Path        :: binary(),
+                   Bin         :: string(),
+                   HostPort    :: {binary(), integer()},
+                   QueryString :: binary(),
+                   Cert        :: term(),
+                   Result      :: [{string(), term()}].
+
 make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
     ScriptName = CGIPrefix ++ binary_to_list(Path),
     {Hostname, Port} = HostPort,
@@ -289,4 +340,8 @@ make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
     end.
 
 
+-spec handle_client_data(Pid, Binary) -> Response
+              when Pid      :: pid(),
+                   Binary   :: binary(),
+                   Response :: gemini_response().
 handle_client_data(_, _) -> none.

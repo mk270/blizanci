@@ -92,8 +92,14 @@ cancel(Pid) ->
 request(_, _, _, _) ->
     defer.
 
--spec serve(path_matches(), request_details(), server_config(), options()) ->
-                   gateway_result().
+
+-spec serve(Matches, Req, ServerConfig, RouteOpts) -> Result
+              when Matches      :: path_matches(),
+                   Req          :: request_details(),
+                   ServerConfig :: server_config(),
+                   RouteOpts    :: options(),
+                   Result       :: gateway_result().
+
 serve(Matches, Req, _ServerConfig, RouteOpts) ->
     #{ <<"PATH">> := Fragment } = Matches,
     #{ rest_of_input := Rest } = Req,
@@ -104,8 +110,14 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
     RootDir = filename:absname(ensure_binary(RootDirBase)),
     serve_titan_request(Fragment, Rest, WorkDir, RootDir).
 
--spec serve_titan_request(binary(), binary(), filepath(), filepath()) ->
-          gateway_result().
+
+-spec serve_titan_request(Fragment, Rest, WorkDir, RootDir) -> Result
+              when Fragment :: binary(),
+                   Rest     :: binary(),
+                   WorkDir  :: filepath(),
+                   RootDir  :: filepath(),
+                   Result   :: gateway_result().
+
 serve_titan_request(Fragment, Rest, WorkDir, RootDir)
   when is_binary(Rest), is_binary(WorkDir), is_binary(RootDir)->
     case parse_titan_request(Fragment) of
@@ -128,9 +140,14 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
 %  concurrently with the payload; that is, the Titan request specifies
 %  that a certain number of bytes of payload will follow, and sufficient
 %  bytes are already available.
--spec handle_all_in_one_request(filepath(), filepath(), binary(),
-                                binary(), integer()) ->
-          gateway_result().
+-spec handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) -> Result
+              when WorkDir :: filepath(),
+                   RootDir :: filepath(),
+                   Path    :: binary(),
+                   Rest    :: binary(),
+                   Size    :: integer(),
+                   Result  :: gateway_result().
+
 handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) ->
     {ok, Stream, TmpPath, TargetPath} =
         create_tmp_file(WorkDir, RootDir, Path, Rest),
@@ -144,8 +161,13 @@ handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) ->
 % data, or insufficient such data to fulfil the request; this entails
 % waiting for more data, therefore we put a Titan worker into the worker
 % pool to handle this
--spec enqueue_titan_job({titan_request(), binary(), filepath(), filepath()}) ->
-          gateway_result().
+-spec enqueue_titan_job(Config) -> Result
+              when Config :: {titan_request(),
+                              binary(),
+                              filepath(),
+                              filepath()},
+                   Result :: gateway_result().
+
 enqueue_titan_job(Config) ->
     case ppool:run(?QUEUE, [{self(), Config}]) of
         {ok, Pid} -> {gateway_started, Pid};
@@ -159,7 +181,11 @@ ensure_binary(X) when is_list(X) -> binary:list_to_bin(X);
 ensure_binary(X) when is_binary(X) -> X.
 
 
--spec handle_client_data(pid(), binary()) -> gemini_response().
+-spec handle_client_data(Pid, Data) -> Result
+              when Pid    :: pid(),
+                   Data   :: binary(),
+                   Result :: gemini_response().
+
 handle_client_data(Pid, Data) when is_pid(Pid) and is_binary(Data) ->
     case gen_server:call(Pid, {client_data, Data}) of
         {ok, in_progress, _NewSize} -> none;
@@ -171,6 +197,11 @@ handle_client_data(Pid, Data) when is_pid(Pid) and is_binary(Data) ->
 %%% Internal functions
 %%%===================================================================
 
+-spec parse_titan_request(Fragment) -> Result
+              when Fragment :: binary(),
+                   Result   :: {ok, titan_request()} |
+                               {error, atom()}.
+
 parse_titan_request(Fragment) ->
     case binary:split(Fragment, <<";">>) of
         [_Single] -> {error, bad_query_string};
@@ -178,8 +209,12 @@ parse_titan_request(Fragment) ->
         _ -> {error, internal_server_error}
     end.
 
--spec parse_titan_qs(binary(), binary()) ->
-          {ok, titan_request()}.
+
+-spec parse_titan_qs(Path, Query) -> Result
+              when Path   ::  binary(),
+                   Query  :: binary(),
+                   Result :: {ok, titan_request()}.
+
 parse_titan_qs(Path, Query)
   when is_binary(Path) and is_binary(Query)
  ->
@@ -193,6 +228,7 @@ parse_titan_qs(Path, Query)
     TitanRequest = {titan_request, Path, Size, MimeType},
     {ok, TitanRequest}.
 
+% TODO: factor out config type
 init({Parent, Config}) ->
     process_flag(trap_exit, true),
     {TitanReq, Rest, RootDir, WorkDir} = Config,
@@ -212,6 +248,7 @@ init({Parent, Config}) ->
               },
     {ok, State}.
 
+% TODO break out guts of handler
 handle_call({client_data, Data}, _From, State) ->
     UploadStatus = recv_data(Data, State),
     Reply = handle_upload_status(UploadStatus),
@@ -254,8 +291,10 @@ format_status(_Opt, Status) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--spec handle_upload_status(upload_status()) ->
-          gateway_result() | {ok, in_progress, integer()}.
+-spec handle_upload_status(Status) -> Result
+              when Status :: upload_status(),
+                   Result :: gateway_result() | {ok, in_progress, integer() }.
+
 handle_upload_status(titan_finished) ->
     {gateway_finished, {success, <<"text/plain">>, <<"Uploaded.\r\n">>}};
 handle_upload_status(titan_enotdir) ->
@@ -264,7 +303,11 @@ handle_upload_status({titan_updated, NewSize}) ->
     {ok, in_progress, NewSize}.
 
 
--spec recv_data(binary(), titan_state()) -> upload_status().
+-spec recv_data(Data, State) -> Result
+              when Data   :: binary(),
+                   State  :: titan_state(),
+                   Result :: upload_status().
+
 recv_data(Data, #titan_state{stream=Stream,
                              size=Size,
                              target_path=TargetPath,
@@ -280,8 +323,14 @@ recv_data(Data, #titan_state{stream=Stream,
             {titan_updated, NewSize}
     end.
 
--spec finish_file(io_device(), filepath(), filepath(), integer()) ->
-          upload_status().
+
+-spec finish_file(Stream, TargetPath, TmpPath, Size) -> Result
+              when Stream     :: io_device(),
+                   TargetPath :: filepath(),
+                   TmpPath    :: filepath(),
+                   Size       :: integer(),
+                   Result     :: upload_status().
+
 finish_file(Stream, TargetPath, TmpPath, Size) ->
     truncate(Stream, Size),
     ok = file:close(Stream),
@@ -293,6 +342,11 @@ finish_file(Stream, TargetPath, TmpPath, Size) ->
             titan_finished
     end.
 
+
+-spec delete(Path) -> Result
+              when Path   :: filepath(),
+                   Result :: ok | {fail, atom()} | term().
+
 delete(Path) ->
     case file:delete(Path) of
         ok -> ok;
@@ -301,21 +355,35 @@ delete(Path) ->
         Error -> Error
     end.
 
--spec truncate(io_device(), integer()) -> ok.
+
+-spec truncate(Stream, Position) -> 'ok'
+              when Stream   :: io_device(),
+                   Position :: integer().
+
 truncate(Stream, Position) when is_integer(Position) ->
     {ok, _Pos} = file:position(Stream, Position),
     ok = file:truncate(Stream).
 
--spec purge(filepath(), filepath()) -> ok.
+
 %% purge work dir of obviously left-over old files
+-spec purge(Path, WorkDir) -> 'ok'
+              when Path    :: filepath(),
+                   WorkDir :: filepath().
+
 purge(Path, WorkDir) when is_binary(Path) and is_binary(WorkDir) ->
     delete(Path),
     lager:debug("Purging: ~p, ~p", [Path, WorkDir]),
     [ delete(F) || F <- blizanci_tmpdir:stale(WorkDir, ?MAX_AGE) ],
     ok.
 
--spec create_tmp_file(filepath(), filepath(), filepath(), binary()) ->
-          {ok, io_device(), filepath(), filepath()}.
+
+-spec create_tmp_file(WorkDir, RootDir, Path, Rest) -> Result
+              when WorkDir :: filepath(),
+                   RootDir :: filepath(),
+                   Path    :: filepath(),
+                   Rest    :: binary(),
+                   Result  :: {ok, io_device(), filepath(), filepath()}.
+
 create_tmp_file(WorkDir, RootDir, Path, Rest)
   when is_binary(WorkDir) and is_binary(RootDir) and
        is_binary(Path) and is_binary(Rest)
