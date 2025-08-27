@@ -12,13 +12,23 @@
 
 -include("blizanci_types.hrl").
 
--spec prepare([{string(), module(), authorisation(), [route_option()]}]) ->
-    {'ok', [route()]} |
-    {'error', atom()}.
+
+-type route_info() :: {Proto      :: atom(),
+                       Regex      :: binary(),
+                       Module     :: module(),
+                       AuthPolicy :: authorisation(),
+                       Opts       :: [route_option()]
+                      }.
+
 % TBD
 %% @doc
 %% Check that a routing table entry is valid.
 %% @end
+-spec prepare(RouteInfo) -> Result
+              when RouteInfo :: [route_info()],
+                   Result    :: {'ok', [route()]} |
+                                {'error', term()}.
+
 prepare(RouteInfo) ->
     try make_routes(RouteInfo) of
         Routes -> {ok, Routes}
@@ -26,12 +36,18 @@ prepare(RouteInfo) ->
         Err -> {error, Err}
     end.
 
-% TBD: spec
+
+-spec make_routes(RouteInfo) -> Routes
+              when RouteInfo :: [route_info()],
+                   Routes    :: [route()].
 make_routes(RouteInfo) ->
     [ make_route(R) || R <- RouteInfo ].
 
--spec make_route({atom(), binary(), module(), authorisation(), [route_option()]})
-                -> route().
+
+-spec make_route(RouteInfo) -> Route
+              when RouteInfo :: route_info(),
+                   Route     :: route().
+
 make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
     {ok, RE} = re:compile(Regex),
     case blizanci_auth:valid_authz_policy(AuthPolicy) of
@@ -46,7 +62,6 @@ make_route(_) ->
     throw(invalid_route).
 
 
--spec route(atom(), binary(), map(), server_config()) -> gemini_response().
 %% @doc
 %% Route a Gemini request to a handler.
 %% The Config provides a routing table, which is an ordered list of regular
@@ -59,15 +74,30 @@ make_route(_) ->
 %% @param Request the Gemini request
 %% @param Config the server configuration, including the routing table
 %% @end
+-spec route(Proto, Path, Request, Config) -> Response
+              when Proto    :: atom(),
+                   Path     :: binary(),
+                   Request  :: map(),
+                   Config   :: server_config(),
+                   Response :: gemini_response().
+
 route(Proto, Path, Request, Config=#server_config{routing=Routes}) ->
     Relevant_Routes =
         lists:filter(fun (Route) -> Route#route.proto =:= Proto end,
                      Routes),
     try_route(Path, Request, Config, Relevant_Routes).
 
--spec try_route(binary(), map(), server_config(), [route()]) -> any().
+
+-spec try_route(Path, Request, Config, Routes) -> Result
+        when Path    :: binary(),
+             Request :: map(),
+             Config  :: server_config(),
+             Routes  :: [route()],
+             Result  :: any(). % FIXME
+
 try_route(_Path, _Request, _Config, []) ->
     {error_code, file_not_found};
+
 try_route(Path, Request, Config, [Route|Tail]) ->
     case route_match(Path, Route) of
         {match, Matches, Module, AuthPolicy, RouteOpts} ->
@@ -75,11 +105,16 @@ try_route(Path, Request, Config, [Route|Tail]) ->
         _ -> try_route(Path, Request, Config, Tail)
     end.
 
--spec route_match(binary(), route()) ->
-                         'nomatch' |
-                         {'match', map(), module(), authorisation(), any()}.
+
+-type match() :: {'match', map(), module(), authorisation(), any()}.
+
 % see the documentation for re:inspect/2 for what Matches represents and
 % its format
+-spec route_match(Path, Route) -> Result
+              when Path   :: binary(),
+                   Route  :: route(),
+                   Result :: match() | 'nomatch'.
+
 route_match(Path, #route{pattern=Regex,
                          module=Module,
                          auth_policy=AuthPolicy,
