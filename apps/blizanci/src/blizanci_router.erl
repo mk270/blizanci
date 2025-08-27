@@ -92,10 +92,17 @@ route_match(Path, #route{pattern=Regex,
         _ -> nomatch
     end.
 
-% TBD: typing could be improved
--spec dispatch(path_matches(), module(), map(), authorisation(),
-               server_config(), any()) ->
-          gemini_response().
+
+-spec dispatch(Matches, Module, Request, AuthPolicy,
+               ServerConfig, RouteOpts) -> Result
+              when Matches      :: path_matches(),
+                   Module       :: module(),
+                   Request      :: map(),
+                   AuthPolicy   :: authorisation(),
+                   ServerConfig :: server_config(),
+                   RouteOpts    :: any(),
+                   Result       :: gemini_response().
+
 dispatch(Matches, Module, Request, AuthPolicy, ServerConfig, RouteOpts) ->
     case blizanci_auth:authorised(AuthPolicy, Request) of
         authorised ->
