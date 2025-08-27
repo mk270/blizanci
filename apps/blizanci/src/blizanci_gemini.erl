@@ -533,8 +533,9 @@ handle_line_test_data() ->
 
 handle_line_test_() ->
     Docroot = "/tmp",
-    Static_Opts = #{ docroot => Docroot },
-    Routes = [{gemini, "(?<PATH>.*)", blizanci_static, public, Static_Opts}],
+    _Opts = [{docroot, Docroot}],
+    Opts = #{ docroot => Docroot },
+    Routes = [{gemini, <<"(?<PATH>.*)">>, blizanci_static, public, Opts}],
     {ok, Routing} = blizanci_router:prepare(Routes),
 
     [ ?_assertEqual(Expected, handle_line(TestInput,

@@ -17,7 +17,7 @@
                        Regex      :: binary(),
                        Module     :: module(),
                        AuthPolicy :: authorisation(),
-                       Opts       :: [route_option()]
+                       Opts       :: map()
                       }.
 
 % TBD
@@ -50,6 +50,9 @@ make_routes(RouteInfo) ->
 
 make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
     {ok, RE} = re:compile(Regex),
+    ok = valid_proto(Proto),
+    ok = valid_route_opts(Opts),
+    % OptsList = maps:to_list(Opts),
     case blizanci_auth:valid_authz_policy(AuthPolicy) of
         {ok, _} -> #route{proto=Proto,
                           pattern=RE,
@@ -59,6 +62,19 @@ make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
         {error, _} -> throw(invalid_route)
     end;
 make_route(_) ->
+    throw(invalid_route).
+
+
+-spec valid_proto(Proto :: atom()) -> 'ok'.
+valid_proto(gemini) -> ok;
+valid_proto(titan) -> ok;
+valid_proto(_) -> throw(invalid_route).
+
+
+-spec valid_route_opts(term()) -> 'ok'.
+valid_route_opts(Opts) when is_map(Opts) ->
+    ok; % obviously we could do better than this!
+valid_route_opts(_) ->
     throw(invalid_route).
 
 

@@ -19,7 +19,7 @@
          pattern     :: mp(),
          module      :: module(),
          auth_policy :: authorisation(),
-         options     :: [route_option()]}).
+         options     :: map()}). % [route_option()]}).
 -type route() :: #route{}.
 
 -record(server_config,
