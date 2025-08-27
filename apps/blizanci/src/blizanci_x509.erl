@@ -91,7 +91,9 @@ verify_cert(_Cert, _Event, _InitialUserState) ->
     {valid, unknown_user}.
 
 
--spec certificate_from_file(string()) -> #'Certificate'{}.
+-spec certificate_from_file(string()) ->
+          #'Certificate'{} |
+          #'OTPCertificate'{}.
 %% @doc
 %% Return the decoded certificate from a PEM-encoded file.
 %% This returns only the first certificate available in the file, and likely

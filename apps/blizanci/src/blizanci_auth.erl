@@ -11,6 +11,7 @@
 % public: no certificate requirement
 
 -module(blizanci_auth).
+-include_lib("public_key/include/public_key.hrl").
 -include("blizanci_types.hrl").
 
 -export([authorisation_policy/1, authorised/2, valid_authz_policy/1]).
@@ -64,7 +65,7 @@ cert_authorised(_, {error, no_peercert}) ->
     {error_code, cert_required};
 cert_authorised(restricted, {ok, _AnyCert}) ->
     authorised;
-cert_authorised({private, Certs}, {ok, Cert}) when is_map(Cert) ->
+cert_authorised({private, Certs}, {ok, Cert}) ->
     case cert_issued_by_any(Cert, Certs) of
         {ok, Issuer} -> lager:debug("successful auth: ~p", [Issuer]),
                         authorised;
@@ -73,13 +74,12 @@ cert_authorised({private, Certs}, {ok, Cert}) when is_map(Cert) ->
 
 
 -spec cert_issued_by_any(Cert, Issuers) -> Result
-              when Cert    :: map(),
+              when Cert    :: public_key:cert(),
                    Issuers :: [string()],
                    Result  :: {'ok', string()} | 'fail'.
 
-cert_issued_by_any(Cert, []) when is_map(Cert) -> fail;
-cert_issued_by_any(Cert, [Issuer|Tail]) when is_list(Issuer) and
-                                             is_map(Cert) ->
+cert_issued_by_any(_Cert, []) -> fail;
+cert_issued_by_any(Cert, [Issuer|Tail]) when is_list(Issuer) ->
     case cert_issued_by(Cert, Issuer) of
         ok -> {ok, Issuer};
         not_issuer -> cert_issued_by_any(Cert, Tail)
@@ -87,11 +87,11 @@ cert_issued_by_any(Cert, [Issuer|Tail]) when is_list(Issuer) and
 
 
 -spec cert_issued_by(Cert, Issuer) -> Result
-              when Cert   :: map(),
+              when Cert   :: public_key:cert(),
                    Issuer :: string(),
                    Result :: 'ok' | 'not_issuer'.
 
-cert_issued_by(Cert, Issuer) when is_map(Cert) ->
+cert_issued_by(Cert, Issuer) ->
     IssuerCert = blizanci_x509:certificate_from_file(Issuer),
     IsIssuer   = public_key:pkix_is_issuer(Cert, IssuerCert),
     case IsIssuer of
