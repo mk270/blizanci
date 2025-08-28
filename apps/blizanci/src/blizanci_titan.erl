@@ -250,15 +250,7 @@ init({Parent, Config}) ->
 
 % TODO break out guts of handler
 handle_call({client_data, Data}, _From, State) ->
-    UploadStatus = recv_data(Data, State),
-    Reply = handle_upload_status(UploadStatus),
-    case Reply of
-        {gateway_finished, _GatewayStatus} ->
-            {stop, normal, Reply, State};
-        {ok, in_progress, NewSize} ->
-            {reply, Reply, State#titan_state{bytes_recv=NewSize}}
-    end;
-
+    do_handle_client_data(Data, State);
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -290,6 +282,22 @@ format_status(_Opt, Status) ->
     Status.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec do_handle_client_data(Data, State) -> Result
+              when Data   :: binary(),
+                   State  :: titan_state(),
+                   Result :: any().
+
+do_handle_client_data(Data, State) ->
+    UploadStatus = recv_data(Data, State),
+    Reply = handle_upload_status(UploadStatus),
+    case Reply of
+        {gateway_finished, _GatewayStatus} ->
+            {stop, normal, Reply, State};
+        {ok, in_progress, NewSize} ->
+            {reply, Reply, State#titan_state{bytes_recv=NewSize}}
+    end.
+
 
 -spec handle_upload_status(Status) -> Result
               when Status :: upload_status(),
