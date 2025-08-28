@@ -13,7 +13,7 @@
 -include("blizanci_types.hrl").
 
 -export([serve/4, cancel/1, request/4, default_options/0,
-         handle_client_data/2]).
+         handle_client_data/2, start/0]).
 
 -type options() :: #{ bare_mimetype := binary(),
                       unknown_mimetype := binary(),
@@ -119,3 +119,7 @@ mime_type(Path, BareMimeType, UnknownMimeType)
                    Binary   :: binary(),
                    Response :: gemini_response().
 handle_client_data(_, _) -> none.
+
+
+start() ->
+    ok.

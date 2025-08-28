@@ -41,3 +41,6 @@
 %% TBD
 -callback handle_client_data(Pid::pid(), Payload::binary()) ->
     gemini_response().
+
+%% TBD
+-callback start() -> 'ok'.
