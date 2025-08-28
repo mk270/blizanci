@@ -194,7 +194,7 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
             Env = cgi_environment(CGIPrefix, Path, Cmd, {Hostname, Port},
                                   QueryString, Cert),
 
-            case run_cgi(Args, Env) of
+            case enqueue_cgi(Args, Env) of
                 {ok, Pid} -> {gateway_started, Pid};
                 noalloc -> {gateway_error, gateway_busy}
             end
@@ -204,12 +204,12 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
 % Actually place the CGI job on the queue
 %
 % The creation of the CGI subprocess is handled in init/1, not here.
--spec run_cgi(Args, Env) -> Result
+-spec enqueue_cgi(Args, Env) -> Result
               when Args   :: [string()],
                    Env    :: env_list(),
                    Result :: {'ok', pid()} | noalloc.
 
-run_cgi(Args, Env) ->
+enqueue_cgi(Args, Env) ->
     Options = [monitor, {env, Env}, stdout, stderr],
     ppool:run(?QUEUE, [{self(), {Args, Options}}]).
 
@@ -331,6 +331,7 @@ handle_down(OsPid, Pid, Reason, State) ->
     end.
 
 
+% Notify the *rest* of the system that we're finished
 -spec cgi_finished(Reason, State) -> Result
               when Reason :: gateway_result(),
                    State  :: worker_state(),
