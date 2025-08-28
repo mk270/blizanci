@@ -381,8 +381,6 @@ handle_request(Payload, #state{buffer=Buffer,
 %% @hidden
 %% @end
 
-% This function is only exposed in order to facilitate testing.
-
 % Take the request line which has been received in full from the client
 % and check that it's valid UTF8; if so, break it down into its URL parts
 -spec handle_line(Cmd, Config, Cert, Rest) -> Result
@@ -505,7 +503,6 @@ handle_gemini_url(_Proto, #{ port := ReqPort },
 handle_gemini_url(_, _, _) -> {error_code, host_unrecognised}.
 
 
-
 % Strip leading slash(es) from URL
 -spec handle_path(Proto, Path, Req, Config) -> Result
               when Proto  :: atom(),
@@ -546,6 +543,8 @@ handle_file(Proto, Path, Req, Config) when is_binary(Path) ->
 serve(Proto, Path, Req, Config) ->
     blizanci_router:route(Proto, Path, Req, Config).
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec format_headers(Code, Meta) -> Result
               when Code   :: integer(),
