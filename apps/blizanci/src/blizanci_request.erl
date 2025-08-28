@@ -266,8 +266,3 @@ tests(_State) ->
 
     [[?_assertEqual(Expected, HandleLine(Arg))
       || {Expected, Arg} <- handle_line_test_data()]].
-
-     %%     fun(_) ->
-     %%         [[?_assertEqual(Expected, HandleLine(Arg)) ||
-     %%             {Expected, Arg} <- handle_line_test_data()]]
-     %% end
