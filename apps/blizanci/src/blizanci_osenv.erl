@@ -75,6 +75,8 @@ unset_os_env_except(Exceptions) ->
     ok.
 
 
+% Return a list of the environment variables that are defined (from the
+% perspective of the UNIX process running the Erlang VM).
 -spec defined_os_env_vars() -> Result
               when Result :: [string()].
 defined_os_env_vars() ->

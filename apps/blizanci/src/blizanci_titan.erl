@@ -248,7 +248,7 @@ init({Parent, Config}) ->
               },
     {ok, State}.
 
-% TODO break out guts of handler
+
 handle_call({client_data, Data}, _From, State) ->
     do_handle_client_data(Data, State);
 handle_call(_Request, _From, State) ->

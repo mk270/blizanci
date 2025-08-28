@@ -96,10 +96,10 @@ start_link(Args) ->
 
 % Must be called by the application on initialisation; establishes the
 % ppool queue for which most of this module is a set of callbacks.
--spec start() -> ok.
 %% @doc
 %% @hidden
 %% @end
+-spec start() -> ok.
 start() ->
     blizanci_osenv:unset_os_env_except(?ALLOWED_ENV),
     case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of

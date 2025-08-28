@@ -331,6 +331,10 @@ respond({success, MimeType, Data}, #state{transport=Transport,
     finished.
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Request handling.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 % Theoretically, a client could send its request very slowly, with
 % parts of the URL arriving piecemeal; it could also send a massive
 % blob of data all at once. We buffer data received from the client
@@ -544,7 +548,10 @@ serve(Proto, Path, Req, Config) ->
     blizanci_router:route(Proto, Path, Req, Config).
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Utilities.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 -spec format_headers(Code, Meta) -> Result
               when Code   :: integer(),
