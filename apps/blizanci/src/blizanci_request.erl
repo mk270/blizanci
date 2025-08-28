@@ -220,7 +220,7 @@ serve(Proto, Path, Req, Config) ->
 
 handle_line_test_data() ->
     [
-     {{file, <<"text/gemini">>, <<"/dir1/index.gemini">>},
+     {{file, <<"text/gemini">>, <<"test-docroot/dir1/index.gemini">>},
       <<"gemini://this.host.dev/dir1/index.gemini">>},
 
      {{redirect, <<"dir1/index.gemini">>},
@@ -230,9 +230,24 @@ handle_line_test_data() ->
       <<"gemini://this.host.dev:1965/dir1/">>}
     ].
 
-test_handle_line() ->
+handle_line_test_() ->
+    {
+     setup,
+     fun setup/0,
+     fun teardown/1,
+     fun tests/1
+    }.
+
+-define(APP, mime_lookup).
+
+setup() ->
+    {ok, _} = application:ensure_all_started(?APP).
+
+teardown(_State) ->
+    ok = application:stop(?APP).
+
+tests(_State) ->
     Docroot = "test-docroot",
-    _Opts = [{docroot, Docroot}],
     Opts = #{ docroot => Docroot },
     Routes = [{gemini, <<"(?<PATH>.*)">>, blizanci_static, public, Opts}],
     {ok, Routing} = blizanci_router:prepare(Routes),
@@ -245,15 +260,14 @@ test_handle_line() ->
                      },
     Cert = {error, no_peercert},
 
-    [ ?_assertEqual(Expected, handle_line(TestInput, ServerConfig,
-                                          Cert, <<"">>)) ||
-        {Expected, TestInput} <- handle_line_test_data() ].
+    HandleLine = fun(TestInput) ->
+                         handle_line(TestInput, ServerConfig, Cert, <<"">>)
+                 end,
 
-handle_line_test_() ->
-    App = mime_lookup,
-    {
-     setup,
-     fun() -> {ok, _} = application:ensure_all_started(App) end,
-     fun(_) -> ok = application:stop(App) end,
-     fun() -> test_handle_line() end
-    }.
+    [[?_assertEqual(Expected, HandleLine(Arg))
+      || {Expected, Arg} <- handle_line_test_data()]].
+
+     %%     fun(_) ->
+     %%         [[?_assertEqual(Expected, HandleLine(Arg)) ||
+     %%             {Expected, Arg} <- handle_line_test_data()]]
+     %% end
