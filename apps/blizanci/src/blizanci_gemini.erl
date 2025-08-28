@@ -110,7 +110,7 @@ init({Ref, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
     {ok, Socket} = ranch:handshake(Ref),
     ok = activate(Transport, Socket),
-    PC = ssl:peercert(Socket),
+    PeerCert = ssl:peercert(Socket),
     Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     Port = proplists:get_value(port, Opts),
     Routing = proplists:get_value(routing, Opts),
@@ -127,7 +127,7 @@ init({Ref, Transport, Opts}) ->
                config=Config,
                requested=false,
                servlet_proc=no_proc,
-               client_cert=PC},
+               client_cert=PeerCert},
     erlang:send_after(?TIMEOUT_MS, self(), timeout),
     gen_server:enter_loop(?MODULE, [], State).
 
