@@ -93,7 +93,7 @@ valid_route_opts(_) ->
 -spec route(Proto, Path, Request, Config) -> Response
               when Proto    :: atom(),
                    Path     :: binary(),
-                   Request  :: map(),
+                   Request  :: request_details(),
                    Config   :: server_config(),
                    Response :: gemini_response().
 
@@ -106,7 +106,7 @@ route(Proto, Path, Request, Config=#server_config{routing=Routes}) ->
 
 -spec try_route(Path, Request, Config, Routes) -> Result
         when Path    :: binary(),
-             Request :: map(),
+             Request :: request_details(),
              Config  :: server_config(),
              Routes  :: [route()],
              Result  :: any(). % FIXME
@@ -148,13 +148,14 @@ route_match(Path, #route{pattern=Regex,
                ServerConfig, RouteOpts) -> Result
               when Matches      :: path_matches(),
                    Module       :: module(),
-                   Request      :: map(),
+                   Request      :: request_details(),
                    AuthPolicy   :: authorisation(),
                    ServerConfig :: server_config(),
                    RouteOpts    :: any(),
                    Result       :: gemini_response().
 
 dispatch(Matches, Module, Request, AuthPolicy, ServerConfig, RouteOpts) ->
+    % io:format("dispatch req: ~p~n", [Request]),
     case blizanci_auth:authorised(AuthPolicy, Request) of
         authorised ->
             blizanci_servlet_container:request(Module, Matches, Request,

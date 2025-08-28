@@ -131,7 +131,7 @@ actually_handle_client_data(Pid, Payload) ->
 -spec request(Module, Matches, Request, ServerConfig, RouteOpts) -> Result
               when Module       :: module(),
                    Matches      :: path_matches(),
-                   Request      :: any(),
+                   Request      :: request_details(),
                    ServerConfig :: server_config(),
                    RouteOpts    :: any(),
                    Result       :: gemini_response().
@@ -147,7 +147,7 @@ request(Module, Matches, Request, ServerConfig, RouteOpts) ->
 -spec defer_request(Module, Matches, Req, ServerConfig, RouteOpts) -> Result
           when Module       :: module(),
                Matches      :: path_matches(),
-               Req          :: any(), % should be able to do better
+               Req          :: request_details(),
                ServerConfig :: server_config(),
                RouteOpts    :: any(),
                Result       :: gemini_response().

@@ -447,7 +447,7 @@ handle_parsed_url(URI, Config, Cert, Rest) ->
 % Handle a request whose URL has been broken up thus:
 %   [Scheme, Hostname, Port, Path]
 -spec handle_url(Request, Config) -> Result
-              when Request :: map(),
+              when Request :: request_details(),
                    Config  :: server_config(),
                    Result  :: gemini_response().
 
@@ -476,7 +476,7 @@ protocol_supported(_)           -> {false, none}.
 % request)
 -spec handle_gemini_url(Proto, Req, Config) -> Result
               when Proto  :: atom(),
-                   Req    :: map(),
+                   Req    :: request_details(),
                    Config :: server_config(),
                    Result :: gemini_response().
 
@@ -507,7 +507,7 @@ handle_gemini_url(_, _, _) -> {error_code, host_unrecognised}.
 -spec handle_path(Proto, Path, Req, Config) -> Result
               when Proto  :: atom(),
                    Path   :: binary(),
-                   Req    :: map(),
+                   Req    :: request_details(),
                    Config :: server_config(),
                    Result :: gemini_response().
 
@@ -521,7 +521,7 @@ handle_path(Proto, Path, Req, Config) ->
 -spec handle_file(Proto, Path, Req, Config) -> Result
               when Proto  :: atom(),
                    Path   :: binary(),
-                   Req    :: map(),
+                   Req    :: request_details(),
                    Config :: server_config(),
                    Result :: gemini_response().
 
@@ -536,7 +536,7 @@ handle_file(Proto, Path, Req, Config) when is_binary(Path) ->
 -spec serve(Proto, Path, Req, Config) -> Result
               when Proto  :: atom(),
                    Path   :: binary(),
-                   Req    :: map(),
+                   Req    :: request_details(),
                    Config :: server_config(),
                    Result :: gemini_response().
 
