@@ -46,7 +46,7 @@ valid_authz_policy(_) -> {error, invalid_authz_policy}.
 %% @end
 -spec authorised(AuthPolicy, Request) -> Result
               when AuthPolicy :: authorisation(),
-                   Request    :: map(),
+                   Request    :: request_details(),
                    Result     :: 'authorised' | {'error_code', atom()}.
 
 authorised(public, _Request) -> authorised;

@@ -29,6 +29,9 @@
          docroot    :: string()}).
 -type server_config() :: #server_config{}.
 
+-type peer_cert() :: {'ok', public_key:der_encoded() } |
+                     {'error', term() }.
+
 -record(state,
         {transport    :: atom(),
          socket       :: any(),
@@ -36,7 +39,7 @@
          config       :: server_config(),
          requested    :: boolean(),
          servlet_proc :: servlet_proc(),
-         client_cert  :: term()}).
+         client_cert  :: peer_cert()}).
 -type state() :: #state{}.
 
 -type gemini_response() :: {'file', binary(), binary()}
@@ -73,7 +76,7 @@
 
 -type client_cert() :: 'error' | {'ok', cert_details()}.
 
--type request_details() :: #{ client_cert   := client_cert(),
+-type request_details() :: #{ client_cert   := peer_cert(),
                               query         := binary(),
                               rest_of_input := binary(),
                               scheme        := binary(),

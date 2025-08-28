@@ -310,7 +310,7 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
                    Bin         :: string(),
                    HostPort    :: {binary(), integer()},
                    QueryString :: binary(),
-                   Cert        :: term(),
+                   Cert        :: peer_cert(),
                    Result      :: env_list().
 
 cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
@@ -325,7 +325,7 @@ cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
                    Bin         :: string(),
                    HostPort    :: {binary(), integer()},
                    QueryString :: binary(),
-                   Cert        :: term(),
+                   Cert        :: peer_cert(),
                    Result      :: [{string(), term()}].
 
 make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
