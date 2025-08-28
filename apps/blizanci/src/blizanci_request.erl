@@ -114,6 +114,9 @@ handle_parsed_url(URI, Config, Cert, Rest) ->
 
 % Handle a request whose URL has been broken up thus:
 %   [Scheme, Hostname, Port, Path]
+%
+% In particular we are concerned to filter out requests for URL schemes
+% other than gemini:// and titan://, with an appropriate response
 -spec handle_url(Request, Config) -> Result
               when Request :: request_details(),
                    Config  :: server_config(),
@@ -127,7 +130,6 @@ handle_url(#{ scheme := Scheme } = Request, Config) ->
         {true, Proto} -> handle_gemini_url(Proto, Request, Config);
         {false, _}    -> {error_code, unrecognised_protocol}
     end.
-
 
 -spec protocol_supported(Proto) -> Result
               when Proto  :: binary(),
@@ -184,7 +186,7 @@ handle_path(Proto, Path, Req, Config) ->
     handle_file(Proto, Path, Req, Config).
 
 
-% Deal with ".." attempts
+% Disallow URLs with a ".." in them
 -spec handle_file(Proto, Path, Req, Config) -> Result
               when Proto  :: atom(),
                    Path   :: binary(),
@@ -199,7 +201,7 @@ handle_file(Proto, Path, Req, Config) when is_binary(Path) ->
     end.
 
 
-% Separate out CGI
+% Pass the request off to the router
 -spec serve(Proto, Path, Req, Config) -> Result
               when Proto  :: atom(),
                    Path   :: binary(),

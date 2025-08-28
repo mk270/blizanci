@@ -64,6 +64,36 @@
 
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
+
+% A note re environment variables.
+%
+% At startup, the module removes all but the following list of ALLOWED_ENV
+% environment variables from the running UNIX process that hosts the Erlang
+% VM.
+%
+% The preserved variables, constant across all requests, are:
+%
+%   $HOME
+%   $USER
+%   $PATH
+%   $LOGNAME
+%   $SHELL
+%
+% On a per-request basis, the following variables are set:
+%
+%   $PATH_TRANSLATED
+%   $QUERY_STRING
+%   $SCRIPT_NAME
+%   $SERVER_NAME
+%   $SERVER_PORT
+%   $SERVER_PROTOCOL
+%   $REMOTE_USER  (this latter one is only set if a client cert is proferred)
+%
+% No other environment variables get passed through to the CGI runner.
+% In particular, variables inherited at startup from the UNIX environment
+% are not passed through unless on the "preserved" list above.
+
+
 -define(ALLOWED_ENV,
         ["HOME",
          "USER",
@@ -171,6 +201,9 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
     end.
 
 
+% Actually place the CGI job on the queue
+%
+% The creation of the CGI subprocess is handled in init/1, not here.
 -spec run_cgi(Args, Env) -> Result
               when Args   :: [string()],
                    Env    :: env_list(),
@@ -204,6 +237,7 @@ handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
+
 %% @doc
 %% @hidden
 %% @end
@@ -223,6 +257,7 @@ handle_info({stdout, OsPid, Msg}, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
+
 %% @doc
 %% @hidden
 %% @end
@@ -231,6 +266,7 @@ terminate(normal, _State) ->
 terminate(_Reason, _State) ->
     %lager:info("CGI queue worker ~p terminating: [[~p]]", [self(), Reason]),
     ok.
+
 
 %% @doc
 %% @hidden
@@ -251,6 +287,7 @@ format_status(_Opt, Status) ->
 %%% Internal functions
 %%%===================================================================
 
+% Deal with the asynchronous stdout from the CGI process.
 -spec handle_stdout(OsPid, Msg, State) -> Result
               when OsPid  :: integer(),
                    Msg    :: binary(),
@@ -266,6 +303,8 @@ handle_stdout(OsPid, Msg, State) ->
     {noreply, NewState}.
 
 
+% Despite the name, this covers the usual case when the CGI subprocess
+% terminates (i.e., both the normal and error termination possibilities).
 -spec handle_down(OsPid, Pid, Reason, State) -> Result
               when OsPid  :: integer(),
                    Pid    :: pid(),
@@ -302,6 +341,11 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
     {stop, normal, State}.
 
 
+% Returns the "sanitised" version of the per-request environment variables
+%
+% This basically ensures that both the key and value are strings, and
+% values like 'undefined' are handled. The actual details of the variables
+% are determined by make_environment/6
 -spec cgi_environment(CGIPrefix, Path, Bin, HostPort,
                       QueryString, Cert) -> Result
               when CGIPrefix   :: string(),
@@ -317,6 +361,8 @@ cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
     blizanci_osenv:sanitise(Env0).
 
 
+% Construct the process environment for the CGI program, based on the
+% incoming Gemini
 -spec make_environment(CGIPrefix, Path, Bin, HostPort,
                        QueryString, Cert) -> Result
               when CGIPrefix   :: string(),
@@ -348,6 +394,7 @@ make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
     end.
 
 
+% No-op for this module
 -spec handle_client_data(Pid, Binary) -> Response
               when Pid      :: pid(),
                    Binary   :: binary(),
