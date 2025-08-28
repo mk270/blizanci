@@ -109,7 +109,7 @@ route(Proto, Path, Request, Config=#server_config{routing=Routes}) ->
              Request :: request_details(),
              Config  :: server_config(),
              Routes  :: [route()],
-             Result  :: any(). % FIXME
+             Result  :: gemini_response().
 
 try_route(_Path, _Request, _Config, []) ->
     {error_code, file_not_found};
