@@ -55,8 +55,9 @@
 %% @end
 
 -module(blizanci_config).
+-include("blizanci_types.hrl").
 
--export([ssl_opts/0, proto_opts/0, active_servlets/0]).
+-export([make/0]).
 
 -define(PORT, 1965).
 
@@ -142,10 +143,13 @@ routing_table(Docroot, CGIroot, CACerts) ->
       || {Proto, Pattern, Module, AuthPolicy, Opts} <- Default_Route_Specs ].
 
 
-% TBD: obviously this should actually be derived from the routing table
--spec active_servlets() -> [module()].
-active_servlets() ->
-    [blizanci_cgi, blizanci_titan].
+% this is a ridiculous utility function to return the unique modules in the
+% routing table
+-spec unique_module(Tuples) -> Results
+             when Tuples  :: [tuple()],
+                  Results :: [term()].
+unique_module(Tuples) ->
+   lists:usort([T#route.module || T <- Tuples, is_tuple(T), tuple_size(T) > 0]).
 
 
 -spec get_pem_file_from_environment(App, Key, Default_Filename) -> Result
@@ -158,3 +162,17 @@ active_servlets() ->
 get_pem_file_from_environment(App, Key, Default_Filename) ->
     Value = application:get_env(App, Key, Default_Filename),
     blizanci_x509:validate_pem_file(Value).
+
+
+-spec make() -> map().
+make() ->
+    SSL_Opts = ssl_opts(),
+    Proto_Opts = proto_opts(),
+    Routing = proplists:get_value(routing, Proto_Opts),
+    ActiveServlets = unique_module(Routing),
+
+    #{
+      ssl_opts        => SSL_Opts,
+      proto_opts      => Proto_Opts,
+      active_servlets => ActiveServlets
+     }.

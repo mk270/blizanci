@@ -19,11 +19,14 @@ listen() ->
     ok = application:ensure_started(mime_lookup),
     ok = application:ensure_started(ranch),
 
-    Servlets = blizanci_config:active_servlets(),
-    [ ok = Servlet:start() || Servlet <- Servlets ],
+    Config = blizanci_config:make(),
+    #{
+      ssl_opts        := SSL_Opts,
+      proto_opts      := Proto_Opts,
+      active_servlets := Servlets
+     } = Config,
 
-    SSL_Opts   = blizanci_config:ssl_opts(),
-    Proto_Opts = blizanci_config:proto_opts(),
+    [ ok = Servlet:start() || Servlet <- Servlets ],
 
     {ok, Listener} = ranch:start_listener(?LISTENER,
                                           ranch_ssl, SSL_Opts,
