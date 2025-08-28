@@ -1,6 +1,6 @@
 {application, blizanci,
  [{description, "A Gemini protocol server"},
-  {vsn, "5.2.0"},
+  {vsn, "5.3.0"},
   {registered, [blizanci_sup]},
   {mod, {blizanci_app, []}},
   {applications,
