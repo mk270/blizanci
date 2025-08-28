@@ -67,8 +67,7 @@ cert_authorised(restricted, {ok, _AnyCert}) ->
     authorised;
 cert_authorised({private, Certs}, {ok, Cert}) ->
     case cert_issued_by_any(Cert, Certs) of
-        {ok, Issuer} -> lager:debug("successful auth: ~p", [Issuer]),
-                        authorised;
+        {ok, _Issuer} -> authorised;
         fail -> {error_code, cert_not_authorised}
     end.
 

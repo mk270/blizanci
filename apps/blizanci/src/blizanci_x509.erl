@@ -140,11 +140,11 @@ validate_pem_file(Filename) ->
         {ok, PemBin} ->
             case public_key:pem_decode(PemBin) of
                 [] ->
-                    lager:warning("File ~p not a PEM cert.", [Filename]),
+                    %lager:warning("File ~p not a PEM cert.", [Filename]),
                     {fail, not_a_cert};
                 _ -> {ok, Filename}
             end;
         _ ->
-            lager:warning("Couldn't open ~p", [Filename]),
+            %lager:warning("Couldn't open ~p", [Filename]),
             {fail, couldnt_open_pem_file}
     end.

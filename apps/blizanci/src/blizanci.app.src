@@ -7,7 +7,6 @@
    [kernel,
     stdlib,
     runtime_tools,
-    lager,
     ranch,
     erlexec,
     realpath,

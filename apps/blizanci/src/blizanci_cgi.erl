@@ -220,8 +220,7 @@ handle_info({'DOWN', OsPid, process, Pid, Reason}, State) ->
 
 handle_info({stdout, OsPid, Msg}, State) ->
     handle_stdout(OsPid, Msg, State);
-handle_info(Info, State) ->
-    lager:info("OOB msg:~p", [Info]),
+handle_info(_Info, State) ->
     {noreply, State}.
 
 %% @doc
@@ -229,8 +228,8 @@ handle_info(Info, State) ->
 %% @end
 terminate(normal, _State) ->
     ok;
-terminate(Reason, _State) ->
-    lager:info("CGI queue worker ~p terminating: [[~p]]", [self(), Reason]),
+terminate(_Reason, _State) ->
+    %lager:info("CGI queue worker ~p terminating: [[~p]]", [self(), Reason]),
     ok.
 
 %% @doc
@@ -284,11 +283,11 @@ handle_down(OsPid, Pid, Reason, State) ->
         normal ->
             cgi_finished({gateway_output, Buffer}, NewState);
         {exit_status, St} ->
-            RV = exec:status(St),
-            lager:info("cgi process ended with non-zero status: ~p", [RV]),
+            _RV = exec:status(St),
+            %lager:info("cgi process ended with non-zero status: ~p", [RV]),
             cgi_finished({gateway_error, cgi_exec_error}, NewState);
-        St ->
-            lager:info("cgi process terminated anomalously: ~p", [St]),
+        _St ->
+            %lager:info("cgi process terminated anomalously: ~p", [St]),
             cgi_finished({gateway_error, cgi_exec_error}, NewState)
     end.
 

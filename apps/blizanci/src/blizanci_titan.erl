@@ -261,16 +261,16 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 
-handle_info(Info, State) ->
-    lager:info("OOB msg:~p", [Info]),
+handle_info(_Info, State) ->
+    %lager:info("OOB msg:~p", [Info]),
     {noreply, State}.
 
 
 terminate(normal, #titan_state{tmp_file=TmpPath, work_dir=WorkDir}) ->
     ok = purge(TmpPath, WorkDir),
     ok;
-terminate(Reason, #titan_state{tmp_file=TmpPath, work_dir=WorkDir}) ->
-    lager:info("Titan queue worker ~p terminating: [[~p]]", [self(), Reason]),
+terminate(_Reason, #titan_state{tmp_file=TmpPath, work_dir=WorkDir}) ->
+    %lager:info("Titan queue worker ~p terminating: [[~p]]", [self(), Reason]),
     ok = purge(TmpPath, WorkDir),
     ok.
 
@@ -380,7 +380,7 @@ truncate(Stream, Position) when is_integer(Position) ->
 
 purge(Path, WorkDir) when is_binary(Path) and is_binary(WorkDir) ->
     delete(Path),
-    lager:debug("Purging: ~p, ~p", [Path, WorkDir]),
+    %lager:debug("Purging: ~p, ~p", [Path, WorkDir]),
     [ delete(F) || F <- blizanci_tmpdir:stale(WorkDir, ?MAX_AGE) ],
     ok.
 
@@ -399,8 +399,8 @@ create_tmp_file(WorkDir, RootDir, Path, Rest)
     TmpFile = blizanci_tmpdir:tmp_file_name(),
     TmpPath = filename:join(WorkDir, TmpFile),
     TargetPath = filename:join(RootDir, Path),
-    lager:debug("titan path: ~p", [Path]),
-    lager:debug("titan tmp: ~p, target: ~p", [TmpPath, TargetPath]),
+    %lager:debug("titan path: ~p", [Path]),
+    %lager:debug("titan tmp: ~p, target: ~p", [TmpPath, TargetPath]),
     {ok, Stream} = file:open(TmpPath, [write]),
     ok = file:write(Stream, Rest),
     {ok, Stream, TmpPath, TargetPath}.

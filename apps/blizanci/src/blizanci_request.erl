@@ -69,7 +69,6 @@ handle_line(Cmd, Config, Cert, Rest) when is_binary(Cmd) ->
         {error, _, _}      -> {error_code, bad_unicode};
         {incomplete, _, _} -> {error_code, bad_unicode};
         S ->
-            lager:debug("Request: ~p", [S]),
             case uri_string:parse(S) of
                 {error, _, _} -> {error_code, request_not_parsed};
                 URI -> handle_parsed_url(URI, Config, Cert, Rest)
@@ -126,8 +125,7 @@ handle_url(#{ scheme := <<"http">>   }, _) -> {error_code, proxy_refused};
 handle_url(#{ scheme := Scheme } = Request, Config) ->
     case protocol_supported(Scheme) of
         {true, Proto} -> handle_gemini_url(Proto, Request, Config);
-        {false, _} -> lager:info("unrecognised protocol: ~p", [Request]),
-                      {error_code, unrecognised_protocol}
+        {false, _}    -> {error_code, unrecognised_protocol}
     end.
 
 
