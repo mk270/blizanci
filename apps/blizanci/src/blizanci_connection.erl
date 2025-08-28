@@ -43,7 +43,7 @@
 %
 % All calls below handle_request return a response of type gemini_response().
 
--module(blizanci_gemini).
+-module(blizanci_connection).
 -include_lib("eunit/include/eunit.hrl").
 -behaviour(gen_server).
 -include("gen_server.hrl").

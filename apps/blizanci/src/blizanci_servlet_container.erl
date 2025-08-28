@@ -294,7 +294,7 @@ do_handle_payload(Payload, State=#servlet_state{
 report_result(Parent, Result) ->
     ok = check_result(Result),
     ServletResult = Result,
-    ok = blizanci_gemini:servlet_result(Parent, ServletResult).
+    ok = blizanci_connection:servlet_result(Parent, ServletResult).
 
 
 -spec check_result(Result) -> 'ok'

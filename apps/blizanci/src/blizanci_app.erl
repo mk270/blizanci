@@ -27,7 +27,7 @@ listen() ->
 
     {ok, Listener} = ranch:start_listener(?LISTENER,
                                           ranch_ssl, SSL_Opts,
-                                          blizanci_gemini, Proto_Opts),
+                                          blizanci_connection, Proto_Opts),
     {ok, Listener}.
 
 start(_StartType, _StartArgs) ->
