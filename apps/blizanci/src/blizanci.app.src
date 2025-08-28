@@ -23,6 +23,7 @@
              blizanci_connection,
              blizanci_osenv,
              blizanci_path,
+             blizanci_request,
              blizanci_router,
              blizanci_servlet,
              blizanci_servlet_container,
