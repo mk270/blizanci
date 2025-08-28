@@ -40,6 +40,18 @@ sanitise(Env) ->
     [ sanitise_kv(K, V) || {K, V} <- Env, is_list(K) ].
 
 
+% Sanitise an individual {Key, Value} pair
+%
+% The only caller pretty much guarantees that 'Key' will be a string
+%
+% We convert:
+%   binaries to strings: <<"foo">> -> "foo"
+%   integers to strings: 1234 -> "1234"
+%   the atom 'undefined' -> "undefined"
+%
+% We leave strings as strings
+%
+% Other inputs for 'Value' will lead to a nomatch
 -spec sanitise_kv(Key, Value) -> Result
               when Key    :: string(),
                    Value  :: term(),
