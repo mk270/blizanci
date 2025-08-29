@@ -18,7 +18,7 @@
 fix_path(S) ->
     {ok, S2} = realpath:normalise(S),
     {ok, S3} = realpath:canonicalise(S2),
-    {ok, _S4} = realpath:normalise(S3).
+    {ok, _S} = realpath:normalise(S3).
 
 
 %% @doc

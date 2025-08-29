@@ -96,7 +96,6 @@ handle_parsed_url(URI, Config, Cert, Rest) ->
                       P -> P
                   end,
         Query = maps:get(query, URI, <<>>),
-        %% TBD: make this a struct
         #{ scheme        => Scheme,
            host          => ReqHost,
            port          => ReqPort,
