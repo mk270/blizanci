@@ -18,7 +18,8 @@
 fix_path(S) ->
     {ok, S2} = realpath:normalise(S),
     {ok, S3} = realpath:canonicalise(S2),
-    {ok, S3}.
+    {ok, _S4} = realpath:normalise(S3).
+
 
 %% @doc
 %% Is the path S underneath Root? This largely boils down to whether the former
