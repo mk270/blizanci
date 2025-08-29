@@ -104,6 +104,10 @@ route(Proto, Path, Request, Config=#server_config{routing=Routes}) ->
     try_route(Path, Request, Config, Relevant_Routes).
 
 
+% Iterate through the routes in the routing table in order, and dispatch
+% the request if it matches one of them.
+%
+% Otherwise return a "file not found" code
 -spec try_route(Path, Request, Config, Routes) -> Result
         when Path    :: binary(),
              Request :: request_details(),
@@ -124,6 +128,12 @@ try_route(Path, Request, Config, [Route|Tail]) ->
 
 -type match() :: {'match', map(), module(), authorisation(), any()}.
 
+% Does the Path match the candidate route? If so return details of how it
+% matches. Otherwise return 'nomatch'.
+%
+% The data returned in the 'match' case includes variables captured by
+% the regular expression, such as "PATH"
+%
 % see the documentation for re:inspect/2 for what Matches represents and
 % its format
 -spec route_match(Path, Route) -> Result
