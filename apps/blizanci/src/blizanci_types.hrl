@@ -48,7 +48,8 @@
                          | hangup
                          | none
                          | {'init_servlet', pid()}
-                         | {'servlet_output', binary()}.
+                         | {'servlet_output', binary()}
+                         | {'success', binary(), binary()}.
 
 -type gemini_session() :: continue
                         | finished
