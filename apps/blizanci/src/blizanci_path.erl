@@ -16,9 +16,16 @@
               when S      :: list(),
                    Result :: {ok, string()} | {error, atom()}.
 fix_path(S) ->
-    {ok, S2} = realpath:normalise(S),
-    {ok, S3} = realpath:canonicalise(S2),
-    {ok, _S} = realpath:normalise(S3).
+    fix_path2(realpath:normalise(S)).
+
+fix_path2({ok, S}) ->
+    fix_path3(realpath:canonicalise(S));
+fix_path2(Error) -> Error.
+
+fix_path3({ok, S}) ->
+    realpath:normalise(S);
+fix_path3(Error) -> Error.
+
 
 
 %% @doc
