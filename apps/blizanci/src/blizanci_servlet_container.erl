@@ -92,6 +92,7 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
     end.
 
 
+% TODO: document what on earth is going on here
 -spec handle_client_data(Pid, Payload) -> Result
               when Pid     :: pid(),
                    Payload :: binary(),

@@ -34,6 +34,10 @@
 % | {gateway_error, cgi_error()}
 %
 % This message is sent by calling blizanci_servlet_container:gateway_exit/2.
+%
+% The servlet has an analogous protocol for communicating back to the
+% connection handler.
+%
 %% @end
 
 -module(blizanci_cgi).
