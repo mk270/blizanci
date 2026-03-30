@@ -109,7 +109,8 @@
 %%% API
 %%%===================================================================
 
--spec default_options() -> map().
+-spec default_options() -> Result
+              when Result :: map().
 default_options() ->
     #{ cgiprefix => "/cgi-bin/" }.
 
@@ -133,7 +134,8 @@ start_link(Args) ->
 %% @doc
 %% @hidden
 %% @end
--spec start() -> ok.
+-spec start() -> Result
+              when Result :: ok.
 start() ->
     blizanci_osenv:unset_os_env_except(?ALLOWED_ENV),
     case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of
@@ -144,7 +146,9 @@ start() ->
 
 % Called by the servlet to cancel a job, e.g., if the TCP connection has
 % been closed by the remote end.
--spec cancel(Pid :: pid()) -> ok.
+-spec cancel(Pid) -> Result
+              when Pid    :: pid(),
+                   Result :: ok.
 cancel(Pid) ->
     case is_process_alive(Pid) of
         true -> gen_server:cast(Pid, cgi_quit);
@@ -279,8 +283,10 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
--spec format_status(Opt :: normal | terminate,
-                    Status :: list()) -> Status :: term().
+-spec format_status(Opt, Status) -> Result
+              when Opt    :: normal | terminate,
+                   Status :: list(),
+                   Result :: term().
 %% @doc
 %% @hidden
 %% @end
