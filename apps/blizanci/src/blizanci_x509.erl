@@ -86,8 +86,8 @@ munge_utf8({utf8String, B}) when is_binary(B) -> B.
 
 
 -spec oid_alias(OID) -> Alias
-              when OID    :: tuple(),
-                   Alias  :: atom().
+              when OID   :: tuple(),
+                   Alias :: atom().
 
 oid_alias({2,5,4,3}) -> common_name;
 oid_alias({2,5,4,6}) -> country;
@@ -97,16 +97,16 @@ oid_alias(_) -> unknown.
 
 
 -spec verify_cert(OtpCert, Event, InitialUserState) -> Result
-              when OtpCert :: #'OTPCertificate'{},
-                   Event :: {'bad_cert',
-                             Reason :: atom() | {'revoked', atom()} } |
-                            {'extension', #'Extension'{}} |
-                            'valid' |
-                            'valid_peer',
+              when OtpCert          :: #'OTPCertificate'{},
+                   Event            :: {'bad_cert',
+                                        Reason :: atom() | {'revoked', atom()} } |
+                                       {'extension', #'Extension'{}} |
+                                       'valid' |
+                                       'valid_peer',
                    InitialUserState :: term(),
-                   Result :: {'valid', UserState :: term()} |
-                             {'fail', Reason :: term()} |
-                             {'unknown', UserState :: term()}.
+                   Result           :: {'valid', UserState :: term()} |
+                                       {'fail', Reason :: term()} |
+                                       {'unknown', UserState :: term()}.
 
 verify_cert(_Cert, _Event, _InitialUserState) ->
     {valid, unknown_user}.

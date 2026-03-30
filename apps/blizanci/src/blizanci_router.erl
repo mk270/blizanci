@@ -65,13 +65,17 @@ make_route(_) ->
     throw(invalid_route).
 
 
--spec valid_proto(Proto :: atom()) -> 'ok'.
+-spec valid_proto(Proto) -> Result
+              when Proto  :: atom(),
+                   Result :: 'ok'.
 valid_proto(gemini) -> ok;
 valid_proto(titan) -> ok;
 valid_proto(_) -> throw(invalid_route).
 
 
--spec valid_route_opts(term()) -> 'ok'.
+-spec valid_route_opts(Opts) -> Result
+              when Opts   :: term(),
+                   Result :: 'ok'.
 valid_route_opts(Opts) when is_map(Opts) ->
     ok; % obviously we could do better than this!
 valid_route_opts(_) ->
@@ -109,11 +113,11 @@ route(Proto, Path, Request, Config=#server_config{routing=Routes}) ->
 %
 % Otherwise return a "file not found" code
 -spec try_route(Path, Request, Config, Routes) -> Result
-        when Path    :: binary(),
-             Request :: request_details(),
-             Config  :: server_config(),
-             Routes  :: [route()],
-             Result  :: gemini_response().
+              when Path    :: binary(),
+                   Request :: request_details(),
+                   Config  :: server_config(),
+                   Routes  :: [route()],
+                   Result  :: gemini_response().
 
 try_route(_Path, _Request, _Config, []) ->
     {error_code, file_not_found};

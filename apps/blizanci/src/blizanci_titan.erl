@@ -56,14 +56,16 @@
 %%% API
 %%%===================================================================
 
--spec default_options() -> map().
+-spec default_options() -> Result
+              when Result :: map().
 default_options() ->
     #{
       work_dir => <<"titan-temp">>,
       docroot => "docroot"
      }.
 
--spec start() -> ok.
+-spec start() -> Result
+              when Result :: ok.
 start() ->
     case ppool:start_pool(?QUEUE, ?MAX_TITAN,
                           {?MODULE, start_link, []}) of
@@ -71,13 +73,16 @@ start() ->
         {ok, _Pid} -> ok
     end.
 
--spec start_link(any()) ->
-          'ignore' | {'error',_} | {'ok',pid() | {pid(),reference()}}.
+-spec start_link(Args) -> Result
+              when Args   :: any(),
+                   Result :: 'ignore' | {'error', _} | {'ok', pid() | {pid(), reference()}}.
 start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
 
--spec cancel(pid()) -> ok.
+-spec cancel(Pid) -> Result
+              when Pid    :: pid(),
+                   Result :: ok.
 cancel(Pid) ->
     case is_process_alive(Pid) of
         true -> gen_server:cast(Pid, titan_quit);
@@ -86,9 +91,12 @@ cancel(Pid) ->
 
 % Called by the servlet
 %
--spec request(path_matches(), request_details(), server_config(), options()) ->
-                         {'immediate', gemini_response()} |
-                         'defer'.
+-spec request(Matches, Req, ServerConfig, RouteOpts) -> Result
+              when Matches      :: path_matches(),
+                   Req          :: request_details(),
+                   ServerConfig :: server_config(),
+                   RouteOpts    :: options(),
+                   Result       :: {'immediate', gemini_response()} | 'defer'.
 request(_, _, _, _) ->
     defer.
 
@@ -175,8 +183,9 @@ enqueue_titan_job(Config) ->
     end.
 
 
--spec ensure_binary(list()) -> binary();
-                   (binary()) -> binary().
+-spec ensure_binary(Input) -> Result
+              when Input  :: list() | binary(),
+                   Result :: binary().
 ensure_binary(X) when is_list(X) -> binary:list_to_bin(X);
 ensure_binary(X) when is_binary(X) -> X.
 
@@ -364,9 +373,10 @@ delete(Path) ->
     end.
 
 
--spec truncate(Stream, Position) -> 'ok'
+-spec truncate(Stream, Position) -> Result
               when Stream   :: io_device(),
-                   Position :: integer().
+                   Position :: integer(),
+                   Result   :: 'ok'.
 
 truncate(Stream, Position) when is_integer(Position) ->
     {ok, _Pos} = file:position(Stream, Position),
@@ -374,9 +384,10 @@ truncate(Stream, Position) when is_integer(Position) ->
 
 
 %% purge work dir of obviously left-over old files
--spec purge(Path, WorkDir) -> 'ok'
+-spec purge(Path, WorkDir) -> Result
               when Path    :: filepath(),
-                   WorkDir :: filepath().
+                   WorkDir :: filepath(),
+                   Result  :: 'ok'.
 
 purge(Path, WorkDir) when is_binary(Path) and is_binary(WorkDir) ->
     delete(Path),

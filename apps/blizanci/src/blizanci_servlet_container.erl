@@ -67,8 +67,9 @@
 
 
 % Called by the gemini protocol server during shutdown of a connection
--spec cancel(Proc) -> 'ok'
-              when Proc :: servlet_proc().
+-spec cancel(Proc) -> Result
+              when Proc   :: servlet_proc(),
+                   Result :: 'ok'.
 
 cancel(no_proc) ->
     ok;
@@ -81,9 +82,10 @@ cancel({proc, Pid}) ->
 
 % Called by the CGI runner
 %-spec gateway_exit(pid(), gateway_result()) -> 'ok'.
--spec gateway_exit(Pid, Result) -> 'ok'
-              when Pid    :: pid(),
-                   Result :: gateway_result().
+-spec gateway_exit(Pid, GWResult) -> Result
+              when Pid      :: pid(),
+                   GWResult :: gateway_result(),
+                   Result   :: 'ok'.
 
 gateway_exit(Pid, Result) when is_pid(Pid) ->
     case is_process_alive(Pid) of
@@ -146,12 +148,12 @@ request(Module, Matches, Request, ServerConfig, RouteOpts) ->
 
 
 -spec defer_request(Module, Matches, Req, ServerConfig, RouteOpts) -> Result
-          when Module       :: module(),
-               Matches      :: path_matches(),
-               Req          :: request_details(),
-               ServerConfig :: server_config(),
-               RouteOpts    :: any(),
-               Result       :: gemini_response().
+              when Module       :: module(),
+                   Matches      :: path_matches(),
+                   Req          :: request_details(),
+                   ServerConfig :: server_config(),
+                   RouteOpts    :: any(),
+                   Result       :: gemini_response().
 
 defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
     Args = [self(), Module, Matches, Req, ServerConfig, RouteOpts],
@@ -243,8 +245,10 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
--spec format_status(Opt :: normal | terminate,
-                    Status :: list()) -> Status :: term().
+-spec format_status(Opt, Status) -> Result
+              when Opt    :: normal | terminate,
+                   Status :: list(),
+                   Result :: term().
 %% @doc
 %% @hidden
 %% @end
@@ -287,9 +291,10 @@ do_handle_payload(Payload, State=#servlet_state{
     end.
 
 
--spec report_result(ParentPid, Result) -> 'ok'
-              when ParentPid :: pid(),
-                   Result    :: servlet_result().
+-spec report_result(ParentPid, ServletResult) -> Result
+              when ParentPid     :: pid(),
+                   ServletResult :: servlet_result(),
+                   Result        :: 'ok'.
 
 report_result(Parent, Result) ->
     ok = check_result(Result),
@@ -297,8 +302,9 @@ report_result(Parent, Result) ->
     ok = blizanci_connection:servlet_result(Parent, ServletResult).
 
 
--spec check_result(Result) -> 'ok'
-              when Result :: servlet_result().
+-spec check_result(ServResult) -> Result
+              when ServResult :: servlet_result(),
+                   Result     :: 'ok'.
 
 check_result({servlet_failed, Atom}) when is_atom(Atom) -> ok;
 check_result({servlet_complete, Output}) when is_binary(Output) -> ok.

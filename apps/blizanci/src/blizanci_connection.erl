@@ -61,9 +61,10 @@ start_link(Ref, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [{Ref, Transport, Opts}]).
 
 
--spec servlet_result(Pid, Result) -> 'ok'
-              when Pid    :: pid(),
-                   Result :: servlet_result().
+-spec servlet_result(Pid, ServletResult) -> Result
+              when Pid           :: pid(),
+                   ServletResult :: servlet_result(),
+                   Result        :: 'ok'.
 servlet_result(Pid, Result) when is_pid(Pid) ->
     case is_process_alive(Pid) of
         true ->

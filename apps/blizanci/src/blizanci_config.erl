@@ -61,7 +61,8 @@
 
 -define(PORT, 1965).
 
--spec ssl_opts() -> [{atom(), term()}].
+-spec ssl_opts() -> Result
+              when Result :: [{atom(), term()}].
 %% @doc
 %% Generate the options required for ranch to initialise SSL
 %% @end
@@ -85,7 +86,8 @@ ssl_opts() ->
      {versions, ['tlsv1.3']}
     ].
 
--spec proto_opts() -> [{atom(), term()}].
+-spec proto_opts() -> Result
+              when Result :: [{atom(), term()}].
 %% @doc
 %% Generate the options required for ranch to initialise the TCP listener
 %% @end
@@ -164,7 +166,8 @@ get_pem_file_from_environment(App, Key, Default_Filename) ->
     blizanci_x509:validate_pem_file(Value).
 
 
--spec make() -> map().
+-spec make() -> Result
+              when Result :: map().
 make() ->
     SSL_Opts = ssl_opts(),
     Proto_Opts = proto_opts(),

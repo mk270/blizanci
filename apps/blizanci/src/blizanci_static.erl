@@ -28,15 +28,17 @@
 -define(DEFAULT_DOCROOT,  <<"./public_gemini">>).
 
 
--spec default_options() -> map().
+-spec default_options() -> Result
+              when Result :: map().
 default_options() ->
     #{ index            => "index.gemini",
        unknown_mimetype => <<"application/octet-stream">>,
        bare_mimetype    => <<"text/gemini">>
      }.
 
--spec cancel(Pid) -> ok
-              when Pid :: pid().
+-spec cancel(Pid) -> Result
+              when Pid    :: pid(),
+                   Result :: ok.
 cancel(Pid) when is_pid(Pid) ->
     ok.
 
@@ -55,11 +57,12 @@ request(Matches, _Req, _ServerConfig, RouteOpts) ->
     {immediate, Response}.
 
 
--spec serve(path_matches(),
-            request_details(),
-            server_config(),
-            options()) ->
-          gateway_result().
+-spec serve(Matches, Req, ServerConfig, RouteOpts) -> Result
+              when Matches      :: path_matches(),
+                   Req          :: request_details(),
+                   ServerConfig :: server_config(),
+                   RouteOpts    :: options(),
+                   Result       :: gateway_result().
 serve(_, _, _, _) ->
     {gateway_error, unimplemented}.
 
@@ -67,10 +70,10 @@ serve(_, _, _, _) ->
 % If there's a valid file requested, then get its full path, so that
 % it can be sendfile()'d back to the client. If it's a directory, redirect
 % to an index file.
--spec serve_file(Path, Opts) -> Response
-              when Path     :: binary(),
-                   Opts     :: options(),
-                   Response :: gemini_response().
+-spec serve_file(Path, Opts) -> Result
+              when Path   :: binary(),
+                   Opts   :: options(),
+                   Result :: gemini_response().
 
 serve_file(Path, Opts) ->
     Docroot = maps:get(docroot, Opts, ?DEFAULT_DOCROOT),
@@ -114,10 +117,10 @@ mime_type(Path, BareMimeType, UnknownMimeType)
     end.
 
 
--spec handle_client_data(Pid, Binary) -> Response
-              when Pid      :: pid(),
-                   Binary   :: binary(),
-                   Response :: gemini_response().
+-spec handle_client_data(Pid, Binary) -> Result
+              when Pid    :: pid(),
+                   Binary :: binary(),
+                   Result :: gemini_response().
 handle_client_data(_, _) -> none.
 
 
