@@ -6,7 +6,7 @@
 %% the terms of the Apache Software Licence v2.0.
 
 -module(blizanci_status).
--export([gemini_status/1]).
+-export([gemini_status/1, valid_code/1]).
 
 
 -spec gemini_status(Code) -> Result
@@ -35,3 +35,18 @@ gemini_status(file_not_found)        -> {51, <<"File not found">>};
 gemini_status(cert_required)         -> {60, <<"Client certificate required">>};
 gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>};
 gemini_status(cert_not_authorised)   -> {60, <<"Client certificate unauthorised">>}.
+
+
+-spec valid_code(Code) -> boolean()
+              when Code :: integer().
+
+valid_code(Code) ->
+    lists:member(Code, [
+        1, 2, 3, 4, 5, 6,
+        10, 11,
+        20,
+        30, 31,
+        40, 41, 42, 43, 44,
+        50, 51, 52, 53, 59,
+        60, 61, 62
+    ]).

@@ -269,11 +269,15 @@ respond(none, _State) ->
 respond({init_servlet, Pid}, _State) ->
     {expect_servlet, Pid};
 
-respond({servlet_output, Msg}, #state{transport=Transport, socket=Socket}) ->
-    Header = format_headers(20, <<"text/plain">>),
-    Transport:send(Socket, [Header, Msg]),
-    Transport:close(Socket),
-    finished;
+respond({servlet_output, Msg}, State=#state{transport=Transport, socket=Socket}) ->
+    case parse_cgi_output(Msg) of
+        {ok, Code, Meta, Body} ->
+            Transport:send(Socket, [format_headers(Code, Meta), Body]),
+            Transport:close(Socket),
+            finished;
+        error ->
+            respond({error_code, cgi_exec_error}, State)
+    end;
 
 respond(hangup, _State) ->
     finished;
@@ -360,6 +364,44 @@ handle_request(Payload, #state{buffer=Buffer,
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Utilities.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+-spec parse_cgi_output(Buffer) -> Result
+              when Buffer :: binary(),
+                   Result :: {'ok', integer(), binary(), binary()} | 'error'.
+
+parse_cgi_output(Buffer) ->
+    case binary:split(Buffer, <<"\r\n">>) of
+        [FirstLine, Body] ->
+            case parse_gemini_header(FirstLine) of
+                {ok, Code, Meta} -> {ok, Code, Meta, Body};
+                error            -> error
+            end;
+        _ ->
+            error
+    end.
+
+
+-spec parse_gemini_header(Line) -> Result
+              when Line   :: binary(),
+                   Result :: {'ok', integer(), binary()} | 'error'.
+
+parse_gemini_header(Line) ->
+    case binary:split(Line, <<" ">>) of
+        [CodeBin, Meta] ->
+            try binary_to_integer(CodeBin) of
+                Code ->
+                    case blizanci_status:valid_code(Code) of
+                        true  -> {ok, Code, Meta};
+                        false -> error
+                    end
+            catch
+                _:_ -> error
+            end;
+        _ ->
+            error
+    end.
+
 
 
 -spec format_headers(Code, Meta) -> Result
