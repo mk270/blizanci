@@ -86,6 +86,7 @@
 % On a per-request basis, the following variables are set:
 %
 %   $PATH_TRANSLATED
+%   $PATH_INFO
 %   $QUERY_STRING
 %   $SCRIPT_NAME
 %   $SERVER_NAME
@@ -195,12 +196,13 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
         false -> {gateway_error, file_not_found};
         true ->
             #{ query := QueryString, client_cert := Cert } = Req,
+            PathInfo = maps:get(<<"PATH_INFO">>, Matches, <<>>),
 
             % Args represents a UNIX commandline comprising the path of
             % the executable with zero arguments.
             Args = [Cmd],
             Env = cgi_environment(CGIPrefix, Path, Cmd, {Hostname, Port},
-                                  QueryString, Cert),
+                                  QueryString, Cert, PathInfo),
 
             case enqueue_cgi(Args, Env) of
                 {ok, Pid} -> {gateway_started, Pid};
@@ -348,38 +350,41 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
 % values like 'undefined' are handled. The actual details of the variables
 % are determined by make_environment/6
 -spec cgi_environment(CGIPrefix, Path, Bin, HostPort,
-                      QueryString, Cert) -> Result
+                      QueryString, Cert, PathInfo) -> Result
               when CGIPrefix   :: string(),
                    Path        :: binary(),
                    Bin         :: string(),
                    HostPort    :: {binary(), integer()},
                    QueryString :: binary(),
                    Cert        :: peer_cert(),
+                   PathInfo    :: binary(),
                    Result      :: env_list().
 
-cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
-    Env0 = make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert),
+cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
+    Env0 = make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo),
     blizanci_osenv:sanitise(Env0).
 
 
 % Construct the process environment for the CGI program, based on the
 % incoming Gemini
 -spec make_environment(CGIPrefix, Path, Bin, HostPort,
-                       QueryString, Cert) -> Result
+                       QueryString, Cert, PathInfo) -> Result
               when CGIPrefix   :: string(),
                    Path        :: binary(),
                    Bin         :: string(),
                    HostPort    :: {binary(), integer()},
                    QueryString :: binary(),
                    Cert        :: peer_cert(),
+                   PathInfo    :: binary(),
                    Result      :: [{string(), term()}].
 
-make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert) ->
+make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
     ScriptName = CGIPrefix ++ binary_to_list(Path),
     {Hostname, Port} = HostPort,
 
     KVPs = [
      {"PATH_TRANSLATED", Bin},
+     {"PATH_INFO", PathInfo},
      {"QUERY_STRING", QueryString},
      {"SCRIPT_NAME", ScriptName},
      {"SERVER_NAME", Hostname},
