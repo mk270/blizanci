@@ -55,10 +55,11 @@ sanitise(Env) ->
 -spec sanitise_kv(Key, Value) -> Result
               when Key    :: string(),
                    Value  :: term(),
-                   Result :: {string(), string()}.
+                   Result :: {string(), string()} | string().
 
 sanitise_kv(Key, <<"">>) when is_list(Key) ->
-    {Key, <<"">>}; % exec:run apparently objects to null-strings as lists
+    Key ++ "="; % workaround exec:run apparently objecting
+                % to null-strings as lists
 
 sanitise_kv(Key, Value) when is_binary(Value) and is_list(Key) ->
     {Key, binary_to_list(Value)};

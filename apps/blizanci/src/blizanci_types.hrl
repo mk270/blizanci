@@ -55,7 +55,7 @@
                         | finished
                         | {'expect_servlet', pid()}.
 
--type env_list() :: [{string(), string()}].
+-type env_list() :: [{string(), string()} | string()].
 
 
 -type cgi_error() :: 'cgi_exec_error'
