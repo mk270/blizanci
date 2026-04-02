@@ -55,7 +55,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, format_status/2]).
+         terminate/2, code_change/3]).
 
 -record(worker_state, {parent, cgi_status}).
 -type worker_state() :: #worker_state{}.
@@ -282,16 +282,6 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-
--spec format_status(Opt, Status) -> Result
-              when Opt    :: normal | terminate,
-                   Status :: list(),
-                   Result :: term().
-%% @doc
-%% @hidden
-%% @end
-format_status(_Opt, Status) ->
-    Status.
 
 %%%===================================================================
 %%% Internal functions
