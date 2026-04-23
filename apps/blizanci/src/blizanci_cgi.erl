@@ -46,7 +46,6 @@
 -include("blizanci_types.hrl").
 
 -behaviour(gen_server).
--include("gen_server.hrl").
 
 %% API
 -export([serve/4, start/0, cancel/1, request/4, default_options/0,

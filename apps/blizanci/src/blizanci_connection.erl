@@ -20,7 +20,6 @@
 
 -module(blizanci_connection).
 -behaviour(gen_server).
--include("gen_server.hrl").
 -behaviour(ranch_protocol).
 
 -include("blizanci_types.hrl").
