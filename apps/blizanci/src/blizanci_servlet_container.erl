@@ -40,7 +40,6 @@
 -include("blizanci_types.hrl").
 
 -behaviour(gen_server).
--include("gen_server.hrl").
 
 %% API
 -export([request/5, cancel/1, gateway_exit/2, handle_client_data/2]).
