@@ -56,6 +56,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-record(cgi_proc, {pid, os_pid, buffer}).
 -record(worker_state, {parent, cgi_status}).
 -type worker_state() :: #worker_state{}.
 -type options() :: #{
@@ -236,7 +237,7 @@ init({Parent, {CmdLine, Options}}) ->
     process_flag(trap_exit, true),
     Result = exec:run(CmdLine, Options),
     {ok, Pid, OsPid} = Result,
-    {ok, #worker_state{parent=Parent, cgi_status={Pid, OsPid, <<>>}}}.
+    {ok, #worker_state{parent=Parent, cgi_status=#cgi_proc{pid=Pid, os_pid=OsPid, buffer= <<>>}}}.
 
 
 %% @doc
@@ -250,9 +251,8 @@ handle_call(_Request, _From, State) ->
 %% @doc
 %% @hidden
 %% @end
-handle_cast(cgi_quit, State=#worker_state{cgi_status=CGI_Status}) ->
-    {_Pid, OsPid, _Buffer} = CGI_Status,
-    exec:kill(OsPid, 9),
+handle_cast(cgi_quit, State=#worker_state{cgi_status=CGI}) ->
+    exec:kill(CGI#cgi_proc.os_pid, 9),
     {stop, normal, State};
 
 handle_cast(_Request, State) ->
@@ -296,11 +296,11 @@ code_change(_OldVsn, State, _Extra) ->
                    Result :: any(). % presumably an OTP style return value
 
 handle_stdout(OsPid, Msg, State) ->
-    {ExpectedPid, ExpectedOsPid, Buffer} = State#worker_state.cgi_status,
-    ExpectedOsPid = OsPid,
+    CGI = State#worker_state.cgi_status,
+    OsPid = CGI#cgi_proc.os_pid,
+    Buffer = CGI#cgi_proc.buffer,
     NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
-    NewState = State#worker_state{
-                 cgi_status={ExpectedPid, ExpectedOsPid, NewBuffer}},
+    NewState = State#worker_state{cgi_status=CGI#cgi_proc{buffer=NewBuffer}},
     {noreply, NewState}.
 
 
@@ -314,9 +314,10 @@ handle_stdout(OsPid, Msg, State) ->
                    Result :: any().
 
 handle_down(OsPid, Pid, Reason, State) ->
-    {ExpectedPid, ExpectedOsPid, Buffer} = State#worker_state.cgi_status,
-    ExpectedPid = Pid,
-    ExpectedOsPid = OsPid,
+    CGI = State#worker_state.cgi_status,
+    Pid = CGI#cgi_proc.pid,
+    OsPid = CGI#cgi_proc.os_pid,
+    Buffer = CGI#cgi_proc.buffer,
     %ExitStatus = exec:status(Reason),
     NewState = State#worker_state{cgi_status=no_proc},
     case Reason of
