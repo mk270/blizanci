@@ -293,11 +293,27 @@ code_change(_OldVsn, State, _Extra) ->
               when OsPid  :: integer(),
                    Msg    :: binary(),
                    State  :: worker_state(),
-                   Result :: any(). % presumably an OTP style return value
+                   Result :: {noreply, worker_state()}.
 
 handle_stdout(OsPid, Msg, State) ->
     CGI = State#worker_state.cgi_status,
-    OsPid = CGI#cgi_proc.os_pid,
+    case CGI#cgi_proc.os_pid of
+        OsPid ->
+            handle_stdout2(Msg, State);
+        Expected ->
+            % Stale message from a prior process; ignore rather than crash.
+            %logger:warning("handle_stdout: unexpected ospid ~p (expected ~p)",
+            %               [OsPid, Expected]),
+            {noreply, State}
+    end.
+
+-spec handle_stdout2(Msg, State) -> Result
+              when Msg    :: binary(),
+                   State  :: worker_state(),
+                   Result :: {noreply, worker_state()}.
+
+handle_stdout2(Msg, State) ->
+    CGI = State#worker_state.cgi_status,
     Buffer = CGI#cgi_proc.buffer,
     NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
     NewState = State#worker_state{cgi_status=CGI#cgi_proc{buffer=NewBuffer}},
@@ -311,12 +327,27 @@ handle_stdout(OsPid, Msg, State) ->
                    Pid    :: pid(),
                    Reason :: term(),
                    State  :: worker_state(),
-                   Result :: any().
+                   Result :: {noreply, worker_state()} | {stop, normal, worker_state()}.
 
 handle_down(OsPid, Pid, Reason, State) ->
     CGI = State#worker_state.cgi_status,
-    Pid = CGI#cgi_proc.pid,
-    OsPid = CGI#cgi_proc.os_pid,
+    case {CGI#cgi_proc.pid, CGI#cgi_proc.os_pid} of
+        {Pid, OsPid} ->
+            handle_down2(Reason, CGI, State);
+        _ ->
+            % Stale DOWN from a prior process; ignore rather than crash.
+            %logger:warning("handle_down: unexpected pid/ospid ~p/~p",
+            %               [Pid, OsPid]),
+            {noreply, State}
+    end.
+
+-spec handle_down2(Reason, CGI, State) -> Result
+              when Reason :: term(),
+                   CGI    :: #cgi_proc{},
+                   State  :: worker_state(),
+                   Result :: {noreply, worker_state()} | {stop, normal, worker_state()}.
+
+handle_down2(Reason, CGI, State) ->
     Buffer = CGI#cgi_proc.buffer,
     %ExitStatus = exec:status(Reason),
     NewState = State#worker_state{cgi_status=no_proc},
