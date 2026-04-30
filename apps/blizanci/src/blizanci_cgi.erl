@@ -300,7 +300,7 @@ handle_stdout(OsPid, Msg, State) ->
     case CGI#cgi_proc.os_pid of
         OsPid ->
             handle_stdout2(Msg, State);
-        Expected ->
+        _Expected ->
             % Stale message from a prior process; ignore rather than crash.
             %logger:warning("handle_stdout: unexpected ospid ~p (expected ~p)",
             %               [OsPid, Expected]),
