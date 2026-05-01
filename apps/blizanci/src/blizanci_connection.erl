@@ -116,14 +116,14 @@ handle_info({tcp_closed, _Socket}, State) ->
 handle_info({tcp_error, _, _Reason}, State) ->
     {stop, normal, State};
 
-handle_info(timeout, State=#state{servlet_proc={proc, _ServletProc}}) ->
-    %lager:debug("Proc Timeout ~p", [ServletProc]),
+handle_info(timeout, State=#state{servlet_proc={proc, ServletProc}}) ->
+    logger:debug("Proc Timeout ~p", [ServletProc]),
     respond({error_code, request_timeout}, State),
     self() ! finished,
     {stop, normal, State};
 
 handle_info(timeout, State) ->
-    %lager:debug("NoProc Timeout: ~p", [State]),
+    logger:debug("NoProc Timeout: ~p", [State]),
     respond({error_code, response_timeout}, State),
     self() ! finished,
     {stop, normal, State};
@@ -135,10 +135,10 @@ handle_info(finished, State) ->
 handle_info({ssl_closed, _SocketInfo}, State) ->
     {stop, normal, State};
 
-handle_info({'EXIT', Pid, {shutdown, {gateway_init_error, RPid, _Reason}}},
+handle_info({'EXIT', Pid, {shutdown, {gateway_init_error, RPid, Reason}}},
             State=#state{servlet_proc={proc, ProcPid}})
   when Pid =:= RPid, Pid =:= ProcPid ->
-    %lager:info("Gateway init failure: ~p", [Reason]),
+    logger:info("Gateway init failure: ~p", [Reason]),
     respond({error_code, internal_server_error}, State),
     self() ! finished,
     {noreply, State};
@@ -152,14 +152,14 @@ handle_info({'EXIT', Pid, {shutdown, {gateway_complete, RPid, Response}}},
     {noreply, State};
 
 
-handle_info({'EXIT', _Pid, _Reason}, State) ->
-    %lager:info("Abend of process ~p ~p", [Pid, Reason]),
+handle_info({'EXIT', Pid, Reason}, State) ->
+    logger:info("Abend of process ~p ~p", [Pid, Reason]),
     respond({error_code, internal_server_error}, State),
     self() ! finished,
     {noreply, State};
 
-handle_info(_Msg, State) ->
-    %lager:info("Received unrecognised message: ~p~n", [Msg]),
+handle_info(Msg, State) ->
+    logger:info("Received unrecognised message: ~p", [Msg]),
     {stop, normal, State}.
 
 %% TBD: respond + error_code + self ! finis.. etc ought to be factored into
@@ -339,22 +339,22 @@ handle_request(Payload, #state{buffer=Buffer,
             R = blizanci_request:handle_line(Line, Config, Cert, Rest),
             {<<"">>, R};
         _ ->
-            %lager:warning("Shouldn't get here"),
+            logger:warning("Shouldn't get here"),
             {<<>>, hangup}
     end;
 handle_request(Payload, #state{buffer=Buffer,
                                servlet_proc={proc, Proc}
                               }) when is_pid(Proc) ->
     AllInput = erlang:iolist_to_binary([Buffer, Payload]),
-    %lager:debug("~p about to send client data ~p", [self(), Payload]),
+    logger:debug("~p about to send client data ~p", [self(), Payload]),
 
     try blizanci_servlet_container:handle_client_data(Proc, AllInput) of
         Result ->
-            %lager:debug("client data sent"),
+            logger:debug("client data sent"),
             {<<>>, Result}
     catch
-        _Err1:_Err2 ->
-            %lager:info("error sending client data: ~p ~p", [Err1, Err2]),
+        Err1:Err2 ->
+            logger:info("error sending client data: ~p ~p", [Err1, Err2]),
             {<<>>, {error_code, internal_server_error}}
     end.
 

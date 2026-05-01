@@ -232,8 +232,8 @@ handle_info(_Info, State) ->
 %% @end
 terminate(normal, _State) ->
     ok;
-terminate(_Reason, _State) ->
-    %lager:info("servlet ~p terminating because: [[~p]]", [self(), Reason]),
+terminate(Reason, _State) ->
+    logger:info("servlet ~p terminating because: [[~p]]", [self(), Reason]),
     ok.
 
 
@@ -274,7 +274,7 @@ do_handle_payload(Payload, State=#servlet_state{
     try Module:handle_client_data(Pid, Payload) of
         Reply -> {reply, Reply, State}
     catch
-        _E1:_E2 -> %lager:info("unmatched error in servlet: ~p", [{E1, E2}]),
+        E1:E2 -> logger:info("unmatched error in servlet: ~p", [{E1, E2}]),
                  Response = {error_code, internal_server_error},
                  exit({shutdown, {gateway_complete, self(), Response}})
     end.
