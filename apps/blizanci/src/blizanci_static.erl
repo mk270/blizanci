@@ -124,5 +124,7 @@ mime_type(Path, BareMimeType, UnknownMimeType)
 handle_client_data(_, _) -> none.
 
 
+-spec start() -> Result
+              when Result :: ok.
 start() ->
     ok.
