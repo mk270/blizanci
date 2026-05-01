@@ -97,7 +97,23 @@
 % No other environment variables get passed through to the CGI runner.
 % In particular, variables inherited at startup from the UNIX environment
 % are not passed through unless on the "preserved" list above.
-
+%
+%
+% In the Gemini App Guide, it is suggested that the following variables
+% be made available:
+%
+%   $SCRIPT_NAME
+%   $PATH_INFO
+%   $QUERY_STRING
+%   $REMOTE_ADDR
+%   $AUTH_TYPE
+%   $TLS_CLIENT_HASH
+%   $TLS_CLIENT_SUBJECT
+%   $TLS_CLIENT_ISSUER
+%
+% Note that these above are not exactly the variables currently supported
+%
+% See gemini://geminiprotocol.net/docs/app-guide.gmi
 
 -define(ALLOWED_ENV,
         ["HOME",
