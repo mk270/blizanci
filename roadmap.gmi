@@ -1,0 +1,20 @@
+# Blizanci Roadmap
+
+A notional roadmap for Blizanci, as of April 2026 / v5.5.1
+
+## Phase 1 (v6.*)
+
+* better logging
+* proper support for latest TLS given client certificates
+
+## Phase 2 (v7.*)
+
+* better config/routing/auth API
+* SNI support
+* conversion to library
+
+## Phase 3 (v8.*)
+
+* caching
+* directory indexing
+* better packaging (e.g., docker, documentation)
