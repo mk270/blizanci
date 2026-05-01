@@ -151,7 +151,8 @@ routing_table(Docroot, CGIroot, CACerts) ->
              when Tuples  :: [tuple()],
                   Results :: [term()].
 unique_module(Tuples) ->
-   lists:usort([T#route.module || T <- Tuples, is_tuple(T), tuple_size(T) > 0]).
+    Modules = [T#route.module || T <- Tuples, is_tuple(T), tuple_size(T) > 0],
+    lists:usort(Modules).
 
 
 -spec get_pem_file_from_environment(App, Key, Default_Filename) -> Result
