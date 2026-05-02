@@ -81,6 +81,7 @@ ssl_opts() ->
      {keyfile, Key},
      {verify, verify_peer},
      {cacerts, []},
+     {certificate_authorities, false},
      {verify_fun, {VerifyFn, []}},
      {fail_if_no_peer_cert, false},
      {versions, ['tlsv1.3']}
