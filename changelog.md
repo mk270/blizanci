@@ -1,20 +1,13 @@
 # Blizanci Changelog
 
-## 5.5.2
+## 5.6.0
 
 - Use later version of erlexec
 - Adapt to recent OTP requirements around CA certs
 - Pass $PATH_INFO through
 - Improve handling of CGI (stray messages, internal records)
-- Various spec fixes
-
-## 5.5.1
-
-- Adapt to later OTP requirements around CA certs
 - Remove deprecated `format_status/2` callback
-- Bump erlexec dependency version
-- Pass `$PATH_INFO` through to CGI environment
-- Use proper record for CGI status info (replacing ad-hoc tuple)
+- Various spec fixes
 
 ## 5.5.0
 
