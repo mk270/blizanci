@@ -1,12 +1,6 @@
 # Blizanci Changelog
 
-## 5.5.2
-
-- Use later version of erlexec
-- Adapt to recent OTP requirements around CA certs
-- Pass $PATH_INFO through
-- Improve handling of CGI (stray messages, internal records)
-- Various spec fixes
+## 5.6.0
 
 ## 5.5.1
 
