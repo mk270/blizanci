@@ -55,7 +55,6 @@ authorised(AuthPolicy, Request) ->
     cert_authorised(AuthPolicy, Cert).
 
 
-%% TODO: should check for expiry
 -spec cert_authorised(Authorisation, CertInfo) -> Result
               when Authorisation :: authorisation(),
                    CertInfo      :: term(),
@@ -63,10 +62,30 @@ authorised(AuthPolicy, Request) ->
 
 cert_authorised(_, {error, no_peercert}) ->
     {error_code, cert_required};
-cert_authorised(restricted, {ok, _AnyCert}) ->
+cert_authorised(AuthPolicy, {ok, DerCert}) ->
+    case blizanci_x509:check_cert(DerCert) of
+        {ok, OtpCert} ->
+            cert_authorised_policy(AuthPolicy, OtpCert);
+        {error, cert_expired} ->
+            {error_code, cert_expired};
+        {error, cert_not_parsed} ->
+            {error_code, cert_not_parsed}
+    end.
+
+
+%% @doc Check a certificate, already known to be within its validity
+%% period, against the policy's issuer requirements (if any).
+%% @end
+-spec cert_authorised_policy(Authorisation, OtpCert) -> Result
+              when Authorisation :: authorisation(),
+                   OtpCert       :: term(),
+                   Result        :: 'authorised'
+                                  | {'error_code', atom()}.
+
+cert_authorised_policy(restricted, _OtpCert) ->
     authorised;
-cert_authorised({private, Certs}, {ok, Cert}) ->
-    case cert_issued_by_any(Cert, Certs) of
+cert_authorised_policy({private, Certs}, OtpCert) ->
+    case cert_issued_by_any(OtpCert, Certs) of
         {ok, _Issuer} -> authorised;
         fail -> {error_code, cert_not_authorised}
     end.

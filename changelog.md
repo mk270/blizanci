@@ -1,5 +1,13 @@
 # Blizanci Changelog
 
+## 5.7.0
+
+- Reject expired client certificates (previously accepted indefinitely
+  regardless of the auth policy's issuer check)
+- Never crash on a client cert we can't fully parse; report it as a
+  distinct, dedicated status instead
+- Document NUL-byte handling in the CGI environment
+
 ## 5.6.0
 
 ## 5.5.1

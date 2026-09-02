@@ -217,12 +217,23 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
             % Args represents a UNIX commandline comprising the path of
             % the executable with zero arguments.
             Args = [Cmd],
-            Env = cgi_environment(CGIPrefix, Path, Cmd, {Hostname, Port},
-                                  QueryString, Cert, PathInfo),
 
-            case enqueue_cgi(Args, Env) of
-                {ok, Pid} -> {gateway_started, Pid};
-                noalloc -> {gateway_error, gateway_busy}
+            % A client cert, if offered, need not have been required by
+            % this route's auth policy (which may be 'public'); it's
+            % opportunistically decoded here just to populate REMOTE_USER.
+            % If that decoding fails, fail the whole request rather than
+            % silently launching the CGI script without REMOTE_USER: a
+            % certificate we can't understand is exactly the kind of
+            % input we don't want to guess about.
+            case cgi_environment(CGIPrefix, Path, Cmd,
+                                 {Hostname, Port}, QueryString,
+                                 Cert, PathInfo) of
+                {ok, Env} ->
+                    case enqueue_cgi(Args, Env) of
+                        {ok, Pid} -> {gateway_started, Pid};
+                        noalloc -> {gateway_error, gateway_busy}
+                    end;
+                {error, Reason} -> {gateway_error, Reason}
             end
     end.
 
@@ -405,15 +416,30 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
                    QueryString :: binary(),
                    Cert        :: peer_cert(),
                    PathInfo    :: binary(),
-                   Result      :: env_list().
+                   Result      :: {ok, env_list()}
+                                | {error, atom()}.
 
 cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
-    Env0 = make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo),
-    blizanci_osenv:sanitise(Env0).
+    Env = make_environment(CGIPrefix, Path, Bin, HostPort,
+                           QueryString, Cert, PathInfo),
+    case Env of
+        {ok, Env0} -> {ok, blizanci_osenv:sanitise(Env0)};
+        {error, Reason} -> {error, Reason}
+    end.
 
 
 % Construct the process environment for the CGI program, based on the
-% incoming Gemini
+% incoming Gemini request.
+%
+% QUERY_STRING and PATH_INFO are taken verbatim from client-controlled
+% input, and the request line is only required to be valid UTF-8 -- which
+% permits an embedded NUL byte (U+0000 is one valid UTF-8 octet). That
+% NUL therefore reaches erlexec's {env, Env} list unmodified. This was
+% checked against erlexec's env handling (CmdOptions::init_cenv,
+% exec_impl.cpp): each entry is a length-tracked std::string, converted
+% to a NUL-terminated C string only at the point of building execve's
+% envp array, so an embedded NUL truncates that one variable's value --
+% it cannot smuggle in an additional, independent environment variable.
 -spec make_environment(CGIPrefix, Path, Bin, HostPort,
                        QueryString, Cert, PathInfo) -> Result
               when CGIPrefix   :: string(),
@@ -423,7 +449,8 @@ cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
                    QueryString :: binary(),
                    Cert        :: peer_cert(),
                    PathInfo    :: binary(),
-                   Result      :: [{string(), term()}].
+                   Result      :: {ok, [{string(), term()}]}
+                                | {error, atom()}.
 
 make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
     ScriptName = CGIPrefix ++ binary_to_list(Path),
@@ -439,11 +466,17 @@ make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
      {"SERVER_PROTOCOL", "GEMINI"}
     ],
 
+    % A client cert here may not have been required by this route's auth
+    % policy (which may be 'public'); it's decoded opportunistically just
+    % to populate REMOTE_USER. See blizanci_x509:peercert_cn/1 for why a
+    % cert we can't understand is reported rather than silently dropped.
     case blizanci_x509:peercert_cn(Cert) of
         {ok, #{ common_name := CN }} ->
-            KVPs ++ [{"REMOTE_USER", CN}];
+            {ok, KVPs ++ [{"REMOTE_USER", CN}]};
         error ->
-            KVPs
+            {ok, KVPs};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 

@@ -61,7 +61,9 @@
 -type cgi_error() :: 'cgi_exec_error'
                    | 'file_not_found'
                    | 'gateway_busy'
-                   | 'unimplemented'.
+                   | 'unimplemented'
+                   | 'cert_not_parsed'
+                   | 'cert_unsupported_encoding'.
 
 -type gateway_result() :: {'gateway_output', binary()}
                         | {'gateway_finished', gemini_response() }
@@ -75,7 +77,7 @@
 -type cert_details() :: #{ common_name := binary(),
                            issuer_common_name := binary() }.
 
--type client_cert() :: 'error' | {'ok', cert_details()}.
+-type client_cert() :: 'error' | {'ok', cert_details()} | {'error', atom()}.
 
 -type request_details() :: #{ client_cert   := peer_cert(),
                               query         := binary(),

@@ -18,26 +18,40 @@
 -export([peercert_cn/1]).
 -export([verify_cert/3]).
 -export([validate_pem_file/1, certificate_from_file/1]).
+-export([check_cert/1]).
 
 %% @doc
 %% Check if the connection has a valid certificate,
 %% and return the issuer and subject names, or error.
+%%
+%% A certificate is remote-attacker-controlled input: decoding it, or
+%% dumping its RDNs, must never crash the calling process. Any failure
+%% is reported as a distinct {error, Reason}, distinguishing a
+%% certificate we plain couldn't decode (`cert_not_parsed`) from one
+%% which decoded fine but uses a directory-string encoding for an RDN
+%% attribute value that we don't know how to render
+%% (`cert_unsupported_encoding`), e.g. bmpString/universalString.
 %% @end
 -spec peercert_cn(C) -> ClientCert
               when C          :: term(),
                    ClientCert :: client_cert().
 
 peercert_cn({ok, Cert}) ->
-    Res = public_key:pkix_decode_cert(Cert, otp),
-    {Issuer, Subject} = cert_rdns(Res),
-    {ok, RDN} = dump_rdn(Subject),
-    {ok, RDN_Issuer} = dump_rdn(Issuer),
-    Result =
-        #{
-          common_name => proplists:get_value(common_name, RDN),
-          issuer_common_name => proplists:get_value(common_name, RDN_Issuer)
-         },
-    {ok, Result};
+    try
+        Res = public_key:pkix_decode_cert(Cert, otp),
+        {Issuer, Subject} = cert_rdns(Res),
+        {ok, RDN} = dump_rdn(Subject),
+        {ok, RDN_Issuer} = dump_rdn(Issuer),
+        CN = proplists:get_value(common_name, RDN),
+        IssuerCN = proplists:get_value(common_name, RDN_Issuer),
+        Result = #{ common_name => CN, issuer_common_name => IssuerCN },
+        {ok, Result}
+    catch
+        throw:unsupported_rdn_value_encoding ->
+            {error, cert_unsupported_encoding};
+        _:_ ->
+            {error, cert_not_parsed}
+    end;
 peercert_cn(_) ->
     error.
 
@@ -81,8 +95,12 @@ dump_rdn(_X) ->
               when String :: list() | {'utf8String', binary()},
                    Data   :: binary().
 
-munge_utf8(S) when is_list(S)                 -> list_to_binary(S);
-munge_utf8({utf8String, B}) when is_binary(B) -> B.
+munge_utf8(S) when is_list(S)                    -> list_to_binary(S);
+munge_utf8({utf8String, B}) when is_binary(B)    -> B;
+munge_utf8({printableString, S}) when is_list(S) -> list_to_binary(S);
+munge_utf8({teletexString, S}) when is_list(S)   -> list_to_binary(S);
+munge_utf8({ia5String, S}) when is_list(S)       -> list_to_binary(S);
+munge_utf8(_) -> throw(unsupported_rdn_value_encoding).
 
 
 -spec oid_alias(OID) -> Alias
@@ -110,6 +128,82 @@ oid_alias(_) -> unknown.
 
 verify_cert(_Cert, _Event, _InitialUserState) ->
     {valid, unknown_user}.
+
+
+%% @doc
+%% Decode a raw client certificate and check that the current time falls
+%% within its validity period (NotBefore/NotAfter).
+%%
+%% As with peercert_cn/1, the input is remote-attacker-controlled, so a
+%% certificate we can't decode at all is reported distinctly
+%% (`cert_not_parsed`) from one which decodes fine but has expired
+%% (`cert_expired`).
+%% @end
+-spec check_cert(DerCert) -> Result
+              when DerCert :: public_key:der_encoded(),
+                   Result  :: {ok, #'OTPCertificate'{}}
+                            | {error, cert_expired}
+                            | {error, cert_not_parsed}.
+
+check_cert(DerCert) ->
+    try
+        OtpCert = public_key:pkix_decode_cert(DerCert, otp),
+        case cert_time_valid(OtpCert) of
+            true  -> {ok, OtpCert};
+            false -> {error, cert_expired}
+        end
+    catch
+        _:_ -> {error, cert_not_parsed}
+    end.
+
+
+-spec cert_time_valid(OtpCert) -> boolean()
+              when OtpCert :: #'OTPCertificate'{}.
+
+cert_time_valid(Cert) ->
+    {'OTPCertificate', Data, _, _} = Cert,
+    {'OTPTBSCertificate',
+     _Version, _Serial, _Signature, _Issuer,
+     Validity, _Subject, _PubKey, _X1, _X2, _X3} = Data,
+    {'Validity', NotBefore, NotAfter} = Validity,
+    Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
+    Now >= asn1_time_to_gregorian(NotBefore) andalso
+        Now =< asn1_time_to_gregorian(NotAfter).
+
+
+% UTCTime and GeneralizedTime, per RFC 5280 (PKIX profile), must be
+% expressed in UTC (a "Z" suffix) with no fractional seconds; that's
+% assumed here, and any certificate which violates it will throw and be
+% caught by check_cert/1's try/catch, i.e., be treated as cert_not_parsed.
+-spec asn1_time_to_gregorian(Time) -> Seconds
+              when Time    :: {'utcTime', string()}
+                            | {'generalTime', string()},
+                   Seconds :: integer().
+
+asn1_time_to_gregorian({utcTime, [Y1, Y2 | Rest]}) ->
+    Year2 = list_to_integer([Y1, Y2]),
+    Year = case Year2 >= 50 of
+               true  -> 1900 + Year2;
+               false -> 2000 + Year2
+           end,
+    to_gregorian(Year, Rest);
+asn1_time_to_gregorian({generalTime, Str}) ->
+    {YearStr, Rest} = lists:split(4, Str),
+    to_gregorian(list_to_integer(YearStr), Rest).
+
+
+% Rest is "MoMoDDHHMMSSZ", i.e. month/day/hour/minute/second pairs
+% followed by the mandatory "Z" (see asn1_time_to_gregorian/1 above).
+-spec to_gregorian(Year, Rest) -> Seconds
+              when Year    :: integer(),
+                   Rest    :: string(),
+                   Seconds :: integer().
+
+to_gregorian(Year, [Mo1,Mo2,D1,D2,H1,H2,Mi1,Mi2,S1,S2,$Z]) ->
+    calendar:datetime_to_gregorian_seconds(
+      {{Year, list_to_integer([Mo1,Mo2]), list_to_integer([D1,D2])},
+       {list_to_integer([H1,H2]), list_to_integer([Mi1,Mi2]),
+        list_to_integer([S1,S2])}}).
 
 
 %% @doc

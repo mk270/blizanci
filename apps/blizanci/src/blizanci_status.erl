@@ -34,7 +34,13 @@ gemini_status(cannot_overwrite)      -> {40, <<"Cannot overwrite file">>};
 gemini_status(file_not_found)        -> {51, <<"File not found">>};
 gemini_status(cert_required)         -> {60, <<"Client certificate required">>};
 gemini_status(permanent_redirect)    -> {31, <<"Moved permanently">>};
-gemini_status(cert_not_authorised)   -> {60, <<"Client certificate unauthorised">>}.
+gemini_status(cert_not_authorised)   -> {60, <<"Client certificate unauthorised">>};
+gemini_status(cert_expired) ->
+    {60, <<"Client certificate expired">>};
+gemini_status(cert_not_parsed) ->
+    {60, <<"Client certificate not understood">>};
+gemini_status(cert_unsupported_encoding) ->
+    {60, <<"Client certificate uses an unsupported name encoding">>}.
 
 
 -spec valid_code(Code) -> boolean()
