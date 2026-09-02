@@ -1,5 +1,9 @@
 # Blizanci Changelog
 
+## 5.7.1
+
+- Disallow symlinks out from under root dirs for static / CGI / Titan
+
 ## 5.7.0
 
 - Reject expired client certificates (previously accepted indefinitely
