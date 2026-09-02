@@ -19,6 +19,7 @@
 -export([verify_cert/3]).
 -export([validate_pem_file/1, certificate_from_file/1]).
 -export([check_cert/1]).
+-export([verify_signed_by/2]).
 
 %% @doc
 %% Check if the connection has a valid certificate,
@@ -204,6 +205,46 @@ to_gregorian(Year, [Mo1,Mo2,D1,D2,H1,H2,Mi1,Mi2,S1,S2,$Z]) ->
       {{Year, list_to_integer([Mo1,Mo2]), list_to_integer([D1,D2])},
        {list_to_integer([H1,H2]), list_to_integer([Mi1,Mi2]),
         list_to_integer([S1,S2])}}).
+
+
+%% @doc
+%% Check that DerCert was actually signed by IssuerCert's private key --
+%% a genuine cryptographic check, not the name-comparison that
+%% public_key:pkix_is_issuer/2 does (that function only compares the
+%% Issuer field of DerCert against the Subject field of IssuerCert; it
+%% is meant for candidate-chain construction, not a standalone trust
+%% decision, and is trivially spoofable by anyone able to set those
+%% fields on a self-signed certificate).
+%%
+%% Deliberately minimal: this does not require IssuerCert to be a
+%% "proper" CA certificate (no basicConstraints/keyUsage checks, unlike
+%% public_key:pkix_path_validation/3) -- blizanci's issuer certs are
+%% used the way an organisation runs its own internal CA for e.g.
+%% mail/VPN clients, not as web-PKI CAs, and may not carry those
+%% extensions.
+%% @end
+-spec verify_signed_by(DerCert, IssuerCert) -> Result
+              when DerCert    :: public_key:der_encoded(),
+                   IssuerCert :: #'OTPCertificate'{},
+                   Result     :: boolean().
+
+verify_signed_by(DerCert, IssuerCert) ->
+    try
+        Key = issuer_public_key(IssuerCert),
+        public_key:pkix_verify(DerCert, Key)
+    catch
+        _:_ -> false
+    end.
+
+
+-spec issuer_public_key(IssuerCert) -> Key
+              when IssuerCert :: #'OTPCertificate'{},
+                   Key        :: public_key:public_key().
+
+issuer_public_key(#'OTPCertificate'{tbsCertificate = TBS}) ->
+    #'OTPTBSCertificate'{subjectPublicKeyInfo = SPKI} = TBS,
+    #'OTPSubjectPublicKeyInfo'{subjectPublicKey = Key} = SPKI,
+    Key.
 
 
 %% @doc

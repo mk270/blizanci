@@ -64,8 +64,8 @@ cert_authorised(_, {error, no_peercert}) ->
     {error_code, cert_required};
 cert_authorised(AuthPolicy, {ok, DerCert}) ->
     case blizanci_x509:check_cert(DerCert) of
-        {ok, OtpCert} ->
-            cert_authorised_policy(AuthPolicy, OtpCert);
+        {ok, _OtpCert} ->
+            cert_authorised_policy(AuthPolicy, DerCert);
         {error, cert_expired} ->
             {error_code, cert_expired};
         {error, cert_not_parsed} ->
@@ -74,45 +74,53 @@ cert_authorised(AuthPolicy, {ok, DerCert}) ->
 
 
 %% @doc Check a certificate, already known to be within its validity
-%% period, against the policy's issuer requirements (if any).
+%% period, against the policy's issuer requirements (if any). DerCert
+%% is the raw certificate (not the decoded #'OTPCertificate'{} form),
+%% since that's what public_key:pkix_verify/2 (via
+%% blizanci_x509:verify_signed_by/2) requires.
 %% @end
--spec cert_authorised_policy(Authorisation, OtpCert) -> Result
+-spec cert_authorised_policy(Authorisation, DerCert) -> Result
               when Authorisation :: authorisation(),
-                   OtpCert       :: term(),
+                   DerCert       :: public_key:der_encoded(),
                    Result        :: 'authorised'
                                   | {'error_code', atom()}.
 
-cert_authorised_policy(restricted, _OtpCert) ->
+cert_authorised_policy(restricted, _DerCert) ->
     authorised;
-cert_authorised_policy({private, Certs}, OtpCert) ->
-    case cert_issued_by_any(OtpCert, Certs) of
+cert_authorised_policy({private, Certs}, DerCert) ->
+    case cert_issued_by_any(DerCert, Certs) of
         {ok, _Issuer} -> authorised;
         fail -> {error_code, cert_not_authorised}
     end.
 
 
--spec cert_issued_by_any(Cert, Issuers) -> Result
-              when Cert    :: public_key:cert(),
+-spec cert_issued_by_any(DerCert, Issuers) -> Result
+              when DerCert :: public_key:der_encoded(),
                    Issuers :: [string()],
                    Result  :: {'ok', string()} | 'fail'.
 
-cert_issued_by_any(_Cert, []) -> fail;
-cert_issued_by_any(Cert, [Issuer|Tail]) when is_list(Issuer) ->
-    case cert_issued_by(Cert, Issuer) of
+cert_issued_by_any(_DerCert, []) -> fail;
+cert_issued_by_any(DerCert, [Issuer|Tail]) when is_list(Issuer) ->
+    case cert_issued_by(DerCert, Issuer) of
         ok -> {ok, Issuer};
-        not_issuer -> cert_issued_by_any(Cert, Tail)
+        not_issuer -> cert_issued_by_any(DerCert, Tail)
     end.
 
 
--spec cert_issued_by(Cert, Issuer) -> Result
-              when Cert   :: public_key:cert(),
-                   Issuer :: string(),
-                   Result :: 'ok' | 'not_issuer'.
+%% @doc Check that DerCert was cryptographically signed by the private
+%% key of the issuer certificate at path Issuer -- see
+%% blizanci_x509:verify_signed_by/2 for why this isn't just
+%% public_key:pkix_is_issuer/2 (a name comparison, not a signature
+%% check).
+%% @end
+-spec cert_issued_by(DerCert, Issuer) -> Result
+              when DerCert :: public_key:der_encoded(),
+                   Issuer  :: string(),
+                   Result  :: 'ok' | 'not_issuer'.
 
-cert_issued_by(Cert, Issuer) ->
+cert_issued_by(DerCert, Issuer) ->
     IssuerCert = blizanci_x509:certificate_from_file(Issuer),
-    IsIssuer   = public_key:pkix_is_issuer(Cert, IssuerCert),
-    case IsIssuer of
-        false -> not_issuer;
-        true -> ok
+    case blizanci_x509:verify_signed_by(DerCert, IssuerCert) of
+        true  -> ok;
+        false -> not_issuer
     end.

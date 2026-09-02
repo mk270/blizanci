@@ -1,5 +1,12 @@
 # Blizanci Changelog
 
+## 5.8.0
+
+- Verify client certificates against a configured issuer by signature,
+  not by name comparison: a self-signed certificate with a spoofed
+  Issuer field previously satisfied the `private` auth policy without
+  ever needing the issuer's private key
+
 ## 5.7.1
 
 - Disallow symlinks out from under root dirs for static / CGI / Titan
