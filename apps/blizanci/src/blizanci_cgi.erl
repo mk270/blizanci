@@ -288,8 +288,8 @@ handle_info(_Info, State) ->
 %% @end
 terminate(normal, _State) ->
     ok;
-terminate(_Reason, _State) ->
-    %lager:info("CGI queue worker ~p terminating: [[~p]]", [self(), Reason]),
+terminate(Reason, _State) ->
+    logger:info("CGI queue worker ~p terminating: [[~p]]", [self(), Reason]),
     ok.
 
 
@@ -316,10 +316,10 @@ handle_stdout(OsPid, Msg, State) ->
     case CGI#cgi_proc.os_pid of
         OsPid ->
             handle_stdout2(Msg, State);
-        _Expected ->
+        Expected ->
             % Stale message from a prior process; ignore rather than crash.
-            %logger:warning("handle_stdout: unexpected ospid ~p (expected ~p)",
-            %               [OsPid, Expected]),
+            logger:warning("handle_stdout: unexpected ospid ~p (expected ~p)",
+                           [OsPid, Expected]),
             {noreply, State}
     end.
 
@@ -352,8 +352,8 @@ handle_down(OsPid, Pid, Reason, State) ->
             handle_down2(Reason, CGI, State);
         _ ->
             % Stale DOWN from a prior process; ignore rather than crash.
-            %logger:warning("handle_down: unexpected pid/ospid ~p/~p",
-            %               [Pid, OsPid]),
+            logger:warning("handle_down: unexpected pid/ospid ~p/~p",
+                           [Pid, OsPid]),
             {noreply, State}
     end.
 
@@ -371,11 +371,11 @@ handle_down2(Reason, CGI, State) ->
         normal ->
             cgi_finished({gateway_output, Buffer}, NewState);
         {exit_status, St} ->
-            _RV = exec:status(St),
-            %lager:info("cgi process ended with non-zero status: ~p", [RV]),
+            RV = exec:status(St),
+            logger:info("cgi process ended with non-zero status: ~p", [RV]),
             cgi_finished({gateway_error, cgi_exec_error}, NewState);
-        _St ->
-            %lager:info("cgi process terminated anomalously: ~p", [St]),
+        St ->
+            logger:info("cgi process terminated anomalously: ~p", [St]),
             cgi_finished({gateway_error, cgi_exec_error}, NewState)
     end.
 

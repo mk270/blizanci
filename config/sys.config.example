@@ -4,23 +4,16 @@
    {keyfile, "/home/mk270/Src/blizanci/ssl/key.pem"},
    {hostname, "your.fully.qualified.host.name"}
    ]},
-  {lager, [
-   {log_root, "log"},
-   {extra_sinks, [
-     {blizanci_access_lager_event, [
-       {handlers, [
-         {lager_file_backend, [
-           {file, "access.log"},
-           {level, info},
-           {size, 10485760},
-           {date, "$D0"},
-           {count, 5},
-           {formatter, lager_default_formatter},
-           {formatter_config, [date, " ", time, " ", message, "\n"]}
-         ]}
-        ]
-       }
-     ]}
+  {kernel, [
+   {logger_level, debug},
+   {logger, [
+     {handler, default, logger_std_h, #{
+       level => info,
+       formatter => {logger_formatter, #{
+         single_line => true,
+         template => [time, " [", level, "] ", msg, "\n"]
+       }}
+     }}
    ]}
   ]}
 ].
