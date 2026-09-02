@@ -201,13 +201,28 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
     #{ <<"PATH">> := Path } = Matches,
     #{ cgiprefix := CGIPrefix,
        cgiroot   := CGIRoot } = RouteOpts,
-    PathElements  = [CGIRoot, binary_to_list(Path)],
-    {ok, Cmd}     = blizanci_path:fix_path(filename:join(PathElements)),
 
-    % this is a belt-and-braces check; URLs with ".." in them are currently
-    % forbidden anyway
-    true = blizanci_path:path_under_root(Cmd, CGIRoot),
+    % this is a belt-and-braces check; URLs with ".." in them are
+    % currently forbidden anyway. blizanci_path:confine/2 fails closed
+    % (returning file_not_found rather than crashing) if the resolved
+    % path can't be canonicalised, or resolves outside CGIRoot.
+    case blizanci_path:confine(binary_to_list(Path), CGIRoot) of
+        {error, file_not_found} -> {gateway_error, file_not_found};
+        {ok, Cmd} -> serve_cgi(Cmd, Path, Matches, Req,
+                               {Hostname, Port}, CGIPrefix)
+    end.
 
+
+-spec serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) -> Result
+              when Cmd       :: string(),
+                   Path      :: binary(),
+                   Matches   :: path_matches(),
+                   Req       :: request_details(),
+                   HostPort  :: {binary(), integer()},
+                   CGIPrefix :: string(),
+                   Result    :: gateway_result().
+
+serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
     case filelib:is_file(Cmd) of
         false -> {gateway_error, file_not_found};
         true ->
@@ -226,7 +241,7 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
             % certificate we can't understand is exactly the kind of
             % input we don't want to guess about.
             case cgi_environment(CGIPrefix, Path, Cmd,
-                                 {Hostname, Port}, QueryString,
+                                 HostPort, QueryString,
                                  Cert, PathInfo) of
                 {ok, Env} ->
                     case enqueue_cgi(Args, Env) of

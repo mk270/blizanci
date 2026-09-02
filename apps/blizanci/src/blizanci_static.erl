@@ -70,14 +70,31 @@ serve(_, _, _, _) ->
 % If there's a valid file requested, then get its full path, so that
 % it can be sendfile()'d back to the client. If it's a directory, redirect
 % to an index file.
+%
+% Path is resolved via blizanci_path:confine/2 (the same canonicalise-
+% and-confine mechanism CGI and Titan use) rather than a bare
+% filename:join/2, so a symlink inside Docroot can't be used to read
+% or redirect to a file outside it.
 -spec serve_file(Path, Opts) -> Result
               when Path   :: binary(),
                    Opts   :: options(),
                    Result :: gemini_response().
 
 serve_file(Path, Opts) ->
-    Docroot = maps:get(docroot, Opts, ?DEFAULT_DOCROOT),
-    Full = filename:join(Docroot, Path),
+    Docroot = ensure_list(maps:get(docroot, Opts, ?DEFAULT_DOCROOT)),
+    case blizanci_path:confine(binary_to_list(Path), Docroot) of
+        {error, file_not_found} -> {error_code, file_not_found};
+        {ok, Cmd} -> serve_confined_file(list_to_binary(Cmd), Path, Opts)
+    end.
+
+
+-spec serve_confined_file(Full, Path, Opts) -> Result
+              when Full   :: binary(),
+                   Path   :: binary(),
+                   Opts   :: options(),
+                   Result :: gemini_response().
+
+serve_confined_file(Full, Path, Opts) ->
     case {filelib:is_dir(Full), filelib:is_regular(Full)} of
         {true, _} ->
             Index = maps:get(index, Opts, ?INDEX),
@@ -91,6 +108,14 @@ serve_file(Path, Opts) ->
         _ ->
             {error_code, file_not_found}
     end.
+
+
+-spec ensure_list(Input) -> Result
+              when Input  :: list()
+                           | binary(),
+                   Result :: list().
+ensure_list(X) when is_binary(X) -> binary_to_list(X);
+ensure_list(X) when is_list(X)   -> X.
 
 
 % Look up the MIME type for a given filename. If the filename doesn't contain

@@ -129,13 +129,26 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
   when is_binary(Rest), is_binary(WorkDir), is_binary(RootDir)->
     case parse_titan_request(Fragment) of
         {ok, TitanReq} ->
-            Config = {TitanReq, Rest, RootDir, WorkDir},
             {titan_request, Path, Size, _MimeType} = TitanReq,
-            RestSize = byte_size(Rest),
-            case RestSize >= Size of
-                true -> handle_all_in_one_request(WorkDir, RootDir, Path,
-                                                  Rest, Size);
-                false -> enqueue_titan_job(Config)
+
+            % Canonicalise-and-confine the upload target under RootDir
+            % up front, before any worker (sync or queued) is started,
+            % the same mechanism CGI and static-file serving use. This
+            % also catches a symlink inside RootDir that would
+            % otherwise let an upload land outside it.
+            case blizanci_path:confine(binary_to_list(Path),
+                                       binary_to_list(RootDir)) of
+                {ok, TargetPath} ->
+                    Config = {TitanReq, Rest, WorkDir, TargetPath},
+                    RestSize = byte_size(Rest),
+                    case RestSize >= Size of
+                        true -> handle_all_in_one_request(WorkDir,
+                                                          TargetPath,
+                                                          Rest, Size);
+                        false -> enqueue_titan_job(Config)
+                    end;
+                {error, file_not_found} ->
+                    {gateway_finished, {error_code, file_not_found}}
             end;
         {error, Err} ->
             {gateway_finished, {error_code, Err}}
@@ -147,17 +160,15 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
 %  concurrently with the payload; that is, the Titan request specifies
 %  that a certain number of bytes of payload will follow, and sufficient
 %  bytes are already available.
--spec handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) -> Result
-              when WorkDir :: filepath(),
-                   RootDir :: filepath(),
-                   Path    :: binary(),
-                   Rest    :: binary(),
-                   Size    :: integer(),
-                   Result  :: gateway_result().
+-spec handle_all_in_one_request(WorkDir, TargetPath, Rest, Size) -> Result
+              when WorkDir    :: filepath(),
+                   TargetPath :: filepath(),
+                   Rest       :: binary(),
+                   Size       :: integer(),
+                   Result     :: gateway_result().
 
-handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) ->
-    {ok, Stream, TmpPath, TargetPath} =
-        create_tmp_file(WorkDir, RootDir, Path, Rest),
+handle_all_in_one_request(WorkDir, TargetPath, Rest, Size) ->
+    {ok, Stream, TmpPath} = create_tmp_file(WorkDir, Rest),
 
     UploadStatus = finish_file(Stream, TargetPath, TmpPath, Size),
     handle_upload_status(UploadStatus).
@@ -239,11 +250,10 @@ parse_titan_qs(Path, Query)
 % TODO: factor out config type
 init({Parent, Config}) ->
     process_flag(trap_exit, true),
-    {TitanReq, Rest, RootDir, WorkDir} = Config,
-    {titan_request, Path, Size, MimeType} = TitanReq,
+    {TitanReq, Rest, WorkDir, TargetPath} = Config,
+    {titan_request, _Path, Size, MimeType} = TitanReq,
     BytesRecv = byte_size(Rest),
-    {ok, Stream, TmpPath, TargetPath} = create_tmp_file(
-                                          WorkDir, RootDir, Path, Rest),
+    {ok, Stream, TmpPath} = create_tmp_file(WorkDir, Rest),
     State = #titan_state{
                parent=Parent,
                size=Size,
@@ -392,22 +402,20 @@ purge(Path, WorkDir) when is_binary(Path) and is_binary(WorkDir) ->
     ok.
 
 
--spec create_tmp_file(WorkDir, RootDir, Path, Rest) -> Result
+% The target path is resolved by the caller (serve_titan_request/4),
+% via blizanci_path:confine/2, before a worker is ever started; this
+% function only needs a place to stream the incoming bytes to.
+-spec create_tmp_file(WorkDir, Rest) -> Result
               when WorkDir :: filepath(),
-                   RootDir :: filepath(),
-                   Path    :: filepath(),
                    Rest    :: binary(),
-                   Result  :: {ok, io_device(), filepath(), filepath()}.
+                   Result  :: {ok, io_device(), filepath()}.
 
-create_tmp_file(WorkDir, RootDir, Path, Rest)
-  when is_binary(WorkDir) and is_binary(RootDir) and
-       is_binary(Path) and is_binary(Rest)
+create_tmp_file(WorkDir, Rest)
+  when is_binary(WorkDir) and is_binary(Rest)
  ->
     TmpFile = blizanci_tmpdir:tmp_file_name(),
     TmpPath = filename:join(WorkDir, TmpFile),
-    TargetPath = filename:join(RootDir, Path),
-    logger:debug("titan path: ~p", [Path]),
-    logger:debug("titan tmp: ~p, target: ~p", [TmpPath, TargetPath]),
+    logger:debug("titan tmp: ~p", [TmpPath]),
     {ok, Stream} = file:open(TmpPath, [write]),
     ok = file:write(Stream, Rest),
-    {ok, Stream, TmpPath, TargetPath}.
+    {ok, Stream, TmpPath}.

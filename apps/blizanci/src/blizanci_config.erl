@@ -96,6 +96,15 @@ proto_opts() ->
     {ok, App} = application:get_application(),
     {ok, Default_Hostname} = inet:gethostname(),
     Hostname = application:get_env(App, hostname, Default_Hostname),
+
+    % FIXME: Docroot/CGIroot are accepted here as relative paths
+    % (matching the defaults below), but blizanci_path:fix_path/1 --
+    % used to canonicalise and confine request paths under these roots
+    % -- requires an absolute path and returns {error, relative_path}
+    % otherwise. A relative cgiroot/docroot should either be resolved
+    % to absolute here (as blizanci_titan already does for its own
+    % docroot/work_dir via filename:absname/1), or rejected at startup,
+    % rather than left to surface as a per-request failure.
     Docroot = application:get_env(App, docroot, "./public_gemini"),
     CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
     CACerts = application:get_env(App, ca_certs, []),
