@@ -6,24 +6,15 @@
 %% the terms of the Apache Software Licence v2.0.
 
 %% @doc
-%% This module deals with the OS environment.
-%% That is, it deals with conventional UNIX
-%% environment variables as opposed to Erlang's per-application environments.
-%% OS environment variables are implicated in two ways:
-%%
-%% 1) we want to sanitise a proplist of environment variables such that
-%%    it's appropriate for creating a new UNIX subprocess via the erlexec
-%%    port.
-%%
-%% 2) the Erlang VM is likely to be running in an OS process with its
-%%    own environment variables, and we want to unset most of those to
-%%    avoid polluting the environment of the subprocesses created in 1)
+%% This module deals with sanitising a proplist of OS environment
+%% variables such that it's appropriate for creating a new UNIX
+%% subprocess via the erlexec port.
 %% @end
 
 -module(blizanci_osenv).
 -include("blizanci_types.hrl").
 
--export([sanitise/1, unset_os_env_except/1]).
+-export([sanitise/1]).
 
 
 %% @doc Sanitise the system environment variables.
@@ -61,6 +52,9 @@ sanitise_kv(Key, <<"">>) when is_list(Key) ->
     {Key, <<"">>}; % workaround exec:run apparently objecting
                    % to null-strings as lists
 
+sanitise_kv(Key, "") when is_list(Key) ->
+    {Key, <<"">>}; % ditto, for a plain empty string value
+
 sanitise_kv(Key, Value) when is_binary(Value) and is_list(Key) ->
     {Key, binary_to_list(Value)};
 
@@ -72,25 +66,3 @@ sanitise_kv(Key, undefined) when is_list(Key) ->
 
 sanitise_kv(Key, Value) when is_list(Key) and is_list(Value) ->
     {Key, Value}.
-
-
-%% @doc Unset all environment variables but those in the Exceptions whitelist.
-%% @end
--spec unset_os_env_except(Exceptions) -> Result
-              when Exceptions :: [string()],
-                   Result     :: ok.
-
-unset_os_env_except(Exceptions) ->
-    Keys = defined_os_env_vars(),
-    [ os:unsetenv(Key) ||
-        Key <- Keys,
-        not lists:member(Key, Exceptions) ],
-    ok.
-
-
-% Return a list of the environment variables that are defined (from the
-% perspective of the UNIX process running the Erlang VM).
--spec defined_os_env_vars() -> Result
-              when Result :: [string()].
-defined_os_env_vars() ->
-    [ Head || [Head|_] <- [ string:split(Env, "=") || Env <- os:getenv() ] ].

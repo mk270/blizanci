@@ -71,11 +71,14 @@
 
 % A note re environment variables.
 %
-% At startup, the module removes all but the following list of ALLOWED_ENV
-% environment variables from the running UNIX process that hosts the Erlang
-% VM.
+% The CGI child's environment is built from scratch on each request
+% (erlexec's {env, [clear | Env]} option -- see enqueue_cgi/2), rather
+% than inherited from the Erlang VM's own OS environment, so nothing
+% other than what's listed below ever reaches the CGI script.
 %
-% The preserved variables, constant across all requests, are:
+% The preserved variables, constant across all requests (copied from
+% the Erlang VM's own environment at request time, if set -- see
+% preserved_env/0), are:
 %
 %   $HOME
 %   $USER
@@ -154,7 +157,6 @@ start_link(Args) ->
 -spec start() -> Result
               when Result :: ok.
 start() ->
-    blizanci_osenv:unset_os_env_except(?ALLOWED_ENV),
     case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of
         {error, {already_started, _Pid}} -> ok;
         {ok, _Pid} -> ok
@@ -262,7 +264,7 @@ serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
                    Result :: {'ok', pid()} | noalloc.
 
 enqueue_cgi(Args, Env) ->
-    Options = [monitor, {env, Env}, stdout, stderr],
+    Options = [monitor, {env, [clear | Env]}, stdout, stderr],
     ppool:run(?QUEUE, [{self(), {Args, Options}}]).
 
 
@@ -438,9 +440,23 @@ cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
     Env = make_environment(CGIPrefix, Path, Bin, HostPort,
                            QueryString, Cert, PathInfo),
     case Env of
-        {ok, Env0} -> {ok, blizanci_osenv:sanitise(Env0)};
+        {ok, Env0} ->
+            {ok, blizanci_osenv:sanitise(preserved_env() ++ Env0)};
         {error, Reason} -> {error, Reason}
     end.
+
+
+% The subset of the Erlang VM's own OS environment (per ?ALLOWED_ENV)
+% that gets passed through to every CGI child, alongside the
+% per-request variables built by make_environment/7. Only variables
+% actually set are included -- os:getenv/1 returns 'false' for one
+% that isn't, and that's not a value to hand to the CGI child.
+-spec preserved_env() -> Result
+              when Result :: [{string(), string()}].
+preserved_env() ->
+    [ {Name, Value} || Name <- ?ALLOWED_ENV,
+                        Value <- [os:getenv(Name)],
+                        Value =/= false ].
 
 
 % Construct the process environment for the CGI program, based on the

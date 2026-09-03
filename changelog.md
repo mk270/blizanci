@@ -1,5 +1,9 @@
 # Blizanci Changelog
 
+## 5.9.2
+
+- clear the OS environment when doing CGI, via erlexec's own facility
+
 ## 5.9.1
 
 - Register missing logging module
