@@ -47,6 +47,12 @@
 
 -type titan_request() :: {titan_request, binary(), integer(), binary()}.
 
+-record(titan_job, {request     :: titan_request(),
+                    rest        :: binary(),
+                    work_dir    :: filepath(),
+                    target_path :: filepath()}).
+-type titan_job() :: #titan_job{}.
+
 -type upload_status() :: titan_finished
                        | titan_enotdir
                        | {titan_updated, integer()}.
@@ -142,13 +148,16 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             case blizanci_path:confine(binary_to_list(Path),
                                        binary_to_list(RootDir)) of
                 {ok, TargetPath} ->
-                    Config = {TitanReq, Rest, WorkDir, TargetPath},
+                    Job = #titan_job{request=TitanReq,
+                                     rest=Rest,
+                                     work_dir=WorkDir,
+                                     target_path=TargetPath},
                     RestSize = byte_size(Rest),
                     case RestSize >= Size of
                         true -> handle_all_in_one_request(WorkDir,
                                                           TargetPath,
                                                           Rest, Size);
-                        false -> enqueue_titan_job(Config)
+                        false -> enqueue_titan_job(Job)
                     end;
                 {error, file_not_found} ->
                     {gateway_finished, {error_code, file_not_found}}
@@ -182,15 +191,12 @@ handle_all_in_one_request(WorkDir, TargetPath, Rest, Size) ->
 % data, or insufficient such data to fulfil the request; this entails
 % waiting for more data, therefore we put a Titan worker into the worker
 % pool to handle this
--spec enqueue_titan_job(Config) -> Result
-              when Config :: {titan_request(),
-                              binary(),
-                              filepath(),
-                              filepath()},
+-spec enqueue_titan_job(Job) -> Result
+              when Job    :: titan_job(),
                    Result :: gateway_result().
 
-enqueue_titan_job(Config) ->
-    case ppool:run(?QUEUE, [{self(), Config}]) of
+enqueue_titan_job(Job) ->
+    case ppool:run(?QUEUE, [{self(), Job}]) of
         {ok, Pid} -> {gateway_started, Pid};
         noalloc -> {gateway_error, gateway_busy}
     end.
@@ -251,10 +257,12 @@ parse_titan_qs(Path, Query)
     TitanRequest = {titan_request, Path, Size, MimeType},
     {ok, TitanRequest}.
 
-% TODO: factor out config type
-init({Parent, Config}) ->
+init({Parent, Job}) ->
     process_flag(trap_exit, true),
-    {TitanReq, Rest, WorkDir, TargetPath} = Config,
+    #titan_job{request=TitanReq,
+               rest=Rest,
+               work_dir=WorkDir,
+               target_path=TargetPath} = Job,
     {titan_request, _Path, Size, MimeType} = TitanReq,
     BytesRecv = byte_size(Rest),
     {ok, Stream, TmpPath} = create_tmp_file(WorkDir, Rest),
