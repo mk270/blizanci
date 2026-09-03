@@ -44,3 +44,9 @@
 
 %% TBD
 -callback start() -> 'ok'.
+
+%% Called at application shutdown; the counterpart to start/0. Allows
+%% the servlet to tear down any pool/resource it set up there, so
+%% nothing is left running (e.g. leaked ppool pools) across a
+%% stop/start cycle in the same VM.
+-callback stop() -> 'ok'.

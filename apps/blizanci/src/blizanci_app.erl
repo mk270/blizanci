@@ -17,7 +17,10 @@ start(_StartType, _StartArgs) ->
     ok = application:ensure_started(mime_lookup),
     ok = application:ensure_started(ranch),
     Config = blizanci_config:make(),
-    blizanci_sup:start_link(Config).
+    #{ active_servlets := Servlets } = Config,
+    {ok, Pid} = blizanci_sup:start_link(Config),
+    {ok, Pid, Servlets}.
 
-stop(_State) ->
+stop(Servlets) ->
+    [ ok = Servlet:stop() || Servlet <- Servlets ],
     ok.

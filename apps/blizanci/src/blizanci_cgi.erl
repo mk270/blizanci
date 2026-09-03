@@ -48,7 +48,7 @@
 -behaviour(gen_server).
 
 %% API
--export([serve/4, start/0, cancel/1, request/4, default_options/0,
+-export([serve/4, start/0, stop/0, cancel/1, request/4, default_options/0,
         handle_client_data/2]).
 -export([start_link/1]).
 
@@ -160,6 +160,17 @@ start() ->
     case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of
         {error, {already_started, _Pid}} -> ok;
         {ok, _Pid} -> ok
+    end.
+
+
+% The counterpart to start/0; called at application shutdown so the
+% CGI ppool doesn't leak across a stop/start cycle in the same VM.
+-spec stop() -> Result
+              when Result :: ok.
+stop() ->
+    case ppool:stop_pool(?QUEUE) of
+        ok -> ok;
+        {error, _} -> ok
     end.
 
 
