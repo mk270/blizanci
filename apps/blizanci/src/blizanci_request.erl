@@ -217,9 +217,11 @@ serve(Proto, Path, Req, Config) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-handle_line_test_data() ->
+handle_line_test_data(Docroot) ->
+    ExpectedFile = filename:join(filename:absname(Docroot),
+                                 "dir1/index.gemini"),
     [
-     {{file, <<"text/gemini">>, <<"test-docroot/dir1/index.gemini">>},
+     {{file, <<"text/gemini">>, list_to_binary(ExpectedFile)},
       <<"gemini://this.host.dev/dir1/index.gemini">>},
 
      {{redirect, <<"dir1/index.gemini">>},
@@ -264,4 +266,4 @@ tests(_State) ->
                  end,
 
     [[?_assertEqual(Expected, HandleLine(Arg))
-      || {Expected, Arg} <- handle_line_test_data()]].
+      || {Expected, Arg} <- handle_line_test_data(Docroot)]].
