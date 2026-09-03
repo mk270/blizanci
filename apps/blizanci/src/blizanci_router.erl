@@ -51,14 +51,19 @@ make_routes(RouteInfo) ->
 make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
     {ok, RE} = re:compile(Regex),
     ok = valid_proto(Proto),
-    ok = valid_route_opts(Opts),
-    % OptsList = maps:to_list(Opts),
+    % The route's own options are merged with the module's defaults
+    % here, once, so every caller (production config, tests, any
+    % future third-party caller) gets the same guarantee -- callers
+    % are not responsible for remembering to merge before calling in.
+    FullOpts = maps:merge(Module:default_options(), Opts),
+    ok = valid_route_opts(FullOpts),
+    ok = valid_module_opts(Module, FullOpts),
     case blizanci_auth:valid_authz_policy(AuthPolicy) of
         {ok, _} -> #route{proto=Proto,
                           pattern=RE,
                           module=Module,
                           auth_policy=AuthPolicy,
-                          options=Opts};
+                          options=FullOpts};
         {error, _} -> throw(invalid_route)
     end;
 make_route(_) ->
@@ -80,6 +85,20 @@ valid_route_opts(Opts) when is_map(Opts) ->
     ok; % obviously we could do better than this!
 valid_route_opts(_) ->
     throw(invalid_route).
+
+
+% Let the servlet itself reject a bad configuration (e.g. a
+% non-existent root directory) at startup, rather than have it
+% surface as a per-request failure.
+-spec valid_module_opts(Module, Opts) -> Result
+              when Module :: module(),
+                   Opts   :: map(),
+                   Result :: 'ok'.
+valid_module_opts(Module, Opts) ->
+    case Module:validate_options(Opts) of
+        ok -> ok;
+        {error, Reason} -> throw({invalid_route_options, Module, Reason})
+    end.
 
 
 %% @doc

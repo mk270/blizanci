@@ -16,7 +16,7 @@
 -behaviour(gen_server).
 
 -export([serve/4, start/0, stop/0, cancel/1, request/4, default_options/0,
-         handle_client_data/2]).
+         validate_options/1, handle_client_data/2]).
 -export([start_link/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -68,6 +68,22 @@ default_options() ->
       work_dir => <<"titan-temp">>,
       docroot => "docroot"
      }.
+
+
+-spec validate_options(Opts) -> Result
+              when Opts   :: map(),
+                   Result :: 'ok' | {'error', term()}.
+validate_options(#{ docroot := Docroot, work_dir := WorkDir })
+  when is_binary(Docroot) orelse is_list(Docroot),
+       is_binary(WorkDir) orelse is_list(WorkDir) ->
+    case {filelib:is_dir(filename:absname(Docroot)),
+          filelib:is_dir(filename:absname(WorkDir))} of
+        {true, true} -> ok;
+        {false, _} -> {error, {docroot_not_a_directory, Docroot}};
+        {_, false} -> {error, {work_dir_not_a_directory, WorkDir}}
+    end;
+validate_options(Opts) ->
+    {error, {invalid_options, Opts}}.
 
 -spec start() -> Result
               when Result :: ok.

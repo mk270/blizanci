@@ -49,7 +49,7 @@
 
 %% API
 -export([serve/4, start/0, stop/0, cancel/1, request/4, default_options/0,
-        handle_client_data/2]).
+        validate_options/1, handle_client_data/2]).
 -export([start_link/1]).
 
 %% gen_server callbacks
@@ -60,8 +60,6 @@
 -record(worker_state, {parent, cgi_status}).
 -type worker_state() :: #worker_state{}.
 -type options() :: #{
-                     hostname := binary(),
-                     port := integer(),
                      cgiroot := string(),
                      cgiprefix := string()
                     }.
@@ -133,6 +131,30 @@
               when Result :: map().
 default_options() ->
     #{ cgiprefix => "/cgi-bin/" }.
+
+
+-spec validate_options(Opts) -> Result
+              when Opts   :: map(),
+                   Result :: 'ok' | {'error', term()}.
+validate_options(#{ cgiroot := CGIRoot, cgiprefix := CGIPrefix })
+  when is_list(CGIRoot), is_list(CGIPrefix) ->
+    case filelib:is_dir(filename:absname(CGIRoot)) of
+        true ->
+            case valid_prefix(CGIPrefix) of
+                true -> ok;
+                false -> {error, {invalid_cgiprefix, CGIPrefix}}
+            end;
+        false -> {error, {cgiroot_not_a_directory, CGIRoot}}
+    end;
+validate_options(Opts) ->
+    {error, {invalid_options, Opts}}.
+
+
+-spec valid_prefix(Prefix) -> Result
+              when Prefix :: string(),
+                   Result :: boolean().
+valid_prefix(Prefix) ->
+    lists:prefix("/", Prefix) andalso lists:suffix("/", Prefix).
 
 % Called by the ppool queue manager; passes the arguments straight through
 %% @doc

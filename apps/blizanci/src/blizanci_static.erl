@@ -13,7 +13,7 @@
 -include("blizanci_types.hrl").
 
 -export([serve/4, cancel/1, request/4, default_options/0,
-         handle_client_data/2, start/0, stop/0]).
+         validate_options/1, handle_client_data/2, start/0, stop/0]).
 
 -type options() :: #{ bare_mimetype := binary(),
                       unknown_mimetype := binary(),
@@ -35,6 +35,23 @@ default_options() ->
        unknown_mimetype => <<"application/octet-stream">>,
        bare_mimetype    => <<"text/gemini">>
      }.
+
+
+-spec validate_options(Opts) -> Result
+              when Opts   :: map(),
+                   Result :: 'ok' | {'error', term()}.
+validate_options(#{ docroot          := Docroot,
+                    index            := Index,
+                    bare_mimetype    := BareMimetype,
+                    unknown_mimetype := UnknownMimetype })
+  when is_list(Docroot), is_list(Index), Index =/= "",
+       is_binary(BareMimetype), is_binary(UnknownMimetype) ->
+    case filelib:is_dir(filename:absname(Docroot)) of
+        true -> ok;
+        false -> {error, {docroot_not_a_directory, Docroot}}
+    end;
+validate_options(Opts) ->
+    {error, {invalid_options, Opts}}.
 
 -spec cancel(Pid) -> Result
               when Pid    :: pid(),

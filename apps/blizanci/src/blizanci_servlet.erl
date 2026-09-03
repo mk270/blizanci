@@ -38,6 +38,12 @@
 %% default options for any route with which it is associated.
 -callback default_options() -> map().
 
+%% Called during configuration, once per route, with that route's
+%% options already merged with default_options/0 -- lets the servlet
+%% reject a bad configuration (e.g. a non-existent root directory)
+%% at startup, rather than have it surface as a per-request failure.
+-callback validate_options(map()) -> 'ok' | {'error', term()}.
+
 %% TBD
 -callback handle_client_data(Pid::pid(), Payload::binary()) ->
     gemini_response().
