@@ -118,14 +118,15 @@ oid_alias(_) -> unknown.
 -spec verify_cert(OtpCert, Event, InitialUserState) -> Result
               when OtpCert          :: #'OTPCertificate'{},
                    Event            :: {'bad_cert',
-                                        Reason :: atom() | {'revoked', atom()} } |
-                                       {'extension', #'Extension'{}} |
-                                       'valid' |
-                                       'valid_peer',
+                                        Reason :: atom()
+                                                | {'revoked', atom()} }
+                                     | {'extension', #'Extension'{}}
+                                     | 'valid'
+                                     | 'valid_peer',
                    InitialUserState :: term(),
-                   Result           :: {'valid', UserState :: term()} |
-                                       {'fail', Reason :: term()} |
-                                       {'unknown', UserState :: term()}.
+                   Result           :: {'valid', UserState :: term()}
+                                     | {'fail', Reason :: term()}
+                                     | {'unknown', UserState :: term()}.
 
 verify_cert(_Cert, _Event, _InitialUserState) ->
     {valid, unknown_user}.

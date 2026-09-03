@@ -268,7 +268,8 @@ respond(none, _State) ->
 respond({init_servlet, Pid}, _State) ->
     {expect_servlet, Pid};
 
-respond({servlet_output, Msg}, State=#state{transport=Transport, socket=Socket}) ->
+respond({servlet_output, Msg},
+        State=#state{transport=Transport, socket=Socket}) ->
     case parse_cgi_output(Msg) of
         {ok, Code, Meta, Body} ->
             Transport:send(Socket, [format_headers(Code, Meta), Body]),

@@ -114,4 +114,3 @@ confine2(SubPath, AbsRoot, CanonRoot) ->
                            [SubPath, AbsRoot, Reason]),
             {error, file_not_found}
     end.
-

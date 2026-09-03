@@ -22,7 +22,14 @@
 
 -export([level/0, level/1, module_level/2, reset_module_level/1]).
 
--type log_level() :: debug | info | notice | warning | error | critical | alert | emergency.
+-type log_level() :: debug
+                   | info
+                   | notice
+                   | warning
+                   | error
+                   | critical
+                   | alert
+                   | emergency.
 
 %% @doc Return the current primary log level.
 %% @end

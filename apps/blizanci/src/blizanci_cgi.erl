@@ -281,7 +281,12 @@ init({Parent, {CmdLine, Options}}) ->
     process_flag(trap_exit, true),
     Result = exec:run(CmdLine, Options),
     {ok, Pid, OsPid} = Result,
-    {ok, #worker_state{parent=Parent, cgi_status=#cgi_proc{pid=Pid, os_pid=OsPid, buffer= <<>>}}}.
+    CGI_Status = #cgi_proc{pid=Pid,
+                           os_pid=OsPid,
+                           buffer= <<>>},
+    State = #worker_state{parent=Parent,
+                          cgi_status=CGI_Status},
+    {ok, State}.
 
 
 %% @doc
@@ -371,7 +376,8 @@ handle_stdout2(Msg, State) ->
                    Pid    :: pid(),
                    Reason :: term(),
                    State  :: worker_state(),
-                   Result :: {noreply, worker_state()} | {stop, normal, worker_state()}.
+                   Result :: {noreply, worker_state()}
+                           | {stop, normal, worker_state()}.
 
 handle_down(OsPid, Pid, Reason, State) ->
     CGI = State#worker_state.cgi_status,
@@ -389,7 +395,8 @@ handle_down(OsPid, Pid, Reason, State) ->
               when Reason :: term(),
                    CGI    :: #cgi_proc{},
                    State  :: worker_state(),
-                   Result :: {noreply, worker_state()} | {stop, normal, worker_state()}.
+                   Result :: {noreply, worker_state()}
+                           | {stop, normal, worker_state()}.
 
 handle_down2(Reason, CGI, State) ->
     Buffer = CGI#cgi_proc.buffer,
