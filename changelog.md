@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 5.9.3
+
+- Remove unused gen_server.hrl
+- Realign specs in the Titan module
+- Use a proper record for Titan job state instead of an anonymous tuple
+
 ## 5.9.2
 
 - clear the OS environment when doing CGI, via erlexec's own facility
