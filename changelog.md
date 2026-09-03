@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.10.0
+
+- Add a `stop/0` counterpart to the `blizanci_servlet` behaviour's `start/0`, so driver pools don't leak across a stop/start cycle in the same VM
+- Fix a CWD-sensitive stale assertion in the request-handling test suite
+
 ## 5.9.3
 
 - Remove unused gen_server.hrl
