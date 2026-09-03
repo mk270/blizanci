@@ -1,5 +1,9 @@
 # Blizanci Changelog
 
+## 5.12.0
+
+- Declare servlets explicitly via app config instead of inferring them from the routing table, so a routing update can reference any declared servlet without needing its pool started separately
+
 ## 5.11.0
 
 - Add a `validate_options/1` counterpart to `default_options/0` on the `blizanci_servlet` behaviour, so a bad root directory fails at startup instead of on first request
