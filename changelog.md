@@ -1,5 +1,9 @@
 # Blizanci Changelog
 
+## 5.9.1
+
+- Register missing logging module
+
 ## 5.9.0
 
 - Supervise the ranch listener properly, so a crash gets restarted
