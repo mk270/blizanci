@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.11.0
+
+- Add a `validate_options/1` counterpart to `default_options/0` on the `blizanci_servlet` behaviour, so a bad root directory fails at startup instead of on first request
+- Add missing `docroot`/`titan-temp` fixture directories for Titan's own defaults
+
 ## 5.10.0
 
 - Add a `stop/0` counterpart to the `blizanci_servlet` behaviour's `start/0`, so driver pools don't leak across a stop/start cycle in the same VM
