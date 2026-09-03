@@ -14,7 +14,8 @@
     ppool
    ]},
   {env,
-   [{port, 1965}]},
+   [{port, 1965},
+    {servlets, [blizanci_static, blizanci_cgi, blizanci_titan]}]},
   {modules, [blizanci_app,
              blizanci_auth,
              blizanci_cgi,

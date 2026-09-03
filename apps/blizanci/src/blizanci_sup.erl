@@ -25,9 +25,9 @@ start_link(Config) ->
 
 init(Config) ->
     #{
-      ssl_opts        := SSL_Opts,
-      proto_opts      := Proto_Opts,
-      active_servlets := Servlets
+      ssl_opts   := SSL_Opts,
+      proto_opts := Proto_Opts,
+      servlets   := Servlets
      } = Config,
 
     [ ok = Servlet:start() || Servlet <- Servlets ],
