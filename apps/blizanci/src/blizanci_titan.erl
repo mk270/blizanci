@@ -74,7 +74,9 @@ start() ->
 
 -spec start_link(Args) -> Result
               when Args   :: any(),
-                   Result :: 'ignore' | {'error', _} | {'ok', pid() | {pid(), reference()}}.
+                   Result :: 'ignore'
+                           | {'error', _}
+                           | {'ok', pid() | {pid(), reference()}}.
 start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
@@ -95,7 +97,8 @@ cancel(Pid) ->
                    Req          :: request_details(),
                    ServerConfig :: server_config(),
                    RouteOpts    :: options(),
-                   Result       :: {'immediate', gemini_response()} | 'defer'.
+                   Result       :: {'immediate', gemini_response()}
+                                 | 'defer'.
 request(_, _, _, _) ->
     defer.
 
@@ -194,7 +197,8 @@ enqueue_titan_job(Config) ->
 
 
 -spec ensure_binary(Input) -> Result
-              when Input  :: list() | binary(),
+              when Input  :: list()
+                           | binary(),
                    Result :: binary().
 ensure_binary(X) when is_list(X) -> binary:list_to_bin(X);
 ensure_binary(X) when is_binary(X) -> X.
@@ -218,8 +222,8 @@ handle_client_data(Pid, Data) when is_pid(Pid) and is_binary(Data) ->
 
 -spec parse_titan_request(Fragment) -> Result
               when Fragment :: binary(),
-                   Result   :: {ok, titan_request()} |
-                               {error, atom()}.
+                   Result   :: {ok, titan_request()}
+                             | {error, atom()}.
 
 parse_titan_request(Fragment) ->
     case binary:split(Fragment, <<";">>) of
@@ -230,7 +234,7 @@ parse_titan_request(Fragment) ->
 
 
 -spec parse_titan_qs(Path, Query) -> Result
-              when Path   ::  binary(),
+              when Path   :: binary(),
                    Query  :: binary(),
                    Result :: {ok, titan_request()}.
 
@@ -316,7 +320,8 @@ do_handle_client_data(Data, State) ->
 
 -spec handle_upload_status(Status) -> Result
               when Status :: upload_status(),
-                   Result :: gateway_result() | {ok, in_progress, integer() }.
+                   Result :: gateway_result()
+                           | {ok, in_progress, integer() }.
 
 handle_upload_status(titan_finished) ->
     {gateway_finished, {success, <<"text/plain">>, <<"Uploaded.\r\n">>}};
@@ -368,7 +373,9 @@ finish_file(Stream, TargetPath, TmpPath, Size) ->
 
 -spec delete(Path) -> Result
               when Path   :: filepath(),
-                   Result :: ok | {fail, atom()} | term().
+                   Result :: ok
+                           | {fail, atom()}
+                           | term().
 
 delete(Path) ->
     case file:delete(Path) of
