@@ -88,11 +88,7 @@ validate_options(Opts) ->
 -spec start() -> Result
               when Result :: ok.
 start() ->
-    case ppool:start_pool(?QUEUE, ?MAX_TITAN,
-                          {?MODULE, start_link, []}) of
-        {error, {already_started, _Pid}} -> ok;
-        {ok, _Pid} -> ok
-    end.
+    blizanci_pool:start(?QUEUE, ?MAX_TITAN, ?MODULE).
 
 
 % The counterpart to start/0; called at application shutdown so the
@@ -100,10 +96,7 @@ start() ->
 -spec stop() -> Result
               when Result :: ok.
 stop() ->
-    case ppool:stop_pool(?QUEUE) of
-        ok -> ok;
-        {error, _} -> ok
-    end.
+    blizanci_pool:stop(?QUEUE).
 
 -spec start_link(Args) -> Result
               when Args   :: any(),
@@ -118,10 +111,7 @@ start_link(Args) ->
               when Pid    :: pid(),
                    Result :: ok.
 cancel(Pid) ->
-    case is_process_alive(Pid) of
-        true -> gen_server:cast(Pid, titan_quit);
-        _ -> ok
-    end.
+    blizanci_pool:cancel(Pid, titan_quit).
 
 % Called by the servlet
 %
@@ -223,10 +213,7 @@ handle_all_in_one_request(WorkDir, TargetPath, Rest, Size) ->
                    Result :: gateway_result().
 
 enqueue_titan_job(Job) ->
-    case ppool:run(?QUEUE, [{self(), Job}]) of
-        {ok, Pid} -> {gateway_started, Pid};
-        noalloc -> {gateway_error, gateway_busy}
-    end.
+    blizanci_pool:enqueue(?QUEUE, Job).
 
 
 -spec ensure_binary(Input) -> Result

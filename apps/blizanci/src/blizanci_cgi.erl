@@ -179,10 +179,7 @@ start_link(Args) ->
 -spec start() -> Result
               when Result :: ok.
 start() ->
-    case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of
-        {error, {already_started, _Pid}} -> ok;
-        {ok, _Pid} -> ok
-    end.
+    blizanci_pool:start(?QUEUE, ?MAX_CGI, ?MODULE).
 
 
 % The counterpart to start/0; called at application shutdown so the
@@ -190,10 +187,7 @@ start() ->
 -spec stop() -> Result
               when Result :: ok.
 stop() ->
-    case ppool:stop_pool(?QUEUE) of
-        ok -> ok;
-        {error, _} -> ok
-    end.
+    blizanci_pool:stop(?QUEUE).
 
 
 % Called by the servlet to cancel a job, e.g., if the TCP connection has
@@ -202,10 +196,7 @@ stop() ->
               when Pid    :: pid(),
                    Result :: ok.
 cancel(Pid) ->
-    case is_process_alive(Pid) of
-        true -> gen_server:cast(Pid, cgi_quit);
-        _ -> ok
-    end.
+    blizanci_pool:cancel(Pid, cgi_quit).
 
 
 % Called by the servlet
@@ -278,11 +269,7 @@ serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
             case cgi_environment(CGIPrefix, Path, Cmd,
                                  HostPort, QueryString,
                                  Cert, PathInfo) of
-                {ok, Env} ->
-                    case enqueue_cgi(Args, Env) of
-                        {ok, Pid} -> {gateway_started, Pid};
-                        noalloc -> {gateway_error, gateway_busy}
-                    end;
+                {ok, Env} -> enqueue_cgi(Args, Env);
                 {error, Reason} -> {gateway_error, Reason}
             end
     end.
@@ -294,11 +281,11 @@ serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
 -spec enqueue_cgi(Args, Env) -> Result
               when Args   :: [string()],
                    Env    :: env_list(),
-                   Result :: {'ok', pid()} | noalloc.
+                   Result :: gateway_result().
 
 enqueue_cgi(Args, Env) ->
     Options = [monitor, {env, [clear | Env]}, stdout, stderr],
-    ppool:run(?QUEUE, [{self(), {Args, Options}}]).
+    blizanci_pool:enqueue(?QUEUE, {Args, Options}).
 
 
 %%%===================================================================
