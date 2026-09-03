@@ -66,6 +66,7 @@
 
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
+-define(MAX_CGI_OUTPUT_BYTES, 10 * 1024 * 1024). % 10 MiB
 
 % A note re environment variables.
 %
@@ -284,7 +285,8 @@ serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
                    Result :: gateway_result().
 
 enqueue_cgi(Args, Env) ->
-    Options = [monitor, {env, [clear | Env]}, stdout, stderr],
+    Options = [monitor, {group, 0}, kill_group,
+               {env, [clear | Env]}, stdout, stderr],
     blizanci_pool:enqueue(?QUEUE, {Args, Options}).
 
 
@@ -362,7 +364,8 @@ code_change(_OldVsn, State, _Extra) ->
               when OsPid  :: integer(),
                    Msg    :: binary(),
                    State  :: worker_state(),
-                   Result :: {noreply, worker_state()}.
+                   Result :: {noreply, worker_state()}
+                           | {stop, normal, worker_state()}.
 
 handle_stdout(OsPid, Msg, State) ->
     CGI = State#worker_state.cgi_status,
@@ -379,14 +382,21 @@ handle_stdout(OsPid, Msg, State) ->
 -spec handle_stdout2(Msg, State) -> Result
               when Msg    :: binary(),
                    State  :: worker_state(),
-                   Result :: {noreply, worker_state()}.
+                   Result :: {noreply, worker_state()}
+                           | {stop, normal, worker_state()}.
 
 handle_stdout2(Msg, State) ->
     CGI = State#worker_state.cgi_status,
     Buffer = CGI#cgi_proc.buffer,
     NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
-    NewState = State#worker_state{cgi_status=CGI#cgi_proc{buffer=NewBuffer}},
-    {noreply, NewState}.
+    case byte_size(NewBuffer) > ?MAX_CGI_OUTPUT_BYTES of
+        true ->
+            exec:kill(CGI#cgi_proc.os_pid, 9),
+            cgi_finished({gateway_error, cgi_output_too_large}, State);
+        false ->
+            NewState = State#worker_state{cgi_status=CGI#cgi_proc{buffer=NewBuffer}},
+            {noreply, NewState}
+    end.
 
 
 % Despite the name, this covers the usual case when the CGI subprocess
