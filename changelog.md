@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.9.0
+
+- Supervise the ranch listener properly, so a crash gets restarted
+  automatically
+
 ## 5.8.0
 
 - Verify client certificates against a configured issuer by signature,
