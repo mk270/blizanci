@@ -55,11 +55,11 @@
 %% @end
 
 -module(blizanci_config).
--include("blizanci_types.hrl").
 
 -export([make/0]).
 
 -define(PORT, 1965).
+-define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
 
 -spec ssl_opts() -> Result
               when Result :: [{atom(), term()}].
@@ -147,14 +147,19 @@ routing_table(Docroot, CGIroot, CACerts) ->
     Default_Route_Specs.
 
 
-% this is a ridiculous utility function to return the unique modules in the
-% routing table
--spec unique_module(Tuples) -> Results
-             when Tuples  :: [tuple()],
-                  Results :: [term()].
-unique_module(Tuples) ->
-    Modules = [T#route.module || T <- Tuples, is_tuple(T), tuple_size(T) > 0],
-    lists:usort(Modules).
+% Which servlets this instance may ever route to -- a static,
+% deploy-time decision (analogous to {applications, [...]} in
+% blizanci.app.src), not something inferred from the routing table.
+% This means routing-table updates can reference any declared servlet
+% without needing to separately ensure its pool has been started,
+% and lets a third-party servlet be registered without forking
+% blizanci -- just add it to this list (or override via the
+% `servlets` app env).
+-spec servlets() -> Result
+              when Result :: [module()].
+servlets() ->
+    {ok, App} = application:get_application(),
+    application:get_env(App, servlets, ?DEFAULT_SERVLETS).
 
 
 -spec get_pem_file_from_environment(App, Key, Default_Filename) -> Result
@@ -174,11 +179,10 @@ get_pem_file_from_environment(App, Key, Default_Filename) ->
 make() ->
     SSL_Opts = ssl_opts(),
     Proto_Opts = proto_opts(),
-    Routing = proplists:get_value(routing, Proto_Opts),
-    ActiveServlets = unique_module(Routing),
+    Servlets = servlets(),
 
     #{
-      ssl_opts        => SSL_Opts,
-      proto_opts      => Proto_Opts,
-      active_servlets => ActiveServlets
+      ssl_opts   => SSL_Opts,
+      proto_opts => Proto_Opts,
+      servlets   => Servlets
      }.

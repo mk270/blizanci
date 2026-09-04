@@ -45,6 +45,8 @@ gemini_status(gateway_busy) ->
     {40, <<"Gateway too busy">>};
 gemini_status(cgi_exec_error) ->
     {40, <<"Gateway error">>};
+gemini_status(cgi_output_too_large) ->
+    {40, <<"Gateway error">>};
 gemini_status(response_timeout) ->
     {40, <<"Timeout">>};
 gemini_status(cannot_overwrite) ->

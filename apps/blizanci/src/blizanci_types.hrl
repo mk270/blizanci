@@ -59,6 +59,7 @@
 
 
 -type cgi_error() :: 'cgi_exec_error'
+                   | 'cgi_output_too_large'
                    | 'file_not_found'
                    | 'gateway_busy'
                    | 'unimplemented'

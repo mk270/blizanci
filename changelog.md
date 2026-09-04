@@ -1,5 +1,15 @@
 # Blizanci Changelog
 
+## 5.13.0
+
+- Cap accumulated CGI output at 10 MiB; a script that exceeds it has its whole process group killed and gets reported as a gateway error, instead of the buffer growing unbounded
+- Fix CGI process cleanup to kill a script's entire process group, not just the top-level shell, so a piped subprocess can no longer be left running as an orphan
+- Extract shared `blizanci_pool` helpers (start/stop/cancel/enqueue) used by both `blizanci_cgi` and `blizanci_titan`, removing duplicated `ppool` boilerplate
+
+## 5.12.0
+
+- Declare servlets explicitly via app config instead of inferring them from the routing table, so a routing update can reference any declared servlet without needing its pool started separately
+
 ## 5.11.0
 
 - Add a `validate_options/1` counterpart to `default_options/0` on the `blizanci_servlet` behaviour, so a bad root directory fails at startup instead of on first request

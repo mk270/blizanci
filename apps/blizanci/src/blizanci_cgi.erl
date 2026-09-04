@@ -66,6 +66,7 @@
 
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
+-define(MAX_CGI_OUTPUT_BYTES, 10 * 1024 * 1024). % 10 MiB
 
 % A note re environment variables.
 %
@@ -179,10 +180,7 @@ start_link(Args) ->
 -spec start() -> Result
               when Result :: ok.
 start() ->
-    case ppool:start_pool(?QUEUE, ?MAX_CGI, {?MODULE, start_link, []}) of
-        {error, {already_started, _Pid}} -> ok;
-        {ok, _Pid} -> ok
-    end.
+    blizanci_pool:start(?QUEUE, ?MAX_CGI, ?MODULE).
 
 
 % The counterpart to start/0; called at application shutdown so the
@@ -190,10 +188,7 @@ start() ->
 -spec stop() -> Result
               when Result :: ok.
 stop() ->
-    case ppool:stop_pool(?QUEUE) of
-        ok -> ok;
-        {error, _} -> ok
-    end.
+    blizanci_pool:stop(?QUEUE).
 
 
 % Called by the servlet to cancel a job, e.g., if the TCP connection has
@@ -202,10 +197,7 @@ stop() ->
               when Pid    :: pid(),
                    Result :: ok.
 cancel(Pid) ->
-    case is_process_alive(Pid) of
-        true -> gen_server:cast(Pid, cgi_quit);
-        _ -> ok
-    end.
+    blizanci_pool:cancel(Pid, cgi_quit).
 
 
 % Called by the servlet
@@ -278,11 +270,7 @@ serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
             case cgi_environment(CGIPrefix, Path, Cmd,
                                  HostPort, QueryString,
                                  Cert, PathInfo) of
-                {ok, Env} ->
-                    case enqueue_cgi(Args, Env) of
-                        {ok, Pid} -> {gateway_started, Pid};
-                        noalloc -> {gateway_error, gateway_busy}
-                    end;
+                {ok, Env} -> enqueue_cgi(Args, Env);
                 {error, Reason} -> {gateway_error, Reason}
             end
     end.
@@ -294,11 +282,12 @@ serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
 -spec enqueue_cgi(Args, Env) -> Result
               when Args   :: [string()],
                    Env    :: env_list(),
-                   Result :: {'ok', pid()} | noalloc.
+                   Result :: gateway_result().
 
 enqueue_cgi(Args, Env) ->
-    Options = [monitor, {env, [clear | Env]}, stdout, stderr],
-    ppool:run(?QUEUE, [{self(), {Args, Options}}]).
+    Options = [monitor, {group, 0}, kill_group,
+               {env, [clear | Env]}, stdout, stderr],
+    blizanci_pool:enqueue(?QUEUE, {Args, Options}).
 
 
 %%%===================================================================
@@ -375,7 +364,8 @@ code_change(_OldVsn, State, _Extra) ->
               when OsPid  :: integer(),
                    Msg    :: binary(),
                    State  :: worker_state(),
-                   Result :: {noreply, worker_state()}.
+                   Result :: {noreply, worker_state()}
+                           | {stop, normal, worker_state()}.
 
 handle_stdout(OsPid, Msg, State) ->
     CGI = State#worker_state.cgi_status,
@@ -392,14 +382,21 @@ handle_stdout(OsPid, Msg, State) ->
 -spec handle_stdout2(Msg, State) -> Result
               when Msg    :: binary(),
                    State  :: worker_state(),
-                   Result :: {noreply, worker_state()}.
+                   Result :: {noreply, worker_state()}
+                           | {stop, normal, worker_state()}.
 
 handle_stdout2(Msg, State) ->
     CGI = State#worker_state.cgi_status,
     Buffer = CGI#cgi_proc.buffer,
     NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
-    NewState = State#worker_state{cgi_status=CGI#cgi_proc{buffer=NewBuffer}},
-    {noreply, NewState}.
+    case byte_size(NewBuffer) > ?MAX_CGI_OUTPUT_BYTES of
+        true ->
+            exec:kill(CGI#cgi_proc.os_pid, 9),
+            cgi_finished({gateway_error, cgi_output_too_large}, State);
+        false ->
+            NewState = State#worker_state{cgi_status=CGI#cgi_proc{buffer=NewBuffer}},
+            {noreply, NewState}
+    end.
 
 
 % Despite the name, this covers the usual case when the CGI subprocess
