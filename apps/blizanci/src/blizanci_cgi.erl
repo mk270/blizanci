@@ -552,8 +552,8 @@ make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
 
 
 % No-op for this module
--spec handle_client_data(Pid, Binary) -> Response
-              when Pid      :: pid(),
-                   Binary   :: binary(),
-                   Response :: gemini_response().
+-spec handle_client_data(Pid, Binary) -> Result
+              when Pid    :: pid(),
+                   Binary :: binary(),
+                   Result :: gemini_response().
 handle_client_data(_, _) -> none.
