@@ -73,12 +73,26 @@ ssl_opts() ->
     {ok, Key} = get_pem_file_from_environment(App, keyfile,
                                               "./ssl/key.pem"),
     Port = application:get_env(App, port, ?PORT),
+    {ok, Default_Hostname} = inet:gethostname(),
+    Hostname = application:get_env(App, hostname, Default_Hostname),
+    ConfiguredHostname = erlang:list_to_binary(Hostname),
     VerifyFn = fun (ClientCert, Ev, Init) ->
                    blizanci_x509:verify_cert(ClientCert, Ev, Init) end,
 
+    % No top-level certfile/keyfile: sni_fun is the sole source of TLS
+    % credentials, so a client that doesn't send SNI (or sends SNI for
+    % a hostname other than the one configured) has nothing to
+    % complete a handshake against and is refused at the TLS layer,
+    % before any Gemini request is ever parsed.
+    SniFun = fun(SniHostname) ->
+                 case erlang:list_to_binary(SniHostname) of
+                     ConfiguredHostname -> [{certfile, Cert}, {keyfile, Key}];
+                     _ -> unrecognized
+                 end
+             end,
+
     [{port, Port},
-     {certfile, Cert},
-     {keyfile, Key},
+     {sni_fun, SniFun},
      {verify, verify_peer},
      {cacerts, []},
      {certificate_authorities, false},

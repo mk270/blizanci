@@ -89,6 +89,7 @@ init({Ref, Transport, Opts}) ->
     Port = proplists:get_value(port, Opts),
     Routing = proplists:get_value(routing, Opts),
     Docroot = proplists:get_value(docroot, Opts),
+    ok = confirm_sni_hostname(Socket, Transport, Hostname),
     Config = #server_config{
                 hostname=Hostname,
                 port=Port,
@@ -246,6 +247,35 @@ handle_ssl(Socket, Payload, State) ->
                    Result    :: 'ok' | {'error', _}.
 activate(Transport, Socket) ->
     Transport:setopts(Socket, [{active, once}]).
+
+
+% Confirm the hostname negotiated at the TLS layer matches the one
+% configured. Should be unreachable -- blizanci_config:ssl_opts/0's
+% sni_fun already refuses any other hostname (or no SNI at all) before
+% the handshake can even complete -- so reaching the mismatch branch
+% here would mean sni_fun and this check have drifted out of sync with
+% each other: a real bug, not a client-side event.
+-spec confirm_sni_hostname(Socket, Transport, Hostname) -> Result
+              when Socket    :: ssl:sslsocket(),
+                   Transport :: atom(),
+                   Hostname  :: binary(),
+                   Result    :: 'ok'.
+
+confirm_sni_hostname(Socket, Transport, Hostname) ->
+    {ok, [{sni_hostname, SniHostname}]} =
+        ssl:connection_information(Socket, [sni_hostname]),
+    Matches = is_list(SniHostname) andalso
+              erlang:list_to_binary(SniHostname) =:= Hostname,
+    case Matches of
+        true -> ok;
+        false ->
+            logger:warning("SNI hostname ~p accepted at TLS layer but "
+                           "doesn't match configured hostname ~p -- "
+                           "sni_fun and this check are out of sync",
+                           [SniHostname, Hostname]),
+            Transport:close(Socket),
+            exit(normal)
+    end.
 
 
 close_session(State) ->
