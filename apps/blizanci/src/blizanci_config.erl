@@ -191,9 +191,9 @@ get_pem_file_from_environment(App, Key, Default_Filename) ->
 -spec make() -> Result
               when Result :: map().
 make() ->
-    SSL_Opts = ssl_opts(),
+    SSL_Opts   = ssl_opts(),
     Proto_Opts = proto_opts(),
-    Servlets = servlets(),
+    Servlets   = servlets(),
 
     #{
       ssl_opts   => SSL_Opts,
