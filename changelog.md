@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.14.0
+
+- Require SNI for every connection; a client that doesn't send it (or sends an unrecognised hostname) is now refused at the TLS handshake, before any request is processed
+- Fix a stray `Response` return-variable name left over from the spec-alignment work in `blizanci_cgi`
+
 ## 5.13.0
 
 - Cap accumulated CGI output at 10 MiB; a script that exceeds it has its whole process group killed and gets reported as a gateway error, instead of the buffer growing unbounded
