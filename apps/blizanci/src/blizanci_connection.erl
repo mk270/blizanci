@@ -85,16 +85,14 @@ init({Ref, Transport, Opts}) ->
     {ok, Socket} = ranch:handshake(Ref),
     ok = activate(Transport, Socket),
     PeerCert = ssl:peercert(Socket),
-    Hostname = erlang:list_to_binary(proplists:get_value(hostname, Opts)),
     Port = proplists:get_value(port, Opts),
-    Routing = proplists:get_value(routing, Opts),
-    Docroot = proplists:get_value(docroot, Opts),
-    ok = confirm_sni_hostname(Socket, Transport, Hostname),
+    Sites = proplists:get_value(sites, Opts),
+    {ok, Site} = resolve_site(Socket, Transport, Sites),
     Config = #server_config{
-                hostname=Hostname,
+                hostname=Site#site.hostname,
                 port=Port,
-                routing=Routing,
-                docroot=Docroot},
+                routing=Site#site.routing,
+                docroot=Site#site.docroot},
     State = #state{
                transport=Transport,
                socket=Socket,
@@ -249,30 +247,30 @@ activate(Transport, Socket) ->
     Transport:setopts(Socket, [{active, once}]).
 
 
-% Confirm the hostname negotiated at the TLS layer matches the one
-% configured. Should be unreachable -- blizanci_config:ssl_opts/0's
-% sni_fun already refuses any other hostname (or no SNI at all) before
-% the handshake can even complete -- so reaching the mismatch branch
-% here would mean sni_fun and this check have drifted out of sync with
-% each other: a real bug, not a client-side event.
--spec confirm_sni_hostname(Socket, Transport, Hostname) -> Result
+% Resolve the site the TLS layer negotiated via SNI. Should always
+% succeed -- blizanci_config:ssl_opts/1's sni_fun already refuses any
+% hostname that isn't a known site (or no SNI at all) before the
+% handshake can even complete -- so failing to find a match here would
+% mean sni_fun and find_site/2 have drifted out of sync with each
+% other: a real bug, not a client-side event.
+-spec resolve_site(Socket, Transport, Sites) -> Result
               when Socket    :: ssl:sslsocket(),
                    Transport :: atom(),
-                   Hostname  :: binary(),
-                   Result    :: 'ok'.
+                   Sites     :: [site()],
+                   Result    :: {'ok', site()}.
 
-confirm_sni_hostname(Socket, Transport, Hostname) ->
+resolve_site(Socket, Transport, Sites) ->
     {ok, [{sni_hostname, SniHostname}]} =
         ssl:connection_information(Socket, [sni_hostname]),
-    Matches = is_list(SniHostname) andalso
-              erlang:list_to_binary(SniHostname) =:= Hostname,
-    case Matches of
-        true -> ok;
-        false ->
-            logger:warning("SNI hostname ~p accepted at TLS layer but "
-                           "doesn't match configured hostname ~p -- "
-                           "sni_fun and this check are out of sync",
-                           [SniHostname, Hostname]),
+    Found = is_list(SniHostname) andalso
+            blizanci_config:find_site(erlang:list_to_binary(SniHostname),
+                                      Sites),
+    case Found of
+        {ok, Site} -> {ok, Site};
+        _ ->
+            logger:warning("SNI hostname ~p accepted at TLS layer but no "
+                           "matching site found -- sni_fun and find_site/2 "
+                           "are out of sync", [SniHostname]),
             Transport:close(Socket),
             exit(normal)
     end.

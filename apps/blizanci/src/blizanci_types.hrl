@@ -22,6 +22,14 @@
          options     :: map()}). % [route_option()]}).
 -type route() :: #route{}.
 
+-record(site,
+        {hostname :: binary(),
+         certfile :: string(),
+         keyfile  :: string(),
+         routing  :: [route()],
+         docroot  :: string()}).
+-type site() :: #site{}.
+
 -record(server_config,
         {hostname   :: binary(),
          port       :: integer(),

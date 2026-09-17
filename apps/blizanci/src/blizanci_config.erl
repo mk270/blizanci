@@ -55,39 +55,75 @@
 %% @end
 
 -module(blizanci_config).
+-include("blizanci_types.hrl").
 
--export([make/0]).
+-export([make/0, find_site/2]).
 
 -define(PORT, 1965).
 -define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
 
--spec ssl_opts() -> Result
-              when Result :: [{atom(), term()}].
-%% @doc
-%% Generate the options required for ranch to initialise SSL
-%% @end
-ssl_opts() ->
+% Today's sys.config only ever describes a single site (via the
+% top-level hostname/certfile/keyfile/docroot/cgiroot/ca_certs keys),
+% so this always returns a one-element list -- but ssl_opts/1,
+% proto_opts/1 and find_site/2 all genuinely look sites up by
+% hostname, rather than assuming there's exactly one, so this is
+% ready for however a caller ends up supplying more than one later.
+-spec sites() -> Result
+              when Result :: [site()].
+sites() ->
     {ok, App} = application:get_application(),
+    {ok, Default_Hostname} = inet:gethostname(),
+    Hostname = application:get_env(App, hostname, Default_Hostname),
     {ok, Cert} = get_pem_file_from_environment(App, certfile,
                                                "./ssl/certificate.pem"),
     {ok, Key} = get_pem_file_from_environment(App, keyfile,
                                               "./ssl/key.pem"),
+    Docroot = application:get_env(App, docroot, "./public_gemini"),
+    CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
+    CACerts = application:get_env(App, ca_certs, []),
+    Default_Routing = routing_table(Docroot, CGIroot, CACerts),
+    Routes = application:get_env(App, routing, Default_Routing),
+    {ok, Routing} = blizanci_router:prepare(Routes),
+    [#site{hostname = erlang:list_to_binary(Hostname),
+          certfile = Cert,
+          keyfile  = Key,
+          routing  = Routing,
+          docroot  = Docroot}].
+
+
+-spec find_site(Hostname, Sites) -> Result
+              when Hostname :: binary(),
+                   Sites    :: [site()],
+                   Result   :: {'ok', site()} | 'not_found'.
+find_site(Hostname, Sites) ->
+    case lists:keyfind(Hostname, #site.hostname, Sites) of
+        false -> not_found;
+        Site -> {ok, Site}
+    end.
+
+
+-spec ssl_opts(Sites) -> Result
+              when Sites  :: [site()],
+                   Result :: [{atom(), term()}].
+%% @doc
+%% Generate the options required for ranch to initialise SSL
+%% @end
+ssl_opts(Sites) ->
+    {ok, App} = application:get_application(),
     Port = application:get_env(App, port, ?PORT),
-    {ok, Default_Hostname} = inet:gethostname(),
-    Hostname = application:get_env(App, hostname, Default_Hostname),
-    ConfiguredHostname = erlang:list_to_binary(Hostname),
     VerifyFn = fun (ClientCert, Ev, Init) ->
                    blizanci_x509:verify_cert(ClientCert, Ev, Init) end,
 
     % No top-level certfile/keyfile: sni_fun is the sole source of TLS
     % credentials, so a client that doesn't send SNI (or sends SNI for
-    % a hostname other than the one configured) has nothing to
-    % complete a handshake against and is refused at the TLS layer,
+    % a hostname that isn't one of the configured sites) has nothing
+    % to complete a handshake against and is refused at the TLS layer,
     % before any Gemini request is ever parsed.
     SniFun = fun(SniHostname) ->
-                 case erlang:list_to_binary(SniHostname) of
-                     ConfiguredHostname -> [{certfile, Cert}, {keyfile, Key}];
-                     _ -> unrecognized
+                 case find_site(erlang:list_to_binary(SniHostname), Sites) of
+                     {ok, Site} -> [{certfile, Site#site.certfile},
+                                    {keyfile, Site#site.keyfile}];
+                     not_found -> unrecognized
                  end
              end,
 
@@ -101,29 +137,18 @@ ssl_opts() ->
      {versions, ['tlsv1.3']}
     ].
 
--spec proto_opts() -> Result
-              when Result :: [{atom(), term()}].
+-spec proto_opts(Sites) -> Result
+              when Sites  :: [site()],
+                   Result :: [{atom(), term()}].
 %% @doc
 %% Generate the options required for ranch to initialise the TCP listener
 %% @end
-proto_opts() ->
+proto_opts(Sites) ->
     {ok, App} = application:get_application(),
-    {ok, Default_Hostname} = inet:gethostname(),
-    Hostname = application:get_env(App, hostname, Default_Hostname),
-
-    Docroot = application:get_env(App, docroot, "./public_gemini"),
-    CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
-    CACerts = application:get_env(App, ca_certs, []),
     Port = application:get_env(App, port, ?PORT),
-    Default_Routing = routing_table(Docroot, CGIroot, CACerts),
-    Routes = application:get_env(App, routing, Default_Routing),
-    {ok, Routing} = blizanci_router:prepare(Routes),
 
-    [{hostname, Hostname},
-     {docroot, Docroot},
-     {cgiroot, CGIroot},
-     {port, Port},
-     {routing, Routing}
+    [{port, Port},
+     {sites, Sites}
     ].
 
 
@@ -191,8 +216,9 @@ get_pem_file_from_environment(App, Key, Default_Filename) ->
 -spec make() -> Result
               when Result :: map().
 make() ->
-    SSL_Opts   = ssl_opts(),
-    Proto_Opts = proto_opts(),
+    Sites      = sites(),
+    SSL_Opts   = ssl_opts(Sites),
+    Proto_Opts = proto_opts(Sites),
     Servlets   = servlets(),
 
     #{
