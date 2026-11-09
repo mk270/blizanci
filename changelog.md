@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 5.15.0
+
+- Add `blizanci_config:route/5`, which builds and validates a single route and returns a specific `{error, Reason}` for a bad regex, protocol, servlet, auth policy or servlet options, instead of crashing
+- Add `blizanci_config:global/2`, `site/3` and `add_route/2` as the first pieces of a function-based config builder
+- Fix `blizanci_path:confine/2` accepting a sibling directory whose name begins with the root's name (e.g. `/srv/docs-secret` for a root of `/srv/docs`)
+
 ## 5.14.2
 
 - Make `blizanci_config` take its inputs explicitly (`make/3`), confining sys.config reading to `from_app_env/0`, so the config can be built from outside blizanci's own application context
