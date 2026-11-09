@@ -1,5 +1,9 @@
 # Blizanci Changelog
 
+## 5.14.1
+
+- Introduce a `site()` record and look sites up by hostname for both the SNI callback and per-connection routing, ready for more than one site per instance
+
 ## 5.14.0
 
 - Require SNI for every connection; a client that doesn't send it (or sends an unrecognised hostname) is now refused at the TLS handshake, before any request is processed
