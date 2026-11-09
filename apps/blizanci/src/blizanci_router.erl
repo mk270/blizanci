@@ -7,7 +7,7 @@
 
 -module(blizanci_router).
 
--export([prepare/1]).
+-export([prepare/1, build_route/5]).
 -export([route/4]).
 
 -include("blizanci_types.hrl").
@@ -44,19 +44,39 @@ make_routes(RouteInfo) ->
     [ make_route(R) || R <- RouteInfo ].
 
 
+%% @doc
+%% Build and validate a single route, reporting a specific reason if it
+%% is invalid rather than throwing or crashing.
+%% @end
+-spec build_route(Proto, Regex, Module, AuthPolicy, Opts) -> Result
+              when Proto      :: atom(),
+                   Regex      :: string() | binary(),
+                   Module     :: module(),
+                   AuthPolicy :: authorisation(),
+                   Opts       :: map(),
+                   Result     :: {'ok', route()} | {'error', term()}.
+build_route(Proto, Regex, Module, AuthPolicy, Opts) ->
+    try make_route({Proto, Regex, Module, AuthPolicy, Opts}) of
+        Route -> {ok, Route}
+    catch
+        throw:Reason -> {error, Reason}
+    end.
+
+
 -spec make_route(RouteInfo) -> Route
               when RouteInfo :: route_info(),
                    Route     :: route().
 
 make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
-    {ok, RE} = re:compile(Regex),
     ok = valid_proto(Proto),
+    RE = compile_regex(Regex),
+    ok = valid_servlet(Module),
+    ok = valid_route_opts(Opts),
     % The route's own options are merged with the module's defaults
     % here, once, so every caller (production config, tests, any
     % future third-party caller) gets the same guarantee -- callers
     % are not responsible for remembering to merge before calling in.
     FullOpts = maps:merge(Module:default_options(), Opts),
-    ok = valid_route_opts(FullOpts),
     ok = valid_module_opts(Module, FullOpts),
     case blizanci_auth:valid_authz_policy(AuthPolicy) of
         {ok, _} -> #route{proto=Proto,
@@ -64,10 +84,40 @@ make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
                           module=Module,
                           auth_policy=AuthPolicy,
                           options=FullOpts};
-        {error, _} -> throw(invalid_route)
+        {error, Reason} -> throw({Reason, AuthPolicy})
     end;
 make_route(_) ->
     throw(invalid_route).
+
+
+-spec compile_regex(Regex) -> Result
+              when Regex  :: term(),
+                   Result :: mp().
+compile_regex(Regex) ->
+    try re:compile(Regex) of
+        {ok, RE} -> RE;
+        {error, Why} -> throw({invalid_regex, Regex, Why})
+    catch
+        error:badarg -> throw({invalid_regex, Regex, not_a_string})
+    end.
+
+
+-spec valid_servlet(Module) -> Result
+              when Module :: term(),
+                   Result :: 'ok'.
+valid_servlet(Module) when is_atom(Module) ->
+    case code:ensure_loaded(Module) of
+        {module, Module} ->
+            case erlang:function_exported(Module, default_options, 0)
+                 andalso erlang:function_exported(Module,
+                                                  validate_options, 1) of
+                true -> ok;
+                false -> throw({not_a_servlet, Module})
+            end;
+        {error, _} -> throw({unknown_servlet, Module})
+    end;
+valid_servlet(Module) ->
+    throw({not_a_servlet, Module}).
 
 
 -spec valid_proto(Proto) -> Result
@@ -75,7 +125,7 @@ make_route(_) ->
                    Result :: 'ok'.
 valid_proto(gemini) -> ok;
 valid_proto(titan) -> ok;
-valid_proto(_) -> throw(invalid_route).
+valid_proto(Proto) -> throw({invalid_proto, Proto}).
 
 
 -spec valid_route_opts(Opts) -> Result
@@ -83,8 +133,8 @@ valid_proto(_) -> throw(invalid_route).
                    Result :: 'ok'.
 valid_route_opts(Opts) when is_map(Opts) ->
     ok; % obviously we could do better than this!
-valid_route_opts(_) ->
-    throw(invalid_route).
+valid_route_opts(Opts) ->
+    throw({invalid_route_opts, Opts}).
 
 
 % Let the servlet itself reject a bad configuration (e.g. a

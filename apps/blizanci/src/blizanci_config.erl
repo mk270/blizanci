@@ -56,11 +56,26 @@
 
 -module(blizanci_config).
 -include("blizanci_types.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
--export([from_app_env/0, make/3, find_site/2]).
+-export([from_app_env/0, make/3, find_site/2, route/5]).
 
 -define(PORT, 1965).
 -define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
+
+% Build and validate one route, eagerly: a bad route fails here, with a
+% specific reason, the moment it is constructed rather than later
+% inside a whole-config validation.
+-spec route(Proto, Regex, Module, AuthPolicy, Opts) -> Result
+              when Proto      :: atom(),
+                   Regex      :: string() | binary(),
+                   Module     :: module(),
+                   AuthPolicy :: authorisation(),
+                   Opts       :: map(),
+                   Result     :: {'ok', route()} | {'error', term()}.
+route(Proto, Regex, Module, AuthPolicy, Opts) ->
+    blizanci_router:build_route(Proto, Regex, Module, AuthPolicy, Opts).
+
 
 % Build one site from explicit values. No ambient lookups: callable
 % from any process, with whatever values the caller has.
@@ -234,3 +249,56 @@ from_app_env() ->
     Port = application:get_env(App, port, ?PORT),
     Servlets = application:get_env(App, servlets, ?DEFAULT_SERVLETS),
     make(Port, Servlets, Sites).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-define(TEST_DOCROOT, "test-docroot").
+
+route_ok_test_() ->
+    Opts = #{ docroot => ?TEST_DOCROOT },
+    Static = fun(Regex, Auth) ->
+                 route(gemini, Regex, blizanci_static, Auth, Opts)
+             end,
+    [?_assertMatch({ok, #route{proto = gemini,
+                               module = blizanci_static,
+                               auth_policy = public}},
+                   Static("(?<PATH>.*)", public)),
+     ?_assertMatch({ok, #route{}}, Static(<<"(?<PATH>.*)">>, public)),
+     ?_assertMatch({ok, #route{auth_policy = restricted}},
+                   Static("x", restricted)),
+     ?_assertMatch({ok, #route{auth_policy = {private, ["ca.pem"]}}},
+                   Static("x", {private, ["ca.pem"]}))].
+
+route_merges_default_options_test() ->
+    {ok, #route{options = Options}} =
+        route(gemini, "x", blizanci_static, public,
+              #{ docroot => ?TEST_DOCROOT }),
+    Defaults = blizanci_static:default_options(),
+    ?assertEqual(maps:merge(Defaults, #{ docroot => ?TEST_DOCROOT }),
+                 Options).
+
+route_errors_test_() ->
+    Opts = #{ docroot => ?TEST_DOCROOT },
+    [?_assertMatch({error, {invalid_proto, gopher}},
+                   route(gopher, "x", blizanci_static, public, Opts)),
+     ?_assertMatch({error, {invalid_regex, "(", _}},
+                   route(gemini, "(", blizanci_static, public, Opts)),
+     ?_assertMatch({error, {invalid_regex, 42, not_a_string}},
+                   route(gemini, 42, blizanci_static, public, Opts)),
+     ?_assertEqual({error, {unknown_servlet, no_such_servlet}},
+                   route(gemini, "x", no_such_servlet, public, Opts)),
+     ?_assertEqual({error, {not_a_servlet, lists}},
+                   route(gemini, "x", lists, public, Opts)),
+     ?_assertEqual({error, {not_a_servlet, "blizanci_static"}},
+                   route(gemini, "x", "blizanci_static", public, Opts)),
+     ?_assertEqual({error, {invalid_authz_policy, bogus}},
+                   route(gemini, "x", blizanci_static, bogus, Opts)),
+     ?_assertEqual({error, {invalid_route_opts, not_a_map}},
+                   route(gemini, "x", blizanci_static, public, not_a_map)),
+     ?_assertEqual({error, {invalid_route_options, blizanci_static,
+                            {docroot_not_a_directory, "/no/such/dir"}}},
+                   route(gemini, "x", blizanci_static, public,
+                         #{ docroot => "/no/such/dir" }))].
