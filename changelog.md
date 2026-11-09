@@ -1,5 +1,9 @@
 # Blizanci Changelog
 
+## 5.14.2
+
+- Make `blizanci_config` take its inputs explicitly (`make/3`), confining sys.config reading to `from_app_env/0`, so the config can be built from outside blizanci's own application context
+
 ## 5.14.1
 
 - Introduce a `site()` record and look sites up by hostname for both the SNI callback and per-connection routing, ready for more than one site per instance
