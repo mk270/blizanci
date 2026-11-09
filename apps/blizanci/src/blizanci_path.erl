@@ -9,6 +9,8 @@
 
 -export([fix_path/1, path_under_root/2, confine/2]).
 
+-include_lib("eunit/include/eunit.hrl").
+
 %% @doc Canonicalise and normalise (q.v.) the path S
 %% @todo does not support relative paths
 %% @end
@@ -29,8 +31,10 @@ fix_path3(Error) -> Error.
 
 
 %% @doc
-%% Is the path S underneath Root? This largely boils down to whether the former
-%% is an initial substring of the latter.
+%% Is the path S underneath Root (or Root itself)? S must equal Root, or
+%% begin with Root followed by a path separator: a bare string-prefix
+%% test would wrongly accept a sibling such as /srv/docs-secret for a
+%% Root of /srv/docs.
 %%
 %% It is (currently) the responsibility of the caller to canonicalise/normalise
 %% the paths before calling this function.
@@ -42,9 +46,11 @@ fix_path3(Error) -> Error.
                    Root   :: string(),
                    Result :: boolean().
 path_under_root(S, Root) ->
-    L = string:len(Root),
-    Sl = string:slice(S, 0, L),
-    Sl =:= Root.
+    Prefix = case lists:suffix("/", Root) of
+                 true  -> Root;
+                 false -> Root ++ "/"
+             end,
+    S =:= Root orelse lists:prefix(Prefix, S).
 
 
 %% @doc
@@ -114,3 +120,61 @@ confine2(SubPath, AbsRoot, CanonRoot) ->
                            [SubPath, AbsRoot, Reason]),
             {error, file_not_found}
     end.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+path_under_root_test_() ->
+    [?_assert(path_under_root("/srv/docs/a/b", "/srv/docs")),
+     ?_assert(path_under_root("/srv/docs", "/srv/docs")),
+     ?_assert(path_under_root("/srv/docs/a", "/srv/docs/")),
+     ?_assert(path_under_root("/anything", "/")),
+     ?_assertNot(path_under_root("/srv/other/a", "/srv/docs")),
+     % a sibling sharing a name prefix is not under the root
+     ?_assertNot(path_under_root("/srv/docs-secret/a", "/srv/docs")),
+     ?_assertNot(path_under_root("/srv/docs2", "/srv/docs")),
+     ?_assertNot(path_under_root("/srv", "/srv/docs"))].
+
+%% Fixture, built under a fresh temporary directory:
+%%   Base/docs/inside.txt
+%%   Base/docs/escape -> ../outside        (symlink out of the root)
+%%   Base/docs-secret/secret.txt           (sibling sharing a name prefix)
+%%   Base/outside/secret.txt
+confine_test_() ->
+    {setup,
+     fun confine_setup/0,
+     fun confine_teardown/1,
+     fun confine_tests/1}.
+
+confine_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("confine_test_" ++ Unique),
+    Docs = filename:join(Base, "docs"),
+    ok = filelib:ensure_path(Docs),
+    ok = filelib:ensure_path(filename:join(Base, "docs-secret")),
+    ok = filelib:ensure_path(filename:join(Base, "outside")),
+    ok = file:write_file(filename:join(Docs, "inside.txt"), <<"x">>),
+    ok = file:write_file(filename:join([Base, "docs-secret", "secret.txt"]),
+                         <<"x">>),
+    ok = file:write_file(filename:join([Base, "outside", "secret.txt"]),
+                         <<"x">>),
+    ok = file:make_symlink("../outside", filename:join(Docs, "escape")),
+    Base.
+
+confine_teardown(Base) ->
+    file:del_dir_r(Base).
+
+confine_tests(Base) ->
+    Docs = filename:join(Base, "docs"),
+    {ok, CanonDocs} = fix_path(Docs),
+    [?_assertEqual({ok, filename:join(CanonDocs, "inside.txt")},
+                   confine("inside.txt", Docs)),
+     ?_assertEqual({error, file_not_found},
+                   confine("../outside/secret.txt", Docs)),
+     % regression: sibling directory sharing the root's name as a prefix
+     ?_assertEqual({error, file_not_found},
+                   confine("../docs-secret/secret.txt", Docs)),
+     ?_assertEqual({error, file_not_found},
+                   confine("escape/secret.txt", Docs))].
