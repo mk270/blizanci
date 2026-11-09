@@ -16,7 +16,7 @@
 start(_StartType, _StartArgs) ->
     ok = application:ensure_started(mime_lookup),
     ok = application:ensure_started(ranch),
-    Config = blizanci_config:make(),
+    Config = blizanci_config:from_app_env(),
     #{ servlets := Servlets } = Config,
     {ok, Pid} = blizanci_sup:start_link(Config),
     {ok, Pid, Servlets}.

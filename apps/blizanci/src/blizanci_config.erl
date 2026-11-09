@@ -57,38 +57,27 @@
 -module(blizanci_config).
 -include("blizanci_types.hrl").
 
--export([make/0, find_site/2]).
+-export([from_app_env/0, make/3, find_site/2]).
 
 -define(PORT, 1965).
 -define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
 
-% Today's sys.config only ever describes a single site (via the
-% top-level hostname/certfile/keyfile/docroot/cgiroot/ca_certs keys),
-% so this always returns a one-element list -- but ssl_opts/1,
-% proto_opts/1 and find_site/2 all genuinely look sites up by
-% hostname, rather than assuming there's exactly one, so this is
-% ready for however a caller ends up supplying more than one later.
--spec sites() -> Result
-              when Result :: [site()].
-sites() ->
-    {ok, App} = application:get_application(),
-    {ok, Default_Hostname} = inet:gethostname(),
-    Hostname = application:get_env(App, hostname, Default_Hostname),
-    {ok, Cert} = get_pem_file_from_environment(App, certfile,
-                                               "./ssl/certificate.pem"),
-    {ok, Key} = get_pem_file_from_environment(App, keyfile,
-                                              "./ssl/key.pem"),
-    Docroot = application:get_env(App, docroot, "./public_gemini"),
-    CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
-    CACerts = application:get_env(App, ca_certs, []),
-    Default_Routing = routing_table(Docroot, CGIroot, CACerts),
-    Routes = application:get_env(App, routing, Default_Routing),
+% Build one site from explicit values. No ambient lookups: callable
+% from any process, with whatever values the caller has.
+-spec make_site(Hostname, Cert, Key, Docroot, Routes) -> Result
+              when Hostname :: string(),
+                   Cert     :: string(),
+                   Key      :: string(),
+                   Docroot  :: string(),
+                   Routes   :: [route_entry()],
+                   Result   :: site().
+make_site(Hostname, Cert, Key, Docroot, Routes) ->
     {ok, Routing} = blizanci_router:prepare(Routes),
-    [#site{hostname = erlang:list_to_binary(Hostname),
+    #site{hostname = erlang:list_to_binary(Hostname),
           certfile = Cert,
           keyfile  = Key,
           routing  = Routing,
-          docroot  = Docroot}].
+          docroot  = Docroot}.
 
 
 -spec find_site(Hostname, Sites) -> Result
@@ -102,15 +91,14 @@ find_site(Hostname, Sites) ->
     end.
 
 
--spec ssl_opts(Sites) -> Result
-              when Sites  :: [site()],
+-spec ssl_opts(Port, Sites) -> Result
+              when Port   :: integer(),
+                   Sites  :: [site()],
                    Result :: [{atom(), term()}].
 %% @doc
 %% Generate the options required for ranch to initialise SSL
 %% @end
-ssl_opts(Sites) ->
-    {ok, App} = application:get_application(),
-    Port = application:get_env(App, port, ?PORT),
+ssl_opts(Port, Sites) ->
     VerifyFn = fun (ClientCert, Ev, Init) ->
                    blizanci_x509:verify_cert(ClientCert, Ev, Init) end,
 
@@ -137,16 +125,14 @@ ssl_opts(Sites) ->
      {versions, ['tlsv1.3']}
     ].
 
--spec proto_opts(Sites) -> Result
-              when Sites  :: [site()],
+-spec proto_opts(Port, Sites) -> Result
+              when Port   :: integer(),
+                   Sites  :: [site()],
                    Result :: [{atom(), term()}].
 %% @doc
 %% Generate the options required for ranch to initialise the TCP listener
 %% @end
-proto_opts(Sites) ->
-    {ok, App} = application:get_application(),
-    Port = application:get_env(App, port, ?PORT),
-
+proto_opts(Port, Sites) ->
     [{port, Port},
      {sites, Sites}
     ].
@@ -186,21 +172,6 @@ routing_table(Docroot, CGIroot, CACerts) ->
     Default_Route_Specs.
 
 
-% Which servlets this instance may ever route to -- a static,
-% deploy-time decision (analogous to {applications, [...]} in
-% blizanci.app.src), not something inferred from the routing table.
-% This means routing-table updates can reference any declared servlet
-% without needing to separately ensure its pool has been started,
-% and lets a third-party servlet be registered without forking
-% blizanci -- just add it to this list (or override via the
-% `servlets` app env).
--spec servlets() -> Result
-              when Result :: [module()].
-servlets() ->
-    {ok, App} = application:get_application(),
-    application:get_env(App, servlets, ?DEFAULT_SERVLETS).
-
-
 -spec get_pem_file_from_environment(App, Key, Default_Filename) -> Result
               when App              :: atom(),
                    Key              :: atom(),
@@ -213,16 +184,53 @@ get_pem_file_from_environment(App, Key, Default_Filename) ->
     blizanci_x509:validate_pem_file(Value).
 
 
--spec make() -> Result
-              when Result :: map().
-make() ->
-    Sites      = sites(),
-    SSL_Opts   = ssl_opts(Sites),
-    Proto_Opts = proto_opts(Sites),
-    Servlets   = servlets(),
-
+% Which servlets this instance may ever route to -- a static,
+% deploy-time decision (analogous to {applications, [...]} in
+% blizanci.app.src), not something inferred from the routing table.
+% This means routing-table updates can reference any declared servlet
+% without needing to separately ensure its pool has been started,
+% and lets a third-party servlet be registered without forking
+% blizanci -- just add it to this list (or override via the
+% `servlets` app env).
+% Takes everything explicitly: a library caller builds its own port,
+% servlet list and sites and passes them in; nothing here consults
+% the application environment.
+-spec make(Port, Servlets, Sites) -> Result
+              when Port     :: integer(),
+                   Servlets :: [module()],
+                   Sites    :: [site()],
+                   Result   :: map().
+make(Port, Servlets, Sites) ->
     #{
-      ssl_opts   => SSL_Opts,
-      proto_opts => Proto_Opts,
+      ssl_opts   => ssl_opts(Port, Sites),
+      proto_opts => proto_opts(Port, Sites),
       servlets   => Servlets
      }.
+
+
+% The one place that reads sys.config: pulls blizanci's app env into
+% the explicit values make/3 takes. Must be called from within
+% blizanci's own application context (application:get_application/0
+% resolves via the calling process), i.e. from blizanci_app:start/2.
+-spec from_app_env() -> Result
+              when Result :: map().
+from_app_env() ->
+    {ok, App} = application:get_application(),
+    {ok, Default_Hostname} = inet:gethostname(),
+    Hostname = application:get_env(App, hostname, Default_Hostname),
+    {ok, Cert} = get_pem_file_from_environment(App, certfile,
+                                               "./ssl/certificate.pem"),
+    {ok, Key} = get_pem_file_from_environment(App, keyfile,
+                                              "./ssl/key.pem"),
+    Docroot = application:get_env(App, docroot, "./public_gemini"),
+    CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
+    CACerts = application:get_env(App, ca_certs, []),
+    Default_Routing = routing_table(Docroot, CGIroot, CACerts),
+    Routes = application:get_env(App, routing, Default_Routing),
+    % Today's sys.config only ever describes a single site, so this
+    % is a one-element list; everything downstream looks sites up by
+    % hostname and doesn't assume that.
+    Sites = [make_site(Hostname, Cert, Key, Docroot, Routes)],
+    Port = application:get_env(App, port, ?PORT),
+    Servlets = application:get_env(App, servlets, ?DEFAULT_SERVLETS),
+    make(Port, Servlets, Sites).
