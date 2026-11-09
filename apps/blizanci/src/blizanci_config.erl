@@ -58,7 +58,8 @@
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([from_app_env/0, make/3, find_site/2, route/5]).
+-export([from_app_env/0, make/3, find_site/2, route/5,
+         global/2, site/3, add_route/2]).
 
 -define(PORT, 1965).
 -define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
@@ -77,8 +78,43 @@ route(Proto, Regex, Module, AuthPolicy, Opts) ->
     blizanci_router:build_route(Proto, Regex, Module, AuthPolicy, Opts).
 
 
-% Build one site from explicit values. No ambient lookups: callable
-% from any process, with whatever values the caller has.
+% The global part of a configuration: one per blizanci instance,
+% however many sites it serves.
+-spec global(Port, Servlets) -> Result
+              when Port     :: integer(),
+                   Servlets :: [module()],
+                   Result   :: global_config().
+global(Port, Servlets) ->
+    #global{port = Port, servlets = Servlets}.
+
+
+% A site with no routes yet: fully self-contained, knowing nothing of
+% any other site. Add routes with add_route/2.
+-spec site(Hostname, CertFile, KeyFile) -> Result
+              when Hostname :: string(),
+                   CertFile :: string(),
+                   KeyFile  :: string(),
+                   Result   :: site().
+site(Hostname, CertFile, KeyFile) ->
+    #site{hostname = erlang:list_to_binary(Hostname),
+          certfile = CertFile,
+          keyfile  = KeyFile,
+          routing  = [],
+          docroot  = undefined}.
+
+
+% Append a route to a site's routing table. Routes are tried in order,
+% first match wins, so this is "append" (iptables -A): a route added
+% later is only reached if no earlier one matches.
+-spec add_route(Site, Route) -> Result
+              when Site   :: site(),
+                   Route  :: route(),
+                   Result :: site().
+add_route(Site = #site{routing = Routing}, Route = #route{}) ->
+    Site#site{routing = Routing ++ [Route]}.
+
+
+% Build one site from explicit values.
 -spec make_site(Hostname, Cert, Key, Docroot, Routes) -> Result
               when Hostname :: string(),
                    Cert     :: string(),
@@ -88,11 +124,8 @@ route(Proto, Regex, Module, AuthPolicy, Opts) ->
                    Result   :: site().
 make_site(Hostname, Cert, Key, Docroot, Routes) ->
     {ok, Routing} = blizanci_router:prepare(Routes),
-    #site{hostname = erlang:list_to_binary(Hostname),
-          certfile = Cert,
-          keyfile  = Key,
-          routing  = Routing,
-          docroot  = Docroot}.
+    Site = site(Hostname, Cert, Key),
+    Site#site{routing = Routing, docroot = Docroot}.
 
 
 -spec find_site(Hostname, Sites) -> Result
@@ -302,3 +335,30 @@ route_errors_test_() ->
                             {docroot_not_a_directory, "/no/such/dir"}}},
                    route(gemini, "x", blizanci_static, public,
                          #{ docroot => "/no/such/dir" }))].
+
+global_test() ->
+    ?assertEqual(#global{port = 1965, servlets = [blizanci_static]},
+                 global(1965, [blizanci_static])).
+
+site_test() ->
+    ?assertEqual(#site{hostname = <<"example.org">>,
+                       certfile = "c.pem",
+                       keyfile  = "k.pem",
+                       routing  = [],
+                       docroot  = undefined},
+                 site("example.org", "c.pem", "k.pem")).
+
+add_route_appends_test() ->
+    Opts = #{ docroot => ?TEST_DOCROOT },
+    {ok, R1} = route(gemini, "a", blizanci_static, public, Opts),
+    {ok, R2} = route(gemini, "b", blizanci_static, restricted, Opts),
+    Site0 = site("example.org", "c.pem", "k.pem"),
+    Site1 = add_route(Site0, R1),
+    Site2 = add_route(Site1, R2),
+    ?assertEqual([R1], Site1#site.routing),
+    ?assertEqual([R1, R2], Site2#site.routing),
+    ?assertEqual([], Site0#site.routing).
+
+add_route_rejects_non_route_test() ->
+    Site = site("example.org", "c.pem", "k.pem"),
+    ?assertError(function_clause, add_route(Site, {not_a_route})).

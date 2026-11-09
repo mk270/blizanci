@@ -27,14 +27,19 @@
          certfile :: string(),
          keyfile  :: string(),
          routing  :: [route()],
-         docroot  :: string()}).
+         docroot  :: string() | 'undefined'}).
 -type site() :: #site{}.
+
+-record(global,
+        {port     :: integer(),
+         servlets :: [module()]}).
+-type global_config() :: #global{}.
 
 -record(server_config,
         {hostname   :: binary(),
          port       :: integer(),
          routing    :: [route()],
-         docroot    :: string()}).
+         docroot    :: string() | 'undefined'}).
 -type server_config() :: #server_config{}.
 
 -type peer_cert() :: {'ok', public_key:der_encoded() } |
