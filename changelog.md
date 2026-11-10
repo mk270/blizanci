@@ -1,5 +1,9 @@
 # Blizanci Changelog
 
+## 5.18.0
+
+- A Titan request with `size=0` now deletes the resource, as the Titan specification says, instead of creating an empty file; only regular files inside the upload root are deleted, and a zero-size request that carries data is refused
+
 ## 5.17.1
 
 - Default a missing Titan `mime` parameter to `text/gemini`, as the Titan specification says, instead of crashing the request
