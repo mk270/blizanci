@@ -1,5 +1,12 @@
 # Blizanci Changelog
 
+## 5.17.0
+
+- Reject Titan requests whose `size` is missing, not a number or negative, with a status 59 error instead of crashing the upload worker
+- Refuse to start, or to validate a config, where a Titan route's `docroot` or `work_dir` is, contains or lies inside a CGI route's `cgiroot`; this can reject configurations that previously ran
+- Only purge blizanci's own temp files from the Titan `work_dir`: they now carry a `blizanci-tmp-` prefix, and the purge leaves everything else alone; temp files left by earlier versions (digit-only names) are no longer purged and can be deleted by hand
+- Fix the Titan temp-file age check, which compared only the time-of-day part of a file's age and used its access time instead of its modification time
+
 ## 5.16.2
 
 - Rename the internal `blizanci_live` module to `blizanci_conf_serv`, document what it manages, and list it in `blizanci.app.src`
