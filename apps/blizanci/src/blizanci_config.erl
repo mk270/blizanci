@@ -59,7 +59,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([from_app_env/0, make/3, find_site/2, route/5,
-         global/2, site/3, add_route/2]).
+         global/2, site/3, add_route/2, insert_route/3, routes/1,
+         new/2, validate/1]).
 
 -define(PORT, 1965).
 -define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
@@ -112,6 +113,125 @@ site(Hostname, CertFile, KeyFile) ->
                    Result :: site().
 add_route(Site = #site{routing = Routing}, Route = #route{}) ->
     Site#site{routing = Routing ++ [Route]}.
+
+
+% Insert a route so that it becomes the Index'th route (1-based),
+% ahead of whatever occupied that position (iptables -I). An Index
+% that doesn't name an existing route is an error, not clamped; use
+% add_route/2 to append.
+-spec insert_route(Site, Index, Route) -> Result
+              when Site   :: site(),
+                   Index  :: pos_integer(),
+                   Route  :: route(),
+                   Result :: {'ok', site()} | {'error', term()}.
+insert_route(Site = #site{routing = Routing}, Index, Route = #route{})
+  when is_integer(Index), Index >= 1, Index =< length(Routing) ->
+    {Before, After} = lists:split(Index - 1, Routing),
+    {ok, Site#site{routing = Before ++ [Route | After]}};
+insert_route(#site{routing = Routing}, Index, #route{}) ->
+    {error, {index_out_of_range, Index, length(Routing)}}.
+
+
+% A site's routes, in the order they are tried.
+-spec routes(Site) -> Result
+              when Site   :: site(),
+                   Result :: [route()].
+routes(#site{routing = Routing}) ->
+    Routing.
+
+
+% Combine a global configuration with the sites it serves.
+-spec new(Global, Sites) -> Result
+              when Global :: global_config(),
+                   Sites  :: [site()],
+                   Result :: config().
+new(Global = #global{}, Sites) when is_list(Sites) ->
+    #config{global = Global, sites = Sites}.
+
+
+% Check a whole configuration, reporting the first problem found.
+-spec validate(Config) -> Result
+              when Config :: config(),
+                   Result :: 'ok' | {'error', term()}.
+validate(#config{global = Global, sites = Sites}) ->
+    first_error([fun() -> validate_global(Global) end,
+                 fun() -> validate_sites(Sites) end,
+                 fun() -> validate_routes_use_servlets(Global, Sites) end]).
+
+
+-spec first_error(Checks) -> Result
+              when Checks :: [fun(() -> 'ok' | {'error', term()})],
+                   Result :: 'ok' | {'error', term()}.
+first_error([]) ->
+    ok;
+first_error([Check | Rest]) ->
+    case Check() of
+        ok -> first_error(Rest);
+        {error, _} = Error -> Error
+    end.
+
+
+-spec validate_global(Global) -> Result
+              when Global :: global_config(),
+                   Result :: 'ok' | {'error', term()}.
+validate_global(#global{port = Port, servlets = Servlets}) ->
+    case is_integer(Port) andalso Port >= 1 andalso Port =< 65535 of
+        true  -> validate_servlets(Servlets);
+        false -> {error, {invalid_port, Port}}
+    end.
+
+
+-spec validate_servlets(Servlets) -> Result
+              when Servlets :: term(),
+                   Result   :: 'ok' | {'error', term()}.
+validate_servlets(Servlets) when is_list(Servlets) ->
+    first_error([fun() -> blizanci_router:check_servlet(S) end
+                 || S <- Servlets]);
+validate_servlets(Servlets) ->
+    {error, {invalid_servlets, Servlets}}.
+
+
+-spec validate_sites(Sites) -> Result
+              when Sites  :: [site()],
+                   Result :: 'ok' | {'error', term()}.
+validate_sites([]) ->
+    {error, no_sites};
+validate_sites(Sites) ->
+    Hostnames = [ S#site.hostname || S <- Sites ],
+    case Hostnames -- lists:usort(Hostnames) of
+        [] -> first_error([fun() -> validate_site(S) end || S <- Sites]);
+        [Duplicate | _] -> {error, {duplicate_site, Duplicate}}
+    end.
+
+
+-spec validate_site(Site) -> Result
+              when Site   :: site(),
+                   Result :: 'ok' | {'error', term()}.
+validate_site(#site{hostname = Hostname, certfile = Cert,
+                    keyfile = Key}) ->
+    case {blizanci_x509:validate_pem_file(Cert),
+          blizanci_x509:validate_pem_file(Key)} of
+        {{fail, Why}, _} -> {error, {bad_certfile, Hostname, Why}};
+        {_, {fail, Why}} -> {error, {bad_keyfile, Hostname, Why}};
+        _                -> ok
+    end.
+
+
+% A route may only name a servlet the global config declares, since only
+% declared servlets have their pools started.
+-spec validate_routes_use_servlets(Global, Sites) -> Result
+              when Global :: global_config(),
+                   Sites  :: [site()],
+                   Result :: 'ok' | {'error', term()}.
+validate_routes_use_servlets(#global{servlets = Servlets}, Sites) ->
+    Undeclared = [ {S#site.hostname, R#route.module}
+                   || S <- Sites, R <- S#site.routing,
+                      not lists:member(R#route.module, Servlets) ],
+    case Undeclared of
+        [] -> ok;
+        [{Hostname, Module} | _] ->
+            {error, {undeclared_servlet, Hostname, Module}}
+    end.
 
 
 % Build one site from explicit values.
@@ -396,3 +516,69 @@ sni_fun_test_() ->
      ?_assertEqual(undefined, proplists:get_value(certfile, SSL)),
      ?_assertEqual(undefined, proplists:get_value(keyfile, SSL)),
      ?_assertEqual(['tlsv1.3'], proplists:get_value(versions, SSL))].
+
+%% Builder: routes and configuration.
+
+insert_route_test_() ->
+    Opts = #{ docroot => ?TEST_DOCROOT },
+    {ok, R1} = route(gemini, "a", blizanci_static, public, Opts),
+    {ok, R2} = route(gemini, "b", blizanci_static, public, Opts),
+    {ok, R3} = route(gemini, "c", blizanci_static, public, Opts),
+    Site = add_route(add_route(site("h", "c.pem", "k.pem"), R1), R2),
+    [?_assertEqual({ok, [R3, R1, R2]},
+                   rmap(insert_route(Site, 1, R3))),
+     ?_assertEqual({ok, [R1, R3, R2]},
+                   rmap(insert_route(Site, 2, R3))),
+     % past the end is an error, not an append
+     ?_assertEqual({error, {index_out_of_range, 3, 2}},
+                   insert_route(Site, 3, R3)),
+     ?_assertEqual({error, {index_out_of_range, 0, 2}},
+                   insert_route(Site, 0, R3)),
+     ?_assertEqual({error, {index_out_of_range, 1, 0}},
+                   insert_route(site("h", "c.pem", "k.pem"), 1, R3)),
+     ?_assertEqual([R1, R2], routes(Site))].
+
+rmap({ok, Site}) -> {ok, routes(Site)};
+rmap(Error) -> Error.
+
+new_test() ->
+    G = global(1965, [blizanci_static]),
+    S = site("a.example", "c.pem", "k.pem"),
+    ?assertEqual(#config{global = G, sites = [S]}, new(G, [S])).
+
+%% validate/1. Uses a real PEM file so the cert/key checks can pass.
+validate_test_() ->
+    {setup, fun write_test_pem/0, fun file:delete/1, fun validate_tests/1}.
+
+validate_tests(Pem) ->
+    {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static, public,
+                    #{ docroot => ?TEST_DOCROOT }),
+    Good = fun(Host) -> add_route(site(Host, Pem, Pem), R) end,
+    G = global(1965, [blizanci_static]),
+    V = fun(Gl, Sites) -> validate(new(Gl, Sites)) end,
+    [?_assertEqual(ok, V(G, [Good("a"), Good("b")])),
+     ?_assertEqual({error, {invalid_port, 0}},
+                   V(global(0, [blizanci_static]), [Good("a")])),
+     ?_assertEqual({error, {invalid_port, <<"x">>}},
+                   V(global(<<"x">>, [blizanci_static]), [Good("a")])),
+     ?_assertEqual({error, {unknown_servlet, nope}},
+                   V(global(1965, [nope]), [Good("a")])),
+     ?_assertEqual({error, no_sites}, V(G, [])),
+     ?_assertEqual({error, {duplicate_site, <<"a">>}},
+                   V(G, [Good("a"), Good("a")])),
+     % a site with no routes is valid
+     ?_assertEqual(ok, V(G, [site("a", Pem, Pem)])),
+     ?_assertEqual({error, {bad_certfile, <<"a">>, couldnt_open_pem_file}},
+                   V(G, [add_route(site("a", "/no/such.pem", Pem), R)])),
+     ?_assertEqual({error, {bad_keyfile, <<"a">>, couldnt_open_pem_file}},
+                   V(G, [add_route(site("a", Pem, "/no/such.pem"), R)])),
+     ?_assertEqual({error, {undeclared_servlet, <<"a">>, blizanci_static}},
+                   V(global(1965, []), [Good("a")]))].
+
+write_test_pem() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Path = filename:absname("validate_test_" ++ Unique ++ ".pem"),
+    Pem = public_key:pem_encode([{'Certificate', <<1, 2, 3>>,
+                                  not_encrypted}]),
+    ok = file:write_file(Path, Pem),
+    Path.

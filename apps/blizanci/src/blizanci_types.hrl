@@ -35,6 +35,11 @@
          servlets :: [module()]}).
 -type global_config() :: #global{}.
 
+-record(config,
+        {global :: global_config(),
+         sites  :: [site()]}).
+-type config() :: #config{}.
+
 -record(server_config,
         {hostname   :: binary(),
          port       :: integer(),

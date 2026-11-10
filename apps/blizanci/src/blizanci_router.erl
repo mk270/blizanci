@@ -7,7 +7,7 @@
 
 -module(blizanci_router).
 
--export([prepare/1, build_route/5]).
+-export([prepare/1, build_route/5, check_servlet/1]).
 -export([route/4]).
 
 -include("blizanci_types.hrl").
@@ -99,6 +99,21 @@ compile_regex(Regex) ->
         {error, Why} -> throw({invalid_regex, Regex, Why})
     catch
         error:badarg -> throw({invalid_regex, Regex, not_a_string})
+    end.
+
+
+%% @doc
+%% Check that Module is loadable and implements the servlet callbacks
+%% used for route validation.
+%% @end
+-spec check_servlet(Module) -> Result
+              when Module :: term(),
+                   Result :: 'ok' | {'error', term()}.
+check_servlet(Module) ->
+    try valid_servlet(Module) of
+        ok -> ok
+    catch
+        throw:Reason -> {error, Reason}
     end.
 
 
