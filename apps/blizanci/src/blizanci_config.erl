@@ -235,12 +235,13 @@ validate_routes_use_servlets(#global{servlets = Servlets}, Sites) ->
 
 
 % Apply a configuration to the running instance, without restarting its
-% listener: the sites (certificates, routes) and the declared servlets
-% are replaced for every connection accepted from now on, while
+% listener: the sites (certificates, routes) and the declared servlet
+% modules are replaced for every connection accepted from now on, while
 % connections already in progress finish with what they started with.
-% Added servlets are started before the switch and removed ones stopped
-% after it, so a route never names a servlet that isn't running; a
-% connection that is mid-request on a removed servlet may be cut off.
+% The start/0 of each added servlet is called before the switch and the
+% stop/0 of each removed one after it, so a route never names a servlet
+% whose resources aren't set up; a connection that is mid-request on a
+% removed servlet may be cut off.
 %
 % The port is bound once when the listener opens, so a change of port
 % is refused rather than applied. Nothing is applied if the instance
@@ -251,13 +252,13 @@ validate_routes_use_servlets(#global{servlets = Servlets}, Sites) ->
 apply(Config = #config{global = #global{port = Port, servlets = Servlets},
                        sites = Sites}) ->
     case validate(Config) of
-        ok -> swap(blizanci_live:current(), Port, Servlets, Sites);
+        ok -> swap(blizanci_conf_serv:current(), Port, Servlets, Sites);
         {error, _} = Error -> Error
     end.
 
 
 -spec swap(Running, Port, Servlets, Sites) -> Result
-              when Running  :: {'ok', blizanci_live:running()}
+              when Running  :: {'ok', blizanci_conf_serv:running()}
                              | 'not_running',
                    Port     :: integer(),
                    Servlets :: [module()],
@@ -273,7 +274,7 @@ swap({ok, #{servlets := OldServlets}}, Port, Servlets, Sites) ->
     Removed = [ S || S <- OldServlets, not lists:member(S, Servlets) ],
     case start_servlets(Added, []) of
         ok ->
-            ok = blizanci_live:publish(Port, Servlets, Sites),
+            ok = blizanci_conf_serv:publish(Port, Servlets, Sites),
             [ ok = S:stop() || S <- Removed ],
             ok;
         {error, _} = Error ->
@@ -281,8 +282,8 @@ swap({ok, #{servlets := OldServlets}}, Port, Servlets, Sites) ->
     end.
 
 
-% Start each servlet in turn; if one fails, stop those already started
-% so a failed apply leaves nothing behind.
+% Call start/0 on each servlet in turn; if one fails, call stop/0 on
+% those already started so a failed apply leaves nothing behind.
 -spec start_servlets(Servlets, Started) -> Result
               when Servlets :: [module()],
                    Started  :: [module()],
@@ -340,10 +341,10 @@ ssl_opts(Port) ->
     % to complete a handshake against and is refused at the TLS layer,
     % before any Gemini request is ever parsed. ranch fixes these
     % options when the listener opens, so the sites are looked up in
-    % blizanci_live at handshake time, which is what lets apply/1
+    % blizanci_conf_serv at handshake time, which is what lets apply/1
     % change them without restarting the listener.
     SniFun = fun(SniHostname) ->
-                 case blizanci_live:find_site(
+                 case blizanci_conf_serv:find_site(
                         erlang:list_to_binary(SniHostname)) of
                      {ok, Site} -> [{certfile, Site#site.certfile},
                                     {keyfile, Site#site.keyfile}];
@@ -590,7 +591,7 @@ sni_fun_test_() ->
       % the same sni_fun sees a replaced site list: this is what lets
       % apply/1 change certificates on a running listener
       ?_test(begin
-                 ok = blizanci_live:publish(1965, [], [B]),
+                 ok = blizanci_conf_serv:publish(1965, [], [B]),
                  ?assertEqual(unrecognized, SniFun("a.example")),
                  ?assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
                               SniFun("b.example"))
@@ -667,13 +668,13 @@ write_test_pem() ->
 %% Stand up / tear down the live configuration, as blizanci_sup would.
 live_up(Port, Servlets, Sites) ->
     live_down(),
-    {ok, _} = blizanci_live:start_link(#{port => Port,
+    {ok, _} = blizanci_conf_serv:start_link(#{port => Port,
                                          servlets => Servlets,
                                          sites => Sites}),
     ok.
 
 live_down() ->
-    case whereis(blizanci_live) of
+    case whereis(blizanci_conf_serv) of
         undefined -> ok;
         Pid -> gen_server:stop(Pid)
     end.
@@ -703,16 +704,16 @@ apply_tests(Pem) ->
                 ?assertEqual({error, no_sites},
                              apply(Conf(1965, [blizanci_static], []))),
                 % an invalid configuration changes nothing
-                ?assertEqual([Site("a")], blizanci_live:sites())
+                ?assertEqual([Site("a")], blizanci_conf_serv:sites())
             end),
      ?_test(begin
                 Reset(),
                 live_up(1965, [blizanci_static], [Site("a")]),
                 ?assertEqual(ok, apply(Conf(1965, [blizanci_static],
                                             [Site("b"), Site("c")]))),
-                ?assertEqual(not_found, blizanci_live:find_site(<<"a">>)),
-                ?assertMatch({ok, _}, blizanci_live:find_site(<<"b">>)),
-                ?assertMatch({ok, _}, blizanci_live:find_site(<<"c">>))
+                ?assertEqual(not_found, blizanci_conf_serv:find_site(<<"a">>)),
+                ?assertMatch({ok, _}, blizanci_conf_serv:find_site(<<"b">>)),
+                ?assertMatch({ok, _}, blizanci_conf_serv:find_site(<<"c">>))
             end),
      ?_test(begin
                 Reset(),
@@ -724,7 +725,7 @@ apply_tests(Pem) ->
                 ?assertEqual({ok, #{port => 1965,
                                     servlets => [blizanci_static],
                                     sites => [Site("a")]}},
-                             blizanci_live:current())
+                             blizanci_conf_serv:current())
             end)].
 
 %% Servlet pools start and stop as the declared list changes.
@@ -754,7 +755,7 @@ apply_servlets_test_() ->
              ?assertEqual(ok, apply(Conf([blizanci_static]))),
              ?assertEqual(undefined, whereis(blizanci_cgi)),
              ?assertMatch({ok, #{servlets := [blizanci_static]}},
-                          blizanci_live:current()),
+                          blizanci_conf_serv:current()),
              live_down()
          end)
      end}.

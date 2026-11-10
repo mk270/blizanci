@@ -39,10 +39,11 @@ init(Config) ->
     RanchChildSpec = ranch:child_spec(?LISTENER, ranch_ssl, SSL_Opts,
                                       blizanci_connection, Proto_Opts),
 
-    % The live configuration (and the servlets it declares) must be up
-    % before the listener accepts anything, and outlive it on shutdown.
-    LiveChildSpec = #{id => blizanci_live,
-                      start => {blizanci_live, start_link,
+    % The configuration manager, which also starts the declared
+    % servlets' resources, must be up before the listener accepts
+    % anything, and must outlive it on shutdown.
+    LiveChildSpec = #{id => blizanci_conf_serv,
+                      start => {blizanci_conf_serv, start_link,
                                 [#{port => Port,
                                    servlets => Servlets,
                                    sites => Sites}]}},

@@ -6,19 +6,30 @@
 %% the terms of the Apache Software Licence v2.0.
 
 %% @hidden
-%% The configuration of the running instance: its port, declared
-%% servlets and sites. This is the single source of truth for site
-%% lookup, read both by the TLS layer (the sni_fun, which ranch fixes
-%% at listen time) and by each connection, so replacing it takes
-%% effect for every handshake after the replacement without touching
-%% the listener.
+%% Manages the configuration of the running instance: its port, the
+%% servlet modules it declares, and its sites.
 %%
-%% It is held in a public ETS table owned by this process, which is
-%% supervised ahead of the listener: it starts the declared servlets
-%% when it starts, and stops whatever servlets are declared at that
-%% moment when it is terminated, after the listener has gone.
+%% The configuration is held in a public ETS table owned by this
+%% process, and is the single source of truth for site lookup. It is
+%% read by the TLS layer (the sni_fun, which ranch fixes at listen
+%% time) and by each connection, and replaced by
+%% blizanci_config:apply/1, so a replacement takes effect for every
+%% handshake after it without touching the listener. Readers see either
+%% the old value or the new one, never a mixture.
+%%
+%% It also owns the lifecycle of the declared servlets' shared
+%% resources. A servlet is a module implementing the blizanci_servlet
+%% behaviour; its start/0 sets up whatever the module needs in order to
+%% serve requests (for blizanci_cgi and blizanci_titan, a pool of
+%% worker processes) and its stop/0 tears that down again. This process
+%% calls start/0 on each declared servlet when it starts, and stop/0 on
+%% each servlet declared at that moment when it terminates.
+%%
+%% It is supervised ahead of the listener, so the table and the
+%% servlets' resources exist before anything is accepted, and outlive
+%% the listener on shutdown.
 
--module(blizanci_live).
+-module(blizanci_conf_serv).
 -behaviour(gen_server).
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -131,8 +142,8 @@ live_test() ->
     ok = gen_server:stop(Pid),
     ?assertEqual(not_running, current()).
 
-%% Stopping the process stops the servlets declared at that moment, not
-%% those it was started with.
+%% Stopping the process calls stop/0 on the servlets declared at that
+%% moment, not on those it was started with.
 terminate_stops_current_servlets_test() ->
     {ok, _} = application:ensure_all_started(ppool),
     {ok, Pid} = start_link(#{port => 1965, servlets => [],

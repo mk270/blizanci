@@ -250,7 +250,7 @@ activate(Transport, Socket) ->
 % Resolve the site the TLS layer negotiated via SNI. Should always
 % succeed -- blizanci_config:ssl_opts/1's sni_fun already refuses any
 % hostname that isn't a known site (or no SNI at all) before the
-% handshake can even complete. Both look sites up in blizanci_live, so
+% handshake can even complete. Both look sites up in blizanci_conf_serv, so
 % the only way to miss here is a reconfiguration landing between the
 % handshake and this lookup, which removed the site. A client that has
 % already disconnected can't be asked its SNI hostname at all; that is
@@ -277,7 +277,7 @@ resolve_site(Socket, Transport) ->
                    Result      :: {'ok', site()}.
 find_negotiated_site(SniHostname, Socket, Transport) ->
     Found = is_list(SniHostname) andalso
-            blizanci_live:find_site(erlang:list_to_binary(SniHostname)),
+            blizanci_conf_serv:find_site(erlang:list_to_binary(SniHostname)),
     case Found of
         {ok, Site} -> {ok, Site};
         _ ->
