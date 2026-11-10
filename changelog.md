@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.21.0
+
+- Refuse hidden files: a request path with any segment beginning with a dot (such as `.git/config` or `.env`) now gets 51 File not found, from static, Titan (creating, overwriting and deleting) and CGI; the path is checked as requested and as resolved, so symlinks to or from dot names are caught, and there is no opt-out yet
+- Allow `.well-known` as the first segment under the root for static and Titan (not CGI), as RFC 8615 places it; a `.well-known` further down, or a dotfile inside it, is still refused
+
 ## 5.20.1
 
 - Make `blizanci_path:confine/2` refuse a request path containing anything other than printable ASCII (control characters, NUL and non-ASCII are refused), closing a case where the static servlet could follow a symlink named with a non-ASCII character out of the docroot when the VM's file-name encoding was UTF-8
