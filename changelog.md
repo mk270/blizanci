@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.20.1
+
+- Make `blizanci_path:confine/2` refuse a request path containing anything other than printable ASCII (control characters, NUL and non-ASCII are refused), closing a case where the static servlet could follow a symlink named with a non-ASCII character out of the docroot when the VM's file-name encoding was UTF-8
+- Add tests that a host name or SNI name with a trailing dot stays refused
+
 ## 5.20.0
 
 - Reject a request whose URL has a fragment, with status 59, as the Gemini specification requires; it was previously served as if the fragment weren't there
