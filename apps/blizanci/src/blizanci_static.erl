@@ -11,6 +11,7 @@
 -behaviour(blizanci_servlet).
 
 -include("blizanci_types.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -export([serve/4, cancel/1, request/4, default_options/0,
          validate_options/1, handle_client_data/2, start/0, stop/0]).
@@ -176,3 +177,50 @@ start() ->
               when Result :: ok.
 stop() ->
     ok.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% A request path is a binary of UTF-8 bytes. A symbolic link out of the
+%% docroot whose name is not ASCII must not be followable, however the
+%% name is spelled: the check and the file opened must be the same name.
+%% Fixture, under a fresh temporary directory (names given as binaries,
+%% so they are bytes whatever the VM's file-name encoding):
+%%   Base/docs/<e-acute> -> Base/outside/secret.txt   (symlink)
+%%   Base/docs/caf<e-acute> -> Base/outside/secret.txt (symlink)
+%%   Base/docs/readme  Base/outside/secret.txt
+non_ascii_symlink_test_() ->
+    {setup, fun nonascii_setup/0, fun nonascii_teardown/1,
+     fun nonascii_tests/1}.
+
+nonascii_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = list_to_binary(filename:absname("static_test_" ++ Unique)),
+    Docs = filename:join(Base, <<"docs">>),
+    ok = filelib:ensure_path(Docs),
+    ok = filelib:ensure_path(filename:join(Base, <<"outside">>)),
+    Secret = filename:join([Base, <<"outside">>, <<"secret.txt">>]),
+    ok = file:write_file(Secret, <<"SECRET">>),
+    ok = file:write_file(filename:join(Docs, <<"readme">>), <<"x">>),
+    ok = file:make_symlink(Secret, filename:join(Docs, <<195, 169>>)),
+    ok = file:make_symlink(Secret, filename:join(Docs, <<"caf", 195, 169>>)),
+    Base.
+
+nonascii_teardown(Base) ->
+    file:del_dir_r(Base).
+
+nonascii_tests(Base) ->
+    Docs = binary_to_list(filename:join(Base, <<"docs">>)),
+    Opts = maps:merge(default_options(), #{ docroot => Docs }),
+    Request = fun(Path) ->
+                  request(#{ <<"PATH">> => Path }, #{}, none, Opts)
+              end,
+    NotFound = {immediate, {error_code, file_not_found}},
+    [?_assertEqual(NotFound, Request(<<195, 169>>)),
+     ?_assertEqual(NotFound, Request(<<"caf", 195, 169>>)),
+     ?_assertEqual(NotFound, Request(<<"readme", 0, ".png">>)),
+     % an ordinary file in the same directory is still found (it has no
+     % extension, so no MIME lookup is involved)
+     ?_assertMatch({immediate, {file, _, _}}, Request(<<"readme">>))].

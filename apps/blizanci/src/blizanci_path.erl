@@ -79,6 +79,18 @@ path_under_root(S, Root) ->
 %% client should not be able to use the response to distinguish "this
 %% doesn't exist" from "you tried to escape the root". The real reason
 %% is still logged.
+%%
+%% SubPath may contain only printable ASCII (space to tilde), whatever
+%% the caller has decoded or not: control characters (NUL included) and
+%% anything non-ASCII are refused. A name is checked in one
+%% representation and later opened in another, and how Erlang maps a
+%% list of integers to the bytes of a file name depends on the VM's
+%% file-name encoding (UTF-8 or Latin-1, chosen from the locale), so for
+%% non-ASCII text the name checked and the name opened can differ.
+%% ASCII is the same in every encoding. This is deliberately the
+%% narrowest rule that is safe; names that aren't ASCII can be served
+%% once confine/2 handles names as bytes end to end. Root is not
+%% restricted this way (it is the operator's), but may not contain NUL.
 %% @end
 -spec confine(SubPath, Root) -> Result
               when SubPath :: string(),
@@ -87,6 +99,47 @@ path_under_root(S, Root) ->
                             | {error, file_not_found}.
 
 confine(SubPath, Root) ->
+    case {printable_ascii(SubPath), has_nul(Root)} of
+        {true, false} ->
+            confine1(SubPath, Root);
+        {false, _} ->
+            logger:warning("path ~w under root ~p has characters other "
+                           "than printable ASCII", [SubPath, Root]),
+            {error, file_not_found};
+        {true, true} ->
+            % Operating systems end a name at a NUL, so a name containing
+            % one means something other than what was checked.
+            logger:warning("root ~w contains a NUL", [Root]),
+            {error, file_not_found}
+    end.
+
+
+-spec printable_ascii(Path) -> Result
+              when Path   :: string() | binary(),
+                   Result :: boolean().
+printable_ascii(Path) when is_binary(Path) ->
+    printable_ascii(binary_to_list(Path));
+printable_ascii(Path) when is_list(Path) ->
+    lists:all(fun (C) -> is_integer(C) andalso C >= 16#20 andalso C =< 16#7E
+              end, lists:flatten(Path)).
+
+
+-spec has_nul(Path) -> Result
+              when Path   :: string() | binary(),
+                   Result :: boolean().
+has_nul(Path) when is_binary(Path) ->
+    binary:match(Path, <<0>>) =/= nomatch;
+has_nul(Path) when is_list(Path) ->
+    lists:member(0, lists:flatten(Path)).
+
+
+-spec confine1(SubPath, Root) -> Result
+              when SubPath :: string(),
+                   Root    :: string(),
+                   Result  :: {ok, string()}
+                            | {error, file_not_found}.
+
+confine1(SubPath, Root) ->
     AbsRoot = filename:absname(Root),
     case fix_path(AbsRoot) of
         {ok, CanonRoot} -> confine2(SubPath, AbsRoot, CanonRoot);
@@ -138,6 +191,7 @@ path_under_root_test_() ->
      ?_assertNot(path_under_root("/srv", "/srv/docs"))].
 
 %% Fixture, built under a fresh temporary directory:
+%%   Base/<d, o-acute, c, s>   (a root whose name is not ASCII)
 %%   Base/docs/inside.txt
 %%   Base/docs/escape -> ../outside        (symlink out of the root)
 %%   Base/docs-secret/secret.txt           (sibling sharing a name prefix)
@@ -161,6 +215,7 @@ confine_setup() ->
     ok = file:write_file(filename:join([Base, "outside", "secret.txt"]),
                          <<"x">>),
     ok = file:make_symlink("../outside", filename:join(Docs, "escape")),
+    ok = filelib:ensure_path(filename:join(Base, [$d, 243, $c, $s])),
     Base.
 
 confine_teardown(Base) ->
@@ -169,6 +224,8 @@ confine_teardown(Base) ->
 confine_tests(Base) ->
     Docs = filename:join(Base, "docs"),
     {ok, CanonDocs} = fix_path(Docs),
+    Odd = filename:join(Base, [$d, 243, $c, $s]),
+    {ok, CanonOdd} = fix_path(Odd),
     [?_assertEqual({ok, filename:join(CanonDocs, "inside.txt")},
                    confine("inside.txt", Docs)),
      ?_assertEqual({error, file_not_found},
@@ -177,4 +234,49 @@ confine_tests(Base) ->
      ?_assertEqual({error, file_not_found},
                    confine("../docs-secret/secret.txt", Docs)),
      ?_assertEqual({error, file_not_found},
-                   confine("escape/secret.txt", Docs))].
+                   confine("escape/secret.txt", Docs)),
+     % a NUL anywhere in the path is refused, even where the name before
+     % it is fine
+     ?_assertEqual({error, file_not_found},
+                   confine("inside.txt\0.png", Docs)),
+     ?_assertEqual({error, file_not_found}, confine("inside.txt\0", Docs)),
+     ?_assertEqual({error, file_not_found}, confine("\0inside.txt", Docs)),
+     ?_assertEqual({error, file_not_found}, confine([0], Docs)),
+     ?_assertEqual({error, file_not_found},
+                   confine("sub\0/../../outside/secret.txt", Docs)),
+     ?_assertEqual({error, file_not_found},
+                   confine(<<"inside.txt", 0, ".png">>, Docs)),
+     ?_assertEqual({error, file_not_found},
+                   confine("inside.txt", Docs ++ "\0")),
+     % control characters other than NUL are refused too
+     ?_assertEqual({error, file_not_found}, confine("inside\t.txt", Docs)),
+     ?_assertEqual({error, file_not_found}, confine("inside\n.txt", Docs)),
+     ?_assertEqual({error, file_not_found}, confine("inside\r.txt", Docs)),
+     ?_assertEqual({error, file_not_found}, confine("inside\e.txt", Docs)),
+     ?_assertEqual({error, file_not_found},
+                   confine([$a, 127, $b], Docs)),
+     % non-ASCII is refused, in any representation: a code point, the
+     % UTF-8 bytes of it as a list (what binary_to_list/1 of a request
+     % path gives), and as a binary
+     ?_assertEqual({error, file_not_found},
+                   confine([233, $., $t, $x, $t], Docs)),
+     ?_assertEqual({error, file_not_found},
+                   confine([195, 169, $., $t, $x, $t], Docs)),
+     ?_assertEqual({error, file_not_found},
+                   confine(<<195, 169, ".txt">>, Docs)),
+     ?_assertEqual({error, file_not_found},
+                   confine([16#4E2D, 16#6587], Docs)),
+     ?_assertEqual({error, file_not_found}, confine("sub/\x{e9}", Docs)),
+     % non-integers are refused, not crashed on
+     ?_assertEqual({error, file_not_found}, confine([$a, b, $c], Docs)),
+     % printable ASCII, space included, is fine whether or not the file
+     % exists
+     ?_assertEqual({ok, filename:join(CanonDocs, "inside.txt")},
+                   confine("inside.txt", Docs)),
+     ?_assertEqual({ok, filename:join(CanonDocs, "a b-c_d~e!.txt")},
+                   confine("a b-c_d~e!.txt", Docs)),
+     ?_assertEqual({ok, filename:join(CanonDocs, "sub/new file.txt")},
+                   confine("sub/new file.txt", Docs)),
+     % the root is the operator's and may be non-ASCII (but not hold a NUL)
+     ?_assertEqual({ok, filename:join(CanonOdd, "f.txt")},
+                   confine("f.txt", Odd))].
