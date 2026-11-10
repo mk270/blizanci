@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 5.19.0
+
+- Refuse Titan uploads that declare a size over 10 MiB, before any data is read, with status 59; the limit is fixed in the source for now
+- Refuse Titan uploads that send more data than they declared, with status 59, installing nothing and deleting what was received; this includes a `size=0` request that carries data
+- Fix the Titan temp-file purge treating a file with a modification time slightly in the future as stale, which could delete the temp file of an upload still in progress
+
 ## 5.18.1
 
 - Create Titan upload temp files exclusively, with names built from the OS process id, time and a unique counter, so concurrent uploads can no longer overwrite each other's temp file and a symlink planted at a temp-file name is not followed
