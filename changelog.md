@@ -1,5 +1,9 @@
 # Blizanci Changelog
 
+## 5.16.2
+
+- Rename the internal `blizanci_live` module to `blizanci_conf_serv`, document what it manages, and list it in `blizanci.app.src`
+
 ## 5.16.1
 
 - Fix a crash in connection handling when a client disconnects immediately after the TLS handshake
