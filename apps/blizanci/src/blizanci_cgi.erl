@@ -44,6 +44,7 @@
 -behaviour(blizanci_servlet).
 
 -include("blizanci_types.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -behaviour(gen_server).
 
@@ -554,3 +555,40 @@ make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
                    Binary :: binary(),
                    Result :: gemini_response().
 handle_client_data(_, _) -> none.
+
+
+%% Hidden files are never run as CGI scripts: any path segment beginning
+%% with a dot is refused, ".well-known" included (nothing is served from
+%% there by CGI). The refusal comes before anything is queued, so these
+%% tests need no worker pool.
+%% Fixture, under a fresh temporary directory:
+%%   Base/cgi/{.hidden,.well-known/x,sub/.y}
+hidden_scripts_test_() ->
+    {setup, fun hidden_setup/0, fun hidden_teardown/1, fun hidden_tests/1}.
+
+hidden_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("cgi_hidden_test_" ++ Unique),
+    Dir = filename:join(Base, "cgi"),
+    [ begin
+          Path = filename:join(Dir, Rel),
+          ok = filelib:ensure_path(filename:dirname(Path)),
+          ok = file:write_file(Path, <<"#!/bin/sh\n">>)
+      end || Rel <- [".hidden", ".well-known/x", "sub/.y"] ],
+    Base.
+
+hidden_teardown(Base) ->
+    file:del_dir_r(Base).
+
+hidden_tests(Base) ->
+    Dir = filename:join(Base, "cgi"),
+    Cfg = #server_config{hostname = <<"h">>, port = 1965,
+                         routing = [], docroot = Dir},
+    Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
+    Serve = fun(Path) ->
+                serve(#{ <<"PATH">> => Path }, #{ query => <<>> }, Cfg, Opts)
+            end,
+    [?_assertEqual({gateway_error, file_not_found}, Serve(<<".hidden">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"sub/.y">>)),
+     ?_assertEqual({gateway_error, file_not_found},
+                   Serve(<<".well-known/x">>))].

@@ -100,7 +100,10 @@ serve(_, _, _, _) ->
 
 serve_file(Path, Opts) ->
     Docroot = ensure_list(maps:get(docroot, Opts, ?DEFAULT_DOCROOT)),
-    case blizanci_path:confine(binary_to_list(Path), Docroot) of
+    % hidden files are never served, except under a ".well-known"
+    % directory at the top of the docroot
+    case blizanci_path:confine(binary_to_list(Path), Docroot,
+                               #{ well_known => true }) of
         {error, file_not_found} -> {error_code, file_not_found};
         {ok, Cmd} -> serve_confined_file(list_to_binary(Cmd), Path, Opts)
     end.
@@ -224,3 +227,48 @@ nonascii_tests(Base) ->
      % an ordinary file in the same directory is still found (it has no
      % extension, so no MIME lookup is involved)
      ?_assertMatch({immediate, {file, _, _}}, Request(<<"readme">>))].
+
+%% Hidden files are never served, whatever their path: any segment that
+%% begins with a dot is refused, except under a ".well-known" directory
+%% at the top of the docroot. Files here have no extension, so no MIME
+%% lookup is involved.
+%% Fixture, under a fresh temporary directory:
+%%   Base/docs/{readme,.env,.git/config,.well-known/{security,.secret},
+%%              nested/.well-known/x}
+%%   Base/docs/viewgit -> .git   (an innocent name for a hidden directory)
+hidden_files_test_() ->
+    {setup, fun hidden_setup/0, fun hidden_teardown/1, fun hidden_tests/1}.
+
+hidden_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("static_hidden_test_" ++ Unique),
+    Docs = filename:join(Base, "docs"),
+    [ begin
+          Path = filename:join(Docs, Rel),
+          ok = filelib:ensure_path(filename:dirname(Path)),
+          ok = file:write_file(Path, <<"x">>)
+      end || Rel <- ["readme", ".env", ".git/config",
+                     ".well-known/security", ".well-known/.secret",
+                     "nested/.well-known/x"] ],
+    ok = file:make_symlink(".git", filename:join(Docs, "viewgit")),
+    Base.
+
+hidden_teardown(Base) ->
+    file:del_dir_r(Base).
+
+hidden_tests(Base) ->
+    Docs = filename:join(Base, "docs"),
+    Opts = maps:merge(default_options(), #{ docroot => Docs }),
+    Request = fun(Path) ->
+                  request(#{ <<"PATH">> => Path }, #{}, none, Opts)
+              end,
+    NotFound = {immediate, {error_code, file_not_found}},
+    [?_assertMatch({immediate, {file, _, _}}, Request(<<"readme">>)),
+     ?_assertEqual(NotFound, Request(<<".env">>)),
+     ?_assertEqual(NotFound, Request(<<".git/config">>)),
+     ?_assertEqual(NotFound, Request(<<"viewgit/config">>)),
+     ?_assertEqual(NotFound, Request(<<"nested/.well-known/x">>)),
+     ?_assertEqual(NotFound, Request(<<".well-known/.secret">>)),
+     % the one exception, at the top of the docroot
+     ?_assertMatch({immediate, {file, _, _}},
+                   Request(<<".well-known/security">>))].

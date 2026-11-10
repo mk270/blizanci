@@ -44,6 +44,10 @@
 -define(MAX_AGE, 3600). % for expiring files; measured in seconds
 -define(DEFAULT_MIME, <<"text/gemini">>). % per the Titan specification
 
+% Hidden files are refused, as everywhere, except that a ".well-known"
+% directory at the top of the upload root may be written to.
+-define(CONFINE_OPTS, #{ well_known => true }).
+
 % The largest upload accepted, in bytes: a request declaring more is
 % refused before any of its data is read.
 % TODO: plumb this through to the config system one day, as a route
@@ -185,7 +189,8 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             % it is written (see finish_file/5), because a long upload
             % leaves time for the directory tree to change.
             case blizanci_path:confine(binary_to_list(Path),
-                                       binary_to_list(RootDir)) of
+                                       binary_to_list(RootDir),
+                                       ?CONFINE_OPTS) of
                 {ok, _TargetPath} when byte_size(Rest) > Size ->
                     % more data than the request declared: refused
                     % before anything is written
@@ -488,7 +493,8 @@ finish_file(Stream, Path, RootDir, TmpPath, Size) ->
     truncate(Stream, Size),
     ok = file:close(Stream),
     case blizanci_path:confine(binary_to_list(Path),
-                               binary_to_list(RootDir)) of
+                               binary_to_list(RootDir),
+                               ?CONFINE_OPTS) of
         {ok, TargetPath} ->
             replace_target(TargetPath, TmpPath);
         {error, file_not_found} ->
@@ -684,6 +690,7 @@ finish_tests(Base) ->
 %% serve/4, so path confinement and parsing are exercised too.
 %% Fixture, under a fresh temporary directory:
 %%   Base/root/{a.txt,b.txt,c.txt,dir/inner.txt,escape -> ../outside}
+%%   Base/root/{.env,.git/config,.well-known/old}
 %%   Base/outside/secret.txt  Base/work
 delete_test_() ->
     {setup, fun delete_setup/0, fun delete_teardown/1, fun delete_tests/1}.
@@ -692,9 +699,11 @@ delete_setup() ->
     Unique = integer_to_list(erlang:unique_integer([positive])),
     Base = filename:absname("titan_delete_test_" ++ Unique),
     [ ok = filelib:ensure_path(filename:join(Base, D))
-      || D <- ["root/dir", "outside", "work"] ],
+      || D <- ["root/dir", "root/.git", "root/.well-known", "outside",
+               "work"] ],
     [ ok = file:write_file(filename:join([Base, "root", F]), <<"x">>)
-      || F <- ["a.txt", "b.txt", "c.txt", "dir/inner.txt"] ],
+      || F <- ["a.txt", "b.txt", "c.txt", "dir/inner.txt", ".env",
+               ".git/config", ".well-known/old"] ],
     ok = file:write_file(filename:join([Base, "outside", "secret.txt"]),
                          <<"secret">>),
     ok = file:make_symlink("../outside",
@@ -855,3 +864,69 @@ excess_tests(Base) ->
                 ?assertEqual({titan_updated, 3}, recv_data(<<"zz">>, St))
             end),
      ?_assertEqual(TooLong, handle_upload_status(titan_too_much))].
+
+
+%% Hidden files can't be created, overwritten or deleted, whether the
+%% data comes with the request or later; the one exception is real files
+%% directly under a ".well-known" directory at the top of the root.
+hidden_files_test_() ->
+    {setup, fun delete_setup/0, fun delete_teardown/1, fun hidden_tests/1}.
+
+hidden_tests(Base) ->
+    Root = filename:join(Base, "root"),
+    Work = list_to_binary(filename:join(Base, "work")),
+    Opts = #{ docroot => Root, work_dir => Work },
+    Cfg = #server_config{hostname = <<"h">>, port = 1965,
+                         routing = [], docroot = Root},
+    Serve = fun(Fragment, Rest) ->
+                serve(#{ <<"PATH">> => Fragment },
+                      #{ rest_of_input => Rest }, Cfg, Opts)
+            end,
+    NotFound = {gateway_finished, {error_code, file_not_found}},
+    Read = fun(Name) -> file:read_file(filename:join(Root, Name)) end,
+    Exists = fun(Name) -> filelib:is_file(filename:join(Root, Name)) end,
+    [% creating
+     ?_test(begin
+                ?assertEqual(NotFound, Serve(<<".evil;size=3">>, <<"abc">>)),
+                ?assertNot(Exists(".evil"))
+            end),
+     ?_test(begin
+                ?assertEqual(NotFound,
+                             Serve(<<".git/pwn;size=3">>, <<"abc">>)),
+                ?assertNot(Exists(".git/pwn"))
+            end),
+     % overwriting
+     ?_test(begin
+                ?assertEqual(NotFound, Serve(<<".env;size=3">>, <<"new">>)),
+                ?assertEqual({ok, <<"x">>}, Read(".env"))
+            end),
+     % deleting
+     ?_test(begin
+                ?assertEqual(NotFound, Serve(<<".git/config;size=0">>, <<>>)),
+                ?assert(Exists(".git/config"))
+            end),
+     % a dotfile inside .well-known is still hidden
+     ?_assertEqual(NotFound, Serve(<<".well-known/.x;size=3">>, <<"abc">>)),
+     % but real files there can be written and deleted
+     ?_test(begin
+                ?assertMatch({gateway_finished, {success, _, _}},
+                             Serve(<<".well-known/security.txt;size=3">>,
+                                   <<"abc">>)),
+                ?assertEqual({ok, <<"abc">>},
+                             Read(".well-known/security.txt"))
+            end),
+     ?_test(begin
+                ?assertMatch({gateway_finished, {success, _, _}},
+                             Serve(<<".well-known/old;size=0">>, <<>>)),
+                ?assertNot(Exists(".well-known/old"))
+            end),
+     % the same rule applies when the upload is finished later (the
+     % target is resolved again then)
+     ?_test(begin
+                {ok, Stream, Tmp} = create_tmp_file(Work, <<"x">>),
+                ?assertEqual(titan_not_found,
+                             finish_file(Stream, <<".late">>,
+                                         list_to_binary(Root), Tmp, 1)),
+                ?assertNot(Exists(".late")),
+                ?assertNot(filelib:is_file(Tmp))
+            end)].
