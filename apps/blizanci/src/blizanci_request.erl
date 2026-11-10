@@ -89,11 +89,16 @@ handle_parsed_url(#{ userinfo := _U}, _Config, _Cert, _Rest) ->
 % NOT send one and servers MUST reject a request that has one.
 handle_parsed_url(#{ fragment := _F}, _Config, _Cert, _Rest) ->
     {error_code, request_not_parsed};
+% A request is an absolute URI: without a scheme it isn't one, and the
+% server doesn't guess which scheme was meant.
+handle_parsed_url(URI, _Config, _Cert, _Rest)
+  when not is_map_key(scheme, URI) ->
+    {error_code, request_not_parsed};
 handle_parsed_url(URI, Config, Cert, Rest) ->
     try
         ReqHost = maps:get(host, URI, <<>>),
         Path    = maps:get(path, URI, <<"/">>),
-        Scheme  = maps:get(scheme, URI, ?PROTO),
+        Scheme  = maps:get(scheme, URI),
         ReqPort = maps:get(port, URI, Config#server_config.port),
         ReqPath = case Path of
                       <<>> -> <<"/">>;
@@ -308,3 +313,18 @@ fragment_test_() ->
      ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev/a%23b">>)),
      ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev/nothere">>)),
      ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev/nothere?q=1">>))].
+
+%% A request is an absolute URI, so it must have a scheme: the server
+%% mustn't assume one.
+scheme_required_test_() ->
+    H = url_handler(),
+    [?_assertEqual({error_code, request_not_parsed},
+                   H(<<"//this.host.dev/nothere">>)),
+     ?_assertEqual({error_code, request_not_parsed},
+                   H(<<"this.host.dev/nothere">>)),
+     ?_assertEqual({error_code, request_not_parsed}, H(<<"/nothere">>)),
+     ?_assertEqual({error_code, request_not_parsed}, H(<<"nothere">>)),
+     ?_assertEqual({error_code, request_not_parsed}, H(<<>>)),
+     % with a scheme, the request is handled as before
+     ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev/nothere">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev:1965/nothere">>))].
