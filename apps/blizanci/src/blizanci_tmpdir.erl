@@ -10,20 +10,68 @@
 -include_lib("kernel/include/file.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([tmp_file_name/0, stale/2]).
+-export([tmp_file_name/0, create/1, create/2, stale/2]).
+-export_type([name_fun/0]).
 
 -type filepath() :: binary() | string().
+-type name_fun() :: fun(() -> string()).
+
+% How many times create/2 will try a fresh name before giving up.
+-define(ATTEMPTS, 10).
 
 % Every temporary file blizanci creates starts with this, so that
 % stale/2 can tell them apart from anything else in the directory.
 -define(PREFIX, "blizanci-tmp-").
 
-% A fresh name for a temporary file.
+% A fresh name for a temporary file: the operating system's process id
+% (so two instances sharing a directory differ), the time (so one run
+% differs from the next) and a number unique within this run.
 -spec tmp_file_name() -> Name
               when Name :: string().
 tmp_file_name() ->
-    Hash = erlang:phash2(make_ref()),
-    ?PREFIX ++ integer_to_list(Hash).
+    lists:flatten(io_lib:format("~s~s-~B-~B",
+                                [?PREFIX, os:getpid(),
+                                 erlang:system_time(microsecond),
+                                 erlang:unique_integer([positive])])).
+
+
+% Create a new, empty temporary file in 'Dir', open for writing, and
+% return it with its path. The file is created exclusively: if the name
+% is already taken (by anything, including a symbolic link) it is left
+% alone and a fresh name is tried, so one upload can never truncate
+% another's file, nor be redirected by a link planted at the name.
+-spec create(Dir) -> Result
+              when Dir    :: filepath(),
+                   Result :: {ok, file:io_device(), filepath()}
+                             | {error, term()}.
+create(Dir) ->
+    create(Dir, fun tmp_file_name/0).
+
+
+-spec create(Dir, NameFun) -> Result
+              when Dir     :: filepath(),
+                   NameFun :: name_fun(),
+                   Result  :: {ok, file:io_device(), filepath()}
+                              | {error, term()}.
+create(Dir, NameFun) ->
+    create(Dir, NameFun, ?ATTEMPTS).
+
+
+-spec create(Dir, NameFun, Attempts) -> Result
+              when Dir      :: filepath(),
+                   NameFun  :: name_fun(),
+                   Attempts :: non_neg_integer(),
+                   Result   :: {ok, file:io_device(), filepath()}
+                               | {error, term()}.
+create(_Dir, _NameFun, 0) ->
+    {error, eexist};
+create(Dir, NameFun, Attempts) ->
+    Path = filename:join(Dir, NameFun()),
+    case file:open(Path, [write, exclusive]) of
+        {ok, Stream} -> {ok, Stream, Path};
+        {error, eexist} -> create(Dir, NameFun, Attempts - 1);
+        {error, _} = Error -> Error
+    end.
 
 
 % Return the temporary files blizanci made in a directory 'Dir' that were
@@ -83,7 +131,77 @@ older_than(Mtime, MaxAge) ->
 tmp_file_name_test() ->
     Name = tmp_file_name(),
     ?assert(is_temp_name(Name)),
-    ?assertNotEqual(Name, tmp_file_name()).
+    ?assertMatch({match, _},
+                 re:run(Name, "^blizanci-tmp-[0-9]+-[0-9]+-[0-9]+$")),
+    ?assertNotEqual(Name, tmp_file_name()),
+    ?assertEqual(1000, length(lists:usort(
+                               [ tmp_file_name()
+                                 || _ <- lists:seq(1, 1000) ]))).
+
+%% Fixture: a directory containing a file and a symbolic link that
+%% sit at names create/2 will be offered first.
+create_test_() ->
+    {setup, fun create_setup/0, fun create_teardown/1, fun create_tests/1}.
+
+create_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:absname("tmpdir_create_test_" ++ Unique),
+    ok = filelib:ensure_path(Dir),
+    ok = file:write_file(filename:join(Dir, "taken"), <<"precious">>),
+    ok = file:write_file(filename:join(Dir, "victim"), <<"victim">>),
+    ok = file:make_symlink(filename:join(Dir, "victim"),
+                           filename:join(Dir, "planted")),
+    Dir.
+
+create_teardown(Dir) ->
+    file:del_dir_r(Dir).
+
+% A name function that offers the given names in turn, then repeats the
+% last.
+names(Names) ->
+    Ref = make_ref(),
+    put(Ref, Names),
+    fun() ->
+        case get(Ref) of
+            [Last] -> Last;
+            [Next | Rest] -> put(Ref, Rest), Next
+        end
+    end.
+
+create_tests(Dir) ->
+    Read = fun(Name) -> file:read_file(filename:join(Dir, Name)) end,
+    [?_test(begin
+                {ok, S, P} = create(Dir),
+                ok = file:write(S, <<"data">>),
+                ok = file:close(S),
+                ?assertEqual({ok, <<"data">>}, file:read_file(P)),
+                ?assert(is_temp_name(filename:basename(P)))
+            end),
+     % a taken name is skipped, and the existing file left alone
+     ?_test(begin
+                {ok, S, P} = create(Dir, names(["taken", "fresh1"])),
+                ok = file:close(S),
+                ?assertEqual(filename:join(Dir, "fresh1"), P),
+                ?assertEqual({ok, <<"precious">>}, Read("taken"))
+            end),
+     % a symbolic link planted at the name is not followed
+     ?_test(begin
+                {ok, S, P} = create(Dir, names(["planted", "fresh2"])),
+                ok = file:write(S, <<"redirected?">>),
+                ok = file:close(S),
+                ?assertEqual(filename:join(Dir, "fresh2"), P),
+                ?assertEqual({ok, <<"victim">>}, Read("victim"))
+            end),
+     % binary directory names, as the Titan work_dir is
+     ?_test(begin
+                {ok, S, P} = create(list_to_binary(Dir)),
+                ok = file:close(S),
+                ?assert(is_binary(P))
+            end),
+     % give up rather than loop forever
+     ?_assertEqual({error, eexist}, create(Dir, names(["taken"]))),
+     ?_assertMatch({error, enoent},
+                   create(filename:join(Dir, "no/such/dir")))].
 
 %% Only our own old regular files are stale: not recent ones, not other
 %% people's files (including numeric names, as blizanci used to make),

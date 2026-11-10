@@ -543,10 +543,8 @@ purge(Path, WorkDir) when is_binary(Path) and is_binary(WorkDir) ->
 create_tmp_file(WorkDir, Rest)
   when is_binary(WorkDir) and is_binary(Rest)
  ->
-    TmpFile = blizanci_tmpdir:tmp_file_name(),
-    TmpPath = filename:join(WorkDir, TmpFile),
+    {ok, Stream, TmpPath} = blizanci_tmpdir:create(WorkDir),
     logger:debug("titan tmp: ~p", [TmpPath]),
-    {ok, Stream} = file:open(TmpPath, [write]),
     ok = file:write(Stream, Rest),
     {ok, Stream, TmpPath}.
 
