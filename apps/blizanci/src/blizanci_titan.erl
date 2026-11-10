@@ -12,11 +12,13 @@
 % The Titan protocol, for uploading to Gemini servers, is specified at
 %   gemini://transjovian.org/titan/The%20Titan%20Specification
 % In it the "size" parameter is mandatory, "mime" is optional (default
-% text/gemini) and "token" is optional.
+% text/gemini) and "token" is optional. A request with size=0 deletes
+% the resource.
 -module(blizanci_titan).
 -behaviour(blizanci_servlet).
 
 -include("blizanci_types.hrl").
+-include_lib("kernel/include/file.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -behaviour(gen_server).
@@ -176,6 +178,8 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             % leaves time for the directory tree to change.
             case blizanci_path:confine(binary_to_list(Path),
                                        binary_to_list(RootDir)) of
+                {ok, TargetPath} when Size =:= 0 ->
+                    {gateway_finished, delete_resource(TargetPath, Rest)};
                 {ok, _TargetPath} ->
                     Job = #titan_job{request=TitanReq,
                                      rest=Rest,
@@ -192,6 +196,42 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             end;
         {error, Err} ->
             {gateway_finished, {error_code, Err}}
+    end.
+
+
+% A request of zero bytes is how the Titan specification says to delete
+% a resource. Only a regular file is deleted: a resource is a file, so
+% a directory (or anything else) is reported as not found. As an upload
+% does, the target is the file the path resolves to inside the root.
+% Because deleting is not something to do on a malformed request, a
+% zero-size request that nevertheless carries data is refused. Only
+% existing Gemini status responses are used.
+-spec delete_resource(TargetPath, Rest) -> Result
+              when TargetPath :: filepath(),
+                   Rest       :: binary(),
+                   Result     :: gemini_response().
+
+delete_resource(_TargetPath, Rest) when byte_size(Rest) > 0 ->
+    {error_code, bad_query_string};
+delete_resource(TargetPath, <<>>) ->
+    case file:read_link_info(TargetPath) of
+        {ok, #file_info{type = regular}} ->
+            case file:delete(TargetPath) of
+                ok -> {success, <<"text/plain">>, <<"Deleted.\r\n">>};
+                {error, enoent} -> {error_code, file_not_found};
+                {error, Reason} ->
+                    logger:warning("titan: cannot delete ~p: ~p",
+                                   [TargetPath, Reason]),
+                    {error_code, internal_server_error}
+            end;
+        {ok, #file_info{}} ->
+            {error_code, file_not_found};
+        {error, Reason} when Reason =:= enoent; Reason =:= enotdir ->
+            {error_code, file_not_found};
+        {error, Reason} ->
+            logger:warning("titan: cannot stat ~p: ~p",
+                           [TargetPath, Reason]),
+            {error_code, internal_server_error}
     end.
 
 
@@ -613,3 +653,84 @@ finish_tests(Base) ->
             end),
      ?_assertEqual({gateway_finished, {error_code, file_not_found}},
                    handle_upload_status(titan_not_found))].
+
+
+%% size=0 deletes the resource (see delete_resource/2). Driven through
+%% serve/4, so path confinement and parsing are exercised too.
+%% Fixture, under a fresh temporary directory:
+%%   Base/root/{a.txt,b.txt,c.txt,dir/inner.txt,escape -> ../outside}
+%%   Base/outside/secret.txt  Base/work
+delete_test_() ->
+    {setup, fun delete_setup/0, fun delete_teardown/1, fun delete_tests/1}.
+
+delete_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("titan_delete_test_" ++ Unique),
+    [ ok = filelib:ensure_path(filename:join(Base, D))
+      || D <- ["root/dir", "outside", "work"] ],
+    [ ok = file:write_file(filename:join([Base, "root", F]), <<"x">>)
+      || F <- ["a.txt", "b.txt", "c.txt", "dir/inner.txt"] ],
+    ok = file:write_file(filename:join([Base, "outside", "secret.txt"]),
+                         <<"secret">>),
+    ok = file:make_symlink("../outside",
+                           filename:join([Base, "root", "escape"])),
+    Base.
+
+delete_teardown(Base) ->
+    file:del_dir_r(Base).
+
+delete_tests(Base) ->
+    Root = filename:join(Base, "root"),
+    Opts = #{ docroot => Root, work_dir => list_to_binary(Base ++ "/work") },
+    Cfg = #server_config{hostname = <<"h">>, port = 1965,
+                         routing = [], docroot = Root},
+    Serve = fun(Fragment, Rest) ->
+                serve(#{ <<"PATH">> => Fragment },
+                      #{ rest_of_input => Rest }, Cfg, Opts)
+            end,
+    Exists = fun(Name) -> filelib:is_file(filename:join(Root, Name)) end,
+    [?_test(begin
+                ?assert(Exists("a.txt")),
+                ?assertEqual({gateway_finished,
+                              {success, <<"text/plain">>,
+                               <<"Deleted.\r\n">>}},
+                             Serve(<<"a.txt;size=0;mime=text/plain">>, <<>>)),
+                ?assertNot(Exists("a.txt"))
+            end),
+     % mime is optional here as elsewhere
+     ?_test(begin
+                ?assertMatch({gateway_finished, {success, _, _}},
+                             Serve(<<"b.txt;size=0">>, <<>>)),
+                ?assertNot(Exists("b.txt"))
+            end),
+     % already gone
+     ?_assertEqual({gateway_finished, {error_code, file_not_found}},
+                   Serve(<<"a.txt;size=0">>, <<>>)),
+     ?_assertEqual({gateway_finished, {error_code, file_not_found}},
+                   Serve(<<"no/such/file;size=0">>, <<>>)),
+     % never a directory, nor the root itself: not a file, so not found
+     ?_test(begin
+                ?assertEqual({gateway_finished,
+                              {error_code, file_not_found}},
+                             Serve(<<"dir;size=0">>, <<>>)),
+                ?assert(Exists("dir/inner.txt"))
+            end),
+     ?_assertEqual({gateway_finished, {error_code, file_not_found}},
+                   Serve(<<";size=0">>, <<>>)),
+     % a zero-size request that carries data is malformed: not acted on
+     ?_test(begin
+                ?assertEqual({gateway_finished,
+                              {error_code, bad_query_string}},
+                             Serve(<<"c.txt;size=0">>, <<"junk">>)),
+                ?assert(Exists("c.txt"))
+            end),
+     % confined like an upload: can't reach outside the root
+     ?_test(begin
+                ?assertEqual({gateway_finished,
+                              {error_code, file_not_found}},
+                             Serve(<<"escape/secret.txt;size=0">>, <<>>)),
+                ?assert(filelib:is_file(
+                          filename:join([Base, "outside", "secret.txt"])))
+            end),
+     ?_assertEqual({gateway_finished, {error_code, file_not_found}},
+                   Serve(<<"../outside/secret.txt;size=0">>, <<>>))].
