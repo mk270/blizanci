@@ -362,3 +362,37 @@ add_route_appends_test() ->
 add_route_rejects_non_route_test() ->
     Site = site("example.org", "c.pem", "k.pem"),
     ?assertError(function_clause, add_route(Site, {not_a_route})).
+
+find_site_test_() ->
+    A = site("a.example", "a.pem", "a.key"),
+    B = site("b.example", "b.pem", "b.key"),
+    [?_assertEqual({ok, A}, find_site(<<"a.example">>, [A, B])),
+     ?_assertEqual({ok, B}, find_site(<<"b.example">>, [A, B])),
+     ?_assertEqual(not_found, find_site(<<"c.example">>, [A, B])),
+     ?_assertEqual(not_found, find_site(<<"a.example">>, []))].
+
+make_test() ->
+    Site = site("a.example", "a.pem", "a.key"),
+    Config = make(1966, [blizanci_static], [Site]),
+    ?assertEqual([blizanci_static], maps:get(servlets, Config)),
+    SSL = maps:get(ssl_opts, Config),
+    Proto = maps:get(proto_opts, Config),
+    ?assertEqual(1966, proplists:get_value(port, SSL)),
+    ?assertEqual(1966, proplists:get_value(port, Proto)),
+    ?assertEqual([Site], proplists:get_value(sites, Proto)).
+
+% SNI is the only source of TLS credentials: no top-level cert/key, and
+% the sni_fun serves exactly the configured sites.
+sni_fun_test_() ->
+    A = site("a.example", "a.pem", "a.key"),
+    B = site("b.example", "b.pem", "b.key"),
+    SSL = ssl_opts(1965, [A, B]),
+    SniFun = proplists:get_value(sni_fun, SSL),
+    [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
+                   SniFun("a.example")),
+     ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
+                   SniFun("b.example")),
+     ?_assertEqual(unrecognized, SniFun("evil.example")),
+     ?_assertEqual(undefined, proplists:get_value(certfile, SSL)),
+     ?_assertEqual(undefined, proplists:get_value(keyfile, SSL)),
+     ?_assertEqual(['tlsv1.3'], proplists:get_value(versions, SSL))].
