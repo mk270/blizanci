@@ -8,6 +8,11 @@
 %% the terms of the Apache Software Licence v2.0.
 
 % TBD: module-level docs
+%
+% The Titan protocol, for uploading to Gemini servers, is specified at
+%   gemini://transjovian.org/titan/The%20Titan%20Specification
+% In it the "size" parameter is mandatory, "mime" is optional (default
+% text/gemini) and "token" is optional.
 -module(blizanci_titan).
 -behaviour(blizanci_servlet).
 
@@ -35,6 +40,7 @@
 -define(MAX_TITAN, 10).
 
 -define(MAX_AGE, 3600). % for expiring files; measured in seconds
+-define(DEFAULT_MIME, <<"text/gemini">>). % per the Titan specification
 
 -record(titan_state, {parent,
                       size,
@@ -269,7 +275,7 @@ parse_titan_qs(Path, Query)
     KVPs = maps:from_list(BinParams),
     case parse_size(maps:get(<<"size">>, KVPs, undefined)) of
         {ok, Size} ->
-            MimeType = maps:get(<<"mime">>, KVPs),
+            MimeType = maps:get(<<"mime">>, KVPs, ?DEFAULT_MIME),
             {ok, {titan_request, Path, Size, MimeType}};
         {error, _} = Error ->
             Error
@@ -486,6 +492,10 @@ parse_titan_request_test_() ->
      ?_assertEqual({ok, {titan_request, <<"dir/page">>, 0,
                          <<"text/plain">>}},
                    P(<<"size=0;mime=text/plain">>)),
+     % mime is optional and defaults to text/gemini
+     ?_assertEqual({ok, {titan_request, <<"dir/page">>, 5,
+                         <<"text/gemini">>}},
+                   P(<<"size=5">>)),
      ?_assertEqual({error, bad_query_string},
                    P(<<"size=-1;mime=text/plain">>)),
      ?_assertEqual({error, bad_query_string},
