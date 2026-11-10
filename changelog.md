@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.16.1
+
+- Fix a crash in connection handling when a client disconnects immediately after the TLS handshake
+- Hold the live site configuration in a supervised ETS table instead of `persistent_term`; the declared servlets are now started and stopped by the process that owns it
+
 ## 5.16.0
 
 - Add `blizanci_config:new/2`, `routes/1`, `insert_route/3` and `validate/1`, completing the function-based config builder
