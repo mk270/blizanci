@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 5.20.0
+
+- Reject a request whose URL has a fragment, with status 59, as the Gemini specification requires; it was previously served as if the fragment weren't there
+- Reject a request with no URL scheme, with status 59, instead of assuming `gemini` for `//host/path`
+- Add tests, compiled out until the code is fixed (see `PENDING_CASE_INSENSITIVE` in the sources), for treating the URL scheme and host, and the SNI host name, as case-insensitive
+
 ## 5.19.0
 
 - Refuse Titan uploads that declare a size over 10 MiB, before any data is read, with status 59; the limit is fixed in the source for now
