@@ -577,8 +577,8 @@ sni_fun_test_() ->
     SSL = ssl_opts(1965),
     SniFun = proplists:get_value(sni_fun, SSL),
     {setup,
-     fun() -> blizanci_live:publish(1965, [], [A, B]) end,
-     fun(_) -> blizanci_live:clear() end,
+     fun() -> live_up(1965, [], [A, B]) end,
+     fun(_) -> live_down() end,
      [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
                     SniFun("a.example")),
       ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
@@ -664,9 +664,23 @@ write_test_pem() ->
 
 %% apply/1.
 
+%% Stand up / tear down the live configuration, as blizanci_sup would.
+live_up(Port, Servlets, Sites) ->
+    live_down(),
+    {ok, _} = blizanci_live:start_link(#{port => Port,
+                                         servlets => Servlets,
+                                         sites => Sites}),
+    ok.
+
+live_down() ->
+    case whereis(blizanci_live) of
+        undefined -> ok;
+        Pid -> gen_server:stop(Pid)
+    end.
+
 apply_test_() ->
     {setup, fun write_test_pem/0,
-     fun(Pem) -> file:delete(Pem), blizanci_live:clear() end,
+     fun(Pem) -> file:delete(Pem), live_down() end,
      fun apply_tests/1}.
 
 apply_tests(Pem) ->
@@ -676,7 +690,7 @@ apply_tests(Pem) ->
     Conf = fun(Port, Servlets, Sites) ->
                new(global(Port, Servlets), Sites)
            end,
-    Reset = fun() -> blizanci_live:clear() end,
+    Reset = fun() -> live_down() end,
     [?_test(begin
                 Reset(),
                 ?assertEqual({error, not_running},
@@ -685,8 +699,7 @@ apply_tests(Pem) ->
             end),
      ?_test(begin
                 Reset(),
-                ok = blizanci_live:publish(1965, [blizanci_static],
-                                       [Site("a")]),
+                live_up(1965, [blizanci_static], [Site("a")]),
                 ?assertEqual({error, no_sites},
                              apply(Conf(1965, [blizanci_static], []))),
                 % an invalid configuration changes nothing
@@ -694,8 +707,7 @@ apply_tests(Pem) ->
             end),
      ?_test(begin
                 Reset(),
-                ok = blizanci_live:publish(1965, [blizanci_static],
-                                       [Site("a")]),
+                live_up(1965, [blizanci_static], [Site("a")]),
                 ?assertEqual(ok, apply(Conf(1965, [blizanci_static],
                                             [Site("b"), Site("c")]))),
                 ?assertEqual(not_found, blizanci_live:find_site(<<"a">>)),
@@ -704,8 +716,7 @@ apply_tests(Pem) ->
             end),
      ?_test(begin
                 Reset(),
-                ok = blizanci_live:publish(1965, [blizanci_static],
-                                       [Site("a")]),
+                live_up(1965, [blizanci_static], [Site("a")]),
                 ?assertEqual({error, {port_change_requires_restart,
                                       1965, 1966}},
                              apply(Conf(1966, [blizanci_static],
@@ -724,9 +735,8 @@ apply_servlets_test_() ->
          write_test_pem()
      end,
      fun(Pem) ->
-         blizanci_cgi:stop(),
-         file:delete(Pem),
-         blizanci_live:clear()
+         live_down(),
+         file:delete(Pem)
      end,
      fun(Pem) ->
          ?_test(begin
@@ -736,7 +746,7 @@ apply_servlets_test_() ->
              Conf = fun(Servlets) ->
                         new(global(1965, Servlets), [Site])
                     end,
-             ok = blizanci_live:publish(1965, [blizanci_static], [Site]),
+             live_up(1965, [blizanci_static], [Site]),
              ?assertEqual(undefined, whereis(blizanci_cgi)),
              ?assertEqual(ok, apply(Conf([blizanci_static,
                                           blizanci_cgi]))),
@@ -744,6 +754,7 @@ apply_servlets_test_() ->
              ?assertEqual(ok, apply(Conf([blizanci_static]))),
              ?assertEqual(undefined, whereis(blizanci_cgi)),
              ?assertMatch({ok, #{servlets := [blizanci_static]}},
-                          blizanci_live:current())
+                          blizanci_live:current()),
+             live_down()
          end)
      end}.

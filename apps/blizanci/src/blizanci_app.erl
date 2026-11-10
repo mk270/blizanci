@@ -20,13 +20,7 @@ start(_StartType, _StartArgs) ->
     {ok, Pid} = blizanci_sup:start_link(Config),
     {ok, Pid}.
 
-% The servlet list can change while running (blizanci_config:apply/1),
-% so stop whatever is running now, not what was started.
+% Servlets are started and stopped by blizanci_live, which tracks the
+% list as it changes (blizanci_config:apply/1).
 stop(_State) ->
-    case blizanci_live:current() of
-        {ok, #{servlets := Servlets}} ->
-            [ ok = Servlet:stop() || Servlet <- Servlets ];
-        not_running ->
-            ok
-    end,
-    ok = blizanci_live:clear().
+    ok.
