@@ -328,3 +328,37 @@ scheme_required_test_() ->
      % with a scheme, the request is handled as before
      ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev/nothere">>)),
      ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev:1965/nothere">>))].
+
+%% The path of a URL is case-sensitive (RFC 3986) and must be left alone,
+%% and a host that isn't ours is refused whatever its case.
+case_sensitive_parts_test_() ->
+    H = url_handler(),
+    [?_assertEqual({error_code, host_unrecognised},
+                   H(<<"gemini://other.host.dev/nothere">>)),
+     ?_assertEqual({error_code, host_unrecognised},
+                   H(<<"gemini://OTHER.HOST.DEV/nothere">>)),
+     % there is no file "DIR1" (only "dir1")
+     ?_assertEqual(?NOT_FOUND,
+                   H(<<"gemini://this.host.dev/DIR1/index.gemini">>))].
+
+%% PENDING, so compiled out: the scheme and the host of a URL are
+%% case-insensitive (RFC 3986), so a request that spells them in another
+%% case is the same request. Blizanci doesn't do this yet: today these
+%% tests fail ("GEMINI://" gets 59, "THIS.HOST.DEV" gets 53).
+%%
+%% To enable them, either delete the -ifdef and -endif lines around them,
+%% or build with the macro defined, e.g. put
+%%     {eunit_compile_opts, [{d, 'PENDING_CASE_INSENSITIVE'}]}.
+%% on a line of its own in rebar.config (the file may lack a final
+%% newline) and touch this file, since rebar3 won't notice the change.
+%% Once the code is fixed, delete the -ifdef/-endif lines for good. The
+%% matching SNI tests are in blizanci_config.erl, under the same macro.
+-ifdef(PENDING_CASE_INSENSITIVE).
+case_insensitive_scheme_and_host_test_() ->
+    H = url_handler(),
+    [?_assertEqual(?NOT_FOUND, H(<<"GEMINI://this.host.dev/nothere">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"Gemini://this.host.dev/nothere">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"gemini://THIS.HOST.DEV/nothere">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"gemini://This.Host.Dev:1965/nothere">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"GEMINI://THIS.HOST.DEV/nothere">>))].
+-endif.

@@ -589,6 +589,8 @@ sni_fun_test_() ->
       ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
                     SniFun("b.example")),
       ?_assertEqual(unrecognized, SniFun("evil.example")),
+      % a name that isn't ours is refused whatever its case
+      ?_assertEqual(unrecognized, SniFun("EVIL.EXAMPLE")),
       ?_assertEqual(undefined, proplists:get_value(certfile, SSL)),
       ?_assertEqual(undefined, proplists:get_value(keyfile, SSL)),
       ?_assertEqual(['tlsv1.3'], proplists:get_value(versions, SSL)),
@@ -600,6 +602,35 @@ sni_fun_test_() ->
                  ?assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
                               SniFun("b.example"))
              end)]}.
+
+%% PENDING, so compiled out: a host name is case-insensitive, so the same
+%% site must be found whatever the case of the name the client sent in
+%% its SNI. Blizanci doesn't do this yet: today these tests fail (the
+%% lookup gets "unrecognized").
+%%
+%% To enable them, either delete the -ifdef and -endif lines around them,
+%% or build with the macro defined, e.g. put
+%%     {eunit_compile_opts, [{d, 'PENDING_CASE_INSENSITIVE'}]}.
+%% on a line of its own in rebar.config (the file may lack a final
+%% newline) and touch this file, since rebar3 won't notice the change.
+%% Once the code is fixed, delete the -ifdef/-endif lines for good. The
+%% matching request-URL tests are in blizanci_request.erl, under the
+%% same macro.
+-ifdef(PENDING_CASE_INSENSITIVE).
+sni_fun_case_insensitive_test_() ->
+    A = site("a.example", "a.pem", "a.key"),
+    B = site("b.example", "b.pem", "b.key"),
+    SniFun = proplists:get_value(sni_fun, ssl_opts(1965)),
+    {setup,
+     fun() -> live_up(1965, [], [A, B]) end,
+     fun(_) -> live_down() end,
+     [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
+                    SniFun("A.EXAMPLE")),
+      ?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
+                    SniFun("A.Example")),
+      ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
+                    SniFun("B.example"))]}.
+-endif.
 
 %% Builder: routes and configuration.
 
