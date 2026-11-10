@@ -44,6 +44,13 @@
 -define(MAX_AGE, 3600). % for expiring files; measured in seconds
 -define(DEFAULT_MIME, <<"text/gemini">>). % per the Titan specification
 
+% The largest upload accepted, in bytes: a request declaring more is
+% refused before any of its data is read.
+% TODO: plumb this through to the config system one day, as a route
+% option so each Titan route can set its own limit, instead of being
+% fixed here at compile time.
+-define(MAX_UPLOAD_BYTES, 10 * 1024 * 1024). % 10 MiB
+
 -record(titan_state, {parent,
                       size,
                       mime_type,
@@ -66,6 +73,7 @@
 -type upload_status() :: titan_finished
                        | titan_enotdir
                        | titan_not_found
+                       | titan_too_much
                        | {titan_updated, integer()}.
 
 %%%===================================================================
@@ -178,8 +186,12 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             % leaves time for the directory tree to change.
             case blizanci_path:confine(binary_to_list(Path),
                                        binary_to_list(RootDir)) of
+                {ok, _TargetPath} when byte_size(Rest) > Size ->
+                    % more data than the request declared: refused
+                    % before anything is written
+                    {gateway_finished, {error_code, request_too_long}};
                 {ok, TargetPath} when Size =:= 0 ->
-                    {gateway_finished, delete_resource(TargetPath, Rest)};
+                    {gateway_finished, delete_resource(TargetPath)};
                 {ok, _TargetPath} ->
                     Job = #titan_job{request=TitanReq,
                                      rest=Rest,
@@ -203,17 +215,13 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
 % a resource. Only a regular file is deleted: a resource is a file, so
 % a directory (or anything else) is reported as not found. As an upload
 % does, the target is the file the path resolves to inside the root.
-% Because deleting is not something to do on a malformed request, a
-% zero-size request that nevertheless carries data is refused. Only
-% existing Gemini status responses are used.
--spec delete_resource(TargetPath, Rest) -> Result
+% (A zero-size request that carries data has already been refused, like
+% any request that sends more than it declared.)
+-spec delete_resource(TargetPath) -> Result
               when TargetPath :: filepath(),
-                   Rest       :: binary(),
                    Result     :: gemini_response().
 
-delete_resource(_TargetPath, Rest) when byte_size(Rest) > 0 ->
-    {error_code, bad_query_string};
-delete_resource(TargetPath, <<>>) ->
+delete_resource(TargetPath) ->
     case file:read_link_info(TargetPath) of
         {ok, #file_info{type = regular}} ->
             case file:delete(TargetPath) of
@@ -329,7 +337,8 @@ parse_titan_qs(Path, Query)
 
 % The size parameter is mandatory, and a number of bytes: so a missing,
 % non-numeric or negative size is a bad request. Zero is valid (the
-% Titan specification uses it to mean "delete").
+% Titan specification uses it to mean "delete"). A size over the limit
+% is refused outright.
 -spec parse_size(SizeS) -> Result
               when SizeS  :: binary() | 'undefined',
                    Result :: {ok, non_neg_integer()}
@@ -338,6 +347,7 @@ parse_size(undefined) ->
     {error, bad_query_string};
 parse_size(SizeS) when is_binary(SizeS) ->
     try erlang:binary_to_integer(SizeS) of
+        Size when Size > ?MAX_UPLOAD_BYTES -> {error, request_too_long};
         Size when Size >= 0 -> {ok, Size};
         _Negative -> {error, bad_query_string}
     catch
@@ -425,6 +435,8 @@ handle_upload_status(titan_enotdir) ->
     {gateway_finished, {error_code, cannot_overwrite}};
 handle_upload_status(titan_not_found) ->
     {gateway_finished, {error_code, file_not_found}};
+handle_upload_status(titan_too_much) ->
+    {gateway_finished, {error_code, request_too_long}};
 handle_upload_status({titan_updated, NewSize}) ->
     {ok, in_progress, NewSize}.
 
@@ -440,13 +452,19 @@ recv_data(Data, #titan_state{stream=Stream,
                              root_dir=RootDir,
                              tmp_file=TmpPath,
                              bytes_recv=OldBytesRecv}) ->
-    Len = byte_size(Data),
-    file:write(Stream, Data),
-    NewSize = OldBytesRecv + Len,
-    case NewSize >= Size of
-        true ->
+    NewSize = OldBytesRecv + byte_size(Data),
+    if
+        NewSize > Size ->
+            % The client sent more than it declared: nothing is
+            % installed, and what was received is thrown away.
+            ok = file:close(Stream),
+            ok = delete(TmpPath),
+            titan_too_much;
+        NewSize =:= Size ->
+            ok = file:write(Stream, Data),
             finish_file(Stream, Path, RootDir, TmpPath, Size);
-        _ ->
+        true ->
+            ok = file:write(Stream, Data),
             {titan_updated, NewSize}
     end.
 
@@ -571,6 +589,15 @@ parse_titan_request_test_() ->
                    P(<<"size=-1;mime=text/plain">>)),
      ?_assertEqual({error, bad_query_string},
                    P(<<"size=-0123456789;mime=text/plain">>)),
+     % the limit itself is allowed; one byte more is not
+     ?_assertMatch({ok, {titan_request, _, ?MAX_UPLOAD_BYTES, _}},
+                   P(list_to_binary(
+                       "size=" ++ integer_to_list(?MAX_UPLOAD_BYTES)))),
+     ?_assertEqual({error, request_too_long},
+                   P(list_to_binary(
+                       "size=" ++ integer_to_list(?MAX_UPLOAD_BYTES + 1)))),
+     ?_assertEqual({error, request_too_long},
+                   P(<<"size=1000000000000000000000000000000">>)),
      ?_assertEqual({error, bad_query_string},
                    P(<<"size=abc;mime=text/plain">>)),
      ?_assertEqual({error, bad_query_string},
@@ -715,10 +742,11 @@ delete_tests(Base) ->
             end),
      ?_assertEqual({gateway_finished, {error_code, file_not_found}},
                    Serve(<<";size=0">>, <<>>)),
-     % a zero-size request that carries data is malformed: not acted on
+     % a zero-size request that carries data sends more than it
+     % declared: refused, and nothing is deleted
      ?_test(begin
                 ?assertEqual({gateway_finished,
-                              {error_code, bad_query_string}},
+                              {error_code, request_too_long}},
                              Serve(<<"c.txt;size=0">>, <<"junk">>)),
                 ?assert(Exists("c.txt"))
             end),
@@ -732,3 +760,98 @@ delete_tests(Base) ->
             end),
      ?_assertEqual({gateway_finished, {error_code, file_not_found}},
                    Serve(<<"../outside/secret.txt;size=0">>, <<>>))].
+
+
+%% An over-large upload is refused before anything is read or created.
+size_cap_test_() ->
+    {setup, fun delete_setup/0, fun delete_teardown/1,
+     fun(Base) ->
+         Root = filename:join(Base, "root"),
+         Work = filename:join(Base, "work"),
+         Opts = #{ docroot => Root, work_dir => list_to_binary(Work) },
+         Cfg = #server_config{hostname = <<"h">>, port = 1965,
+                              routing = [], docroot = Root},
+         Big = list_to_binary("big.txt;size=" ++
+                              integer_to_list(?MAX_UPLOAD_BYTES + 1)),
+         ?_test(begin
+                    ?assertEqual({gateway_finished,
+                                  {error_code, request_too_long}},
+                                 serve(#{ <<"PATH">> => Big },
+                                       #{ rest_of_input => <<"some data">> },
+                                       Cfg, Opts)),
+                    ?assertEqual({ok, []}, file:list_dir(Work)),
+                    ?assertNot(filelib:is_file(
+                                 filename:join(Root, "big.txt")))
+                end)
+     end}.
+
+
+%% An upload that sends more than it declared is refused with a bad
+%% request, nothing is installed (an existing file is left as it was),
+%% and the data received is deleted.
+excess_data_test_() ->
+    {setup, fun delete_setup/0, fun delete_teardown/1, fun excess_tests/1}.
+
+excess_tests(Base) ->
+    Root = filename:join(Base, "root"),
+    Work = list_to_binary(filename:join(Base, "work")),
+    Opts = #{ docroot => Root, work_dir => Work },
+    Cfg = #server_config{hostname = <<"h">>, port = 1965,
+                         routing = [], docroot = Root},
+    Serve = fun(Fragment, Rest) ->
+                serve(#{ <<"PATH">> => Fragment },
+                      #{ rest_of_input => Rest }, Cfg, Opts)
+            end,
+    TooLong = {gateway_finished, {error_code, request_too_long}},
+    Inner = filename:join([Root, "dir", "inner.txt"]),
+    % a state as the queued worker would hold it part-way through
+    State = fun(Path, Size, Received) ->
+                {ok, Stream, Tmp} = blizanci_tmpdir:create(Work),
+                ok = file:write(Stream, binary:copy(<<"y">>, Received)),
+                {#titan_state{size = Size, bytes_recv = Received,
+                              tmp_file = Tmp, path = Path,
+                              root_dir = list_to_binary(Root),
+                              stream = Stream}, Tmp}
+            end,
+    [% data sent with the request line
+     ?_test(begin
+                ?assertEqual(TooLong,
+                             Serve(<<"new.txt;size=3">>, <<"abcdef">>)),
+                ?assertNot(filelib:is_file(filename:join(Root, "new.txt"))),
+                ?assertEqual({ok, []}, file:list_dir(Work))
+            end),
+     ?_test(begin
+                ?assertEqual({ok, <<"x">>}, file:read_file(Inner)),
+                ?assertEqual(TooLong,
+                             Serve(<<"dir/inner.txt;size=3">>, <<"abcdef">>)),
+                ?assertEqual({ok, <<"x">>}, file:read_file(Inner))
+            end),
+     % exactly the declared size is fine
+     ?_assertMatch({gateway_finished, {success, _, _}},
+                   Serve(<<"exact.txt;size=3">>, <<"abc">>)),
+     % excess arriving later, to a queued upload
+     ?_test(begin
+                {St, Tmp} = State(<<"late.txt">>, 3, 0),
+                ?assertEqual(titan_too_much, recv_data(<<"abcdef">>, St)),
+                ?assertNot(filelib:is_file(Tmp)),
+                ?assertNot(filelib:is_file(filename:join(Root, "late.txt")))
+            end),
+     ?_test(begin
+                {St, Tmp} = State(<<"dir/inner.txt">>, 3, 2),
+                ?assertEqual(titan_too_much, recv_data(<<"cd">>, St)),
+                ?assertNot(filelib:is_file(Tmp)),
+                ?assertEqual({ok, <<"x">>}, file:read_file(Inner))
+            end),
+     % chunks that add up exactly to the declared size are fine
+     ?_test(begin
+                {St, _Tmp} = State(<<"chunks.txt">>, 4, 2),
+                ?assertEqual(titan_finished, recv_data(<<"zz">>, St)),
+                ?assertEqual({ok, <<"yyzz">>},
+                             file:read_file(filename:join(Root,
+                                                          "chunks.txt")))
+            end),
+     ?_test(begin
+                {St, _Tmp} = State(<<"part.txt">>, 4, 1),
+                ?assertEqual({titan_updated, 3}, recv_data(<<"zz">>, St))
+            end),
+     ?_assertEqual(TooLong, handle_upload_status(titan_too_much))].
