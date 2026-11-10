@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 5.16.0
+
+- Add `blizanci_config:new/2`, `routes/1`, `insert_route/3` and `validate/1`, completing the function-based config builder
+- Add `blizanci_config:apply/1`, which reconfigures a running instance without restarting its listener: sites, certificates and the declared servlets can change live (a change of port is refused)
+- Look sites up in a live store shared by the TLS layer and connections, so site changes take effect for every new handshake
+
 ## 5.15.0
 
 - Add `blizanci_config:route/5`, which builds and validates a single route and returns a specific `{error, Reason}` for a bad regex, protocol, servlet, auth policy or servlet options, instead of crashing
