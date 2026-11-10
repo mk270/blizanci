@@ -341,6 +341,18 @@ case_sensitive_parts_test_() ->
      ?_assertEqual(?NOT_FOUND,
                    H(<<"gemini://this.host.dev/DIR1/index.gemini">>))].
 
+%% A host name with a trailing dot ("this.host.dev.") is deliberately not
+%% accepted as ours: it stays refused, whatever else changes about how
+%% hosts are compared.
+trailing_dot_host_refused_test_() ->
+    H = url_handler(),
+    [?_assertEqual({error_code, host_unrecognised},
+                   H(<<"gemini://this.host.dev./nothere">>)),
+     ?_assertEqual({error_code, host_unrecognised},
+                   H(<<"gemini://this.host.dev.:1965/nothere">>)),
+     ?_assertEqual({error_code, host_unrecognised},
+                   H(<<"gemini://THIS.HOST.DEV./nothere">>))].
+
 %% PENDING, so compiled out: the scheme and the host of a URL are
 %% case-insensitive (RFC 3986), so a request that spells them in another
 %% case is the same request. Blizanci doesn't do this yet: today these

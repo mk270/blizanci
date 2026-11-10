@@ -591,6 +591,9 @@ sni_fun_test_() ->
       ?_assertEqual(unrecognized, SniFun("evil.example")),
       % a name that isn't ours is refused whatever its case
       ?_assertEqual(unrecognized, SniFun("EVIL.EXAMPLE")),
+      % and a name with a trailing dot (not valid in an SNI) is refused
+      ?_assertEqual(unrecognized, SniFun("a.example.")),
+      ?_assertEqual(unrecognized, SniFun("A.EXAMPLE.")),
       ?_assertEqual(undefined, proplists:get_value(certfile, SSL)),
       ?_assertEqual(undefined, proplists:get_value(keyfile, SSL)),
       ?_assertEqual(['tlsv1.3'], proplists:get_value(versions, SSL)),
