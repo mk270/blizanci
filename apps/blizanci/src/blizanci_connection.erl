@@ -23,6 +23,7 @@
 -behaviour(ranch_protocol).
 
 -include("blizanci_types.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 %% API to be called by other blizanci modules
 -export([start_link/3]).
@@ -251,15 +252,30 @@ activate(Transport, Socket) ->
 % hostname that isn't a known site (or no SNI at all) before the
 % handshake can even complete. Both look sites up in blizanci_live, so
 % the only way to miss here is a reconfiguration landing between the
-% handshake and this lookup, which removed the site.
+% handshake and this lookup, which removed the site. A client that has
+% already disconnected can't be asked its SNI hostname at all; that is
+% an ordinary event, not an error.
 -spec resolve_site(Socket, Transport) -> Result
               when Socket    :: ssl:sslsocket(),
                    Transport :: atom(),
                    Result    :: {'ok', site()}.
 
 resolve_site(Socket, Transport) ->
-    {ok, [{sni_hostname, SniHostname}]} =
-        ssl:connection_information(Socket, [sni_hostname]),
+    case ssl:connection_information(Socket, [sni_hostname]) of
+        {ok, [{sni_hostname, SniHostname}]} ->
+            find_negotiated_site(SniHostname, Socket, Transport);
+        {error, _Reason} ->
+            Transport:close(Socket),
+            exit(normal)
+    end.
+
+
+-spec find_negotiated_site(SniHostname, Socket, Transport) -> Result
+              when SniHostname :: string() | 'undefined',
+                   Socket      :: ssl:sslsocket(),
+                   Transport   :: atom(),
+                   Result      :: {'ok', site()}.
+find_negotiated_site(SniHostname, Socket, Transport) ->
     Found = is_list(SniHostname) andalso
             blizanci_live:find_site(erlang:list_to_binary(SniHostname)),
     case Found of
@@ -474,3 +490,50 @@ construct_url(Scheme, Hostname, Port, Path) ->
                             host => Hostname,
                             port => Port,
                             path => Path }).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% A client that disconnects right after the handshake must make the
+%% connection process exit normally, not crash.
+resolve_site_client_gone_test_() ->
+    {setup,
+     fun() -> {ok, _} = application:ensure_all_started(ssl) end,
+     fun(_) -> ok end,
+     {timeout, 30, fun resolve_site_client_gone/0}}.
+
+resolve_site_client_gone() ->
+    Rsa = [{key, {rsa, 2048, 17}}],
+    #{server_config := ServerConf, client_config := ClientConf} =
+        public_key:pkix_test_data(#{server_chain => #{root => Rsa,
+                                                      peer => Rsa},
+                                    client_chain => #{root => Rsa,
+                                                      peer => Rsa}}),
+    {ok, Listen} = ssl:listen(0, ServerConf ++ [{versions, ['tlsv1.3']},
+                                                {active, false}]),
+    {ok, {_, Port}} = ssl:sockname(Listen),
+    Self = self(),
+    {Pid, Ref} = spawn_monitor(
+                   fun() ->
+                       {ok, T} = ssl:transport_accept(Listen),
+                       {ok, S} = ssl:handshake(T, 5000),
+                       Self ! {handshaken, self()},
+                       {error, closed} = ssl:recv(S, 0, 5000),
+                       resolve_site(S, ranch_ssl)
+                   end),
+    {ok, C} = ssl:connect("localhost", Port,
+                          ClientConf ++ [{verify, verify_none},
+                                         {versions, ['tlsv1.3']},
+                                         {server_name_indication,
+                                          "localhost"}]),
+    receive {handshaken, Pid} -> ok after 5000 -> error(no_handshake) end,
+    ok = ssl:close(C),
+    receive
+        {'DOWN', Ref, process, Pid, Reason} ->
+            ?assertEqual(normal, Reason)
+    after 5000 ->
+        error(server_did_not_exit)
+    end,
+    ssl:close(Listen).
