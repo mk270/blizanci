@@ -112,7 +112,10 @@ is_old_regular_file(Filename, MaxAge) ->
 
 % Modification time is used, not access time, so an upload that is still
 % being written to isn't mistaken for a left-over. A time in the future
-% is written off as stale.
+% is not stale: file times come from the operating system's clock (or a
+% file server's) and the current time from Erlang's, which can differ
+% by a little, and a file that has only just been written must not be
+% taken for a left-over.
 -spec older_than(Mtime, MaxAge) -> Result
               when Mtime   :: calendar:datetime(),
                    MaxAge  :: integer(),
@@ -120,8 +123,7 @@ is_old_regular_file(Filename, MaxAge) ->
 older_than(Mtime, MaxAge) ->
     Now = calendar:datetime_to_gregorian_seconds(calendar:local_time()),
     Then = calendar:datetime_to_gregorian_seconds(Mtime),
-    Age = Now - Then,
-    Age < 0 orelse Age >= MaxAge.
+    Now - Then >= MaxAge.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -250,5 +252,7 @@ older_than_test_() ->
      ?_assertNot(older_than(Ago(60), 3600)),
      % more than a day old with a small time-of-day remainder: old
      ?_assert(older_than(Ago(86400 * 2 + 60), 3600)),
-     % a time in the future is written off as stale
-     ?_assert(older_than(Ago(-3600), 3600))].
+     % a time in the future is not stale, however far ahead
+     ?_assertNot(older_than(Ago(-1), 3600)),
+     ?_assertNot(older_than(Ago(-3600), 3600)),
+     ?_assertNot(older_than(Ago(-86400 * 365), 3600))].
