@@ -12,6 +12,7 @@
 -behaviour(blizanci_servlet).
 
 -include("blizanci_types.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -behaviour(gen_server).
 
@@ -256,7 +257,8 @@ parse_titan_request(Fragment) ->
 -spec parse_titan_qs(Path, Query) -> Result
               when Path   :: binary(),
                    Query  :: binary(),
-                   Result :: {ok, titan_request()}.
+                   Result :: {ok, titan_request()}
+                             | {error, atom()}.
 
 parse_titan_qs(Path, Query)
   when is_binary(Path) and is_binary(Query)
@@ -265,11 +267,31 @@ parse_titan_qs(Path, Query)
     AllParams = uri_string:dissect_query(Q2),
     BinParams = [{K,V} || {K,V} <- AllParams, is_binary(V)],
     KVPs = maps:from_list(BinParams),
-    SizeS = maps:get(<<"size">>, KVPs),
-    MimeType = maps:get(<<"mime">>, KVPs),
-    Size = erlang:binary_to_integer(SizeS),
-    TitanRequest = {titan_request, Path, Size, MimeType},
-    {ok, TitanRequest}.
+    case parse_size(maps:get(<<"size">>, KVPs, undefined)) of
+        {ok, Size} ->
+            MimeType = maps:get(<<"mime">>, KVPs),
+            {ok, {titan_request, Path, Size, MimeType}};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+% The size parameter is mandatory, and a number of bytes: so a missing,
+% non-numeric or negative size is a bad request. Zero is valid (the
+% Titan specification uses it to mean "delete").
+-spec parse_size(SizeS) -> Result
+              when SizeS  :: binary() | 'undefined',
+                   Result :: {ok, non_neg_integer()}
+                             | {error, atom()}.
+parse_size(undefined) ->
+    {error, bad_query_string};
+parse_size(SizeS) when is_binary(SizeS) ->
+    try erlang:binary_to_integer(SizeS) of
+        Size when Size >= 0 -> {ok, Size};
+        _Negative -> {error, bad_query_string}
+    catch
+        error:badarg -> {error, bad_query_string}
+    end.
 
 init({Parent, Job}) ->
     process_flag(trap_exit, true),
@@ -448,3 +470,31 @@ create_tmp_file(WorkDir, Rest)
     {ok, Stream} = file:open(TmpPath, [write]),
     ok = file:write(Stream, Rest),
     {ok, Stream, TmpPath}.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+parse_titan_request_test_() ->
+    P = fun(Params) ->
+            parse_titan_request(<<"dir/page;", Params/binary>>)
+        end,
+    [?_assertEqual({ok, {titan_request, <<"dir/page">>, 123,
+                         <<"text/plain">>}},
+                   P(<<"size=123;mime=text/plain">>)),
+     ?_assertEqual({ok, {titan_request, <<"dir/page">>, 0,
+                         <<"text/plain">>}},
+                   P(<<"size=0;mime=text/plain">>)),
+     ?_assertEqual({error, bad_query_string},
+                   P(<<"size=-1;mime=text/plain">>)),
+     ?_assertEqual({error, bad_query_string},
+                   P(<<"size=-0123456789;mime=text/plain">>)),
+     ?_assertEqual({error, bad_query_string},
+                   P(<<"size=abc;mime=text/plain">>)),
+     ?_assertEqual({error, bad_query_string},
+                   P(<<"size=;mime=text/plain">>)),
+     ?_assertEqual({error, bad_query_string},
+                   P(<<"mime=text/plain">>)),
+     ?_assertEqual({error, bad_query_string},
+                   parse_titan_request(<<"dir/page">>))].
