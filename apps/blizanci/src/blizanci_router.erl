@@ -7,10 +7,12 @@
 
 -module(blizanci_router).
 
--export([prepare/1, build_route/5, check_servlet/1]).
+-export([prepare/1, build_route/5, check_servlet/1,
+         check_upload_dirs/1]).
 -export([route/4]).
 
 -include("blizanci_types.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 
 -type route_info() :: {Proto      :: atom(),
@@ -31,10 +33,67 @@
 
 prepare(RouteInfo) ->
     try make_routes(RouteInfo) of
-        Routes -> {ok, Routes}
+        Routes ->
+            case check_upload_dirs(Routes) of
+                ok -> {ok, Routes};
+                {error, _} = Error -> Error
+            end
     catch
         Err -> {error, Err}
     end.
+
+
+%% @doc
+%% Check that no Titan upload can land in a directory CGI scripts are
+%% run from: neither a Titan route's docroot (where uploads end up) nor
+%% its work_dir (where they are staged) may be, contain, or lie inside
+%% the cgiroot of any CGI route. Directories are compared after
+%% resolving symbolic links, so an alias doesn't get round it.
+%% @end
+-spec check_upload_dirs(Routes) -> Result
+              when Routes :: [route()],
+                   Result :: 'ok' | {'error', term()}.
+check_upload_dirs(Routes) ->
+    CGIRoots = [ Root || #route{module = blizanci_cgi,
+                                options = #{ cgiroot := Root }} <- Routes ],
+    UploadDirs = [ {Kind, Dir}
+                   || #route{module = blizanci_titan,
+                             options = Opts} <- Routes,
+                      Kind <- [docroot, work_dir],
+                      Dir <- [maps:get(Kind, Opts, undefined)],
+                      Dir =/= undefined ],
+    first_overlap([ {Kind, Dir, Root} || {Kind, Dir} <- UploadDirs,
+                                         Root <- CGIRoots ]).
+
+
+-spec first_overlap(Pairs) -> Result
+              when Pairs  :: [{atom(), term(), term()}],
+                   Result :: 'ok' | {'error', term()}.
+first_overlap([]) ->
+    ok;
+first_overlap([{Kind, Dir, Root} | Rest]) ->
+    case {canonical_dir(Dir), canonical_dir(Root)} of
+        {{ok, CanonDir}, {ok, CanonRoot}} ->
+            case blizanci_path:path_under_root(CanonDir, CanonRoot)
+                 orelse blizanci_path:path_under_root(CanonRoot, CanonDir) of
+                true -> {error, {upload_dir_overlaps_cgiroot,
+                                 Kind, Dir, Root}};
+                false -> first_overlap(Rest)
+            end;
+        {{error, Reason}, _} ->
+            {error, {cannot_resolve_dir, Dir, Reason}};
+        {_, {error, Reason}} ->
+            {error, {cannot_resolve_dir, Root, Reason}}
+    end.
+
+
+-spec canonical_dir(Dir) -> Result
+              when Dir    :: binary() | string(),
+                   Result :: {'ok', string()} | {'error', atom()}.
+canonical_dir(Dir) when is_binary(Dir) ->
+    canonical_dir(unicode:characters_to_list(Dir));
+canonical_dir(Dir) when is_list(Dir) ->
+    blizanci_path:fix_path(filename:absname(Dir)).
 
 
 -spec make_routes(RouteInfo) -> Routes
@@ -260,3 +319,82 @@ dispatch(Matches, Module, Request, AuthPolicy, ServerConfig, RouteOpts) ->
                                                ServerConfig, RouteOpts);
         Error -> Error
     end.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Fixture, under a fresh temporary directory:
+%%   Base/cgi  Base/cgi-up  Base/up  Base/work  Base/cgi/inner
+%%   Base/alias -> Base/cgi
+upload_dirs_test_() ->
+    {setup, fun upload_setup/0, fun upload_teardown/1,
+     fun upload_tests/1}.
+
+upload_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("router_test_" ++ Unique),
+    [ ok = filelib:ensure_path(filename:join(Base, D))
+      || D <- ["cgi", "cgi-up", "up", "work", "cgi/inner"] ],
+    ok = file:make_symlink(filename:join(Base, "cgi"),
+                           filename:join(Base, "alias")),
+    Base.
+
+upload_teardown(Base) ->
+    file:del_dir_r(Base).
+
+upload_tests(Base) ->
+    D = fun(Name) -> filename:join(Base, Name) end,
+    Cgi = fun(Dir) ->
+              {ok, R} = build_route(gemini, "x", blizanci_cgi, public,
+                                    #{ cgiroot => Dir }),
+              R
+          end,
+    Titan = fun(Docroot, Work) ->
+                {ok, R} = build_route(titan, "x", blizanci_titan, public,
+                                      #{ docroot => Docroot,
+                                         work_dir => Work }),
+                R
+            end,
+    Check = fun(Routes) -> check_upload_dirs(Routes) end,
+    Overlaps = fun(Kind) ->
+                   fun({error, {upload_dir_overlaps_cgiroot, K, _, _}}) ->
+                           K =:= Kind;
+                      (_) -> false
+                   end
+               end,
+    [?_assertEqual(ok, Check([Cgi(D("cgi")), Titan(D("up"), D("work"))])),
+     % a sibling whose name merely starts with the cgiroot's is fine
+     ?_assertEqual(ok, Check([Cgi(D("cgi")),
+                              Titan(D("cgi-up"), D("work"))])),
+     ?_assertEqual(ok, Check([Cgi(D("cgi"))])),
+     ?_assertEqual(ok, Check([Titan(D("up"), D("work"))])),
+     ?_assertEqual(ok, Check([])),
+     ?_assert((Overlaps(docroot))(
+                Check([Cgi(D("cgi")), Titan(D("cgi"), D("work"))]))),
+     % uploads inside the cgiroot
+     ?_assert((Overlaps(docroot))(
+                Check([Cgi(D("cgi")), Titan(D("cgi/inner"), D("work"))]))),
+     % the cgiroot inside the upload directory
+     ?_assert((Overlaps(docroot))(
+                Check([Cgi(D("cgi")), Titan(Base, D("work"))]))),
+     ?_assert((Overlaps(work_dir))(
+                Check([Cgi(D("cgi")), Titan(D("up"), D("cgi"))]))),
+     % a symbolic link to the cgiroot is the cgiroot
+     ?_assert((Overlaps(docroot))(
+                Check([Cgi(D("cgi")), Titan(D("alias"), D("work"))]))),
+     % the order of the routes doesn't matter
+     ?_assert((Overlaps(docroot))(
+                Check([Titan(D("cgi"), D("work")), Cgi(D("cgi"))]))),
+     % binary directory names, as the default Titan work_dir is
+     ?_assert((Overlaps(work_dir))(
+                Check([Cgi(D("cgi")),
+                       Titan(D("up"), list_to_binary(D("cgi")))]))),
+     % and the check is part of preparing a routing table
+     ?_assertMatch({error, {upload_dir_overlaps_cgiroot, docroot, _, _}},
+                   prepare([{gemini, "c", blizanci_cgi, public,
+                             #{ cgiroot => D("cgi") }},
+                            {titan, "t", blizanci_titan, public,
+                             #{ docroot => D("cgi"),
+                                work_dir => D("work") }}]))].

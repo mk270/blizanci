@@ -208,12 +208,16 @@ validate_sites(Sites) ->
               when Site   :: site(),
                    Result :: 'ok' | {'error', term()}.
 validate_site(#site{hostname = Hostname, certfile = Cert,
-                    keyfile = Key}) ->
+                    keyfile = Key, routing = Routing}) ->
     case {blizanci_x509:validate_pem_file(Cert),
           blizanci_x509:validate_pem_file(Key)} of
         {{fail, Why}, _} -> {error, {bad_certfile, Hostname, Why}};
         {_, {fail, Why}} -> {error, {bad_keyfile, Hostname, Why}};
-        _                -> ok
+        _ ->
+            case blizanci_router:check_upload_dirs(Routing) of
+                ok -> ok;
+                {error, Why} -> {error, {bad_routes, Hostname, Why}}
+            end
     end.
 
 
@@ -711,9 +715,10 @@ apply_tests(Pem) ->
                 live_up(1965, [blizanci_static], [Site("a")]),
                 ?assertEqual(ok, apply(Conf(1965, [blizanci_static],
                                             [Site("b"), Site("c")]))),
-                ?assertEqual(not_found, blizanci_conf_serv:find_site(<<"a">>)),
-                ?assertMatch({ok, _}, blizanci_conf_serv:find_site(<<"b">>)),
-                ?assertMatch({ok, _}, blizanci_conf_serv:find_site(<<"c">>))
+                Find = fun(Host) -> blizanci_conf_serv:find_site(Host) end,
+                ?assertEqual(not_found, Find(<<"a">>)),
+                ?assertMatch({ok, _}, Find(<<"b">>)),
+                ?assertMatch({ok, _}, Find(<<"c">>))
             end),
      ?_test(begin
                 Reset(),
@@ -759,3 +764,27 @@ apply_servlets_test_() ->
              live_down()
          end)
      end}.
+
+%% validate/1 refuses a site whose routes let a Titan upload land in a
+%% CGI directory.
+validate_upload_in_cgi_dir_test_() ->
+    {setup,
+     fun() -> {write_test_pem(), make_test_dir()} end,
+     fun({Pem, Dir}) -> file:delete(Pem), file:del_dir_r(Dir) end,
+     fun({Pem, Dir}) ->
+         {ok, C} = route(gemini, "c", blizanci_cgi, public,
+                         #{ cgiroot => Dir }),
+         {ok, T} = route(titan, "t", blizanci_titan, public,
+                         #{ docroot => Dir, work_dir => Dir }),
+         Site = add_route(add_route(site("a", Pem, Pem), C), T),
+         G = global(1965, [blizanci_cgi, blizanci_titan]),
+         ?_assertMatch({error, {bad_routes, <<"a">>,
+                                {upload_dir_overlaps_cgiroot, _, _, _}}},
+                       validate(new(G, [Site])))
+     end}.
+
+make_test_dir() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:absname("validate_dir_test_" ++ Unique),
+    ok = filelib:ensure_path(Dir),
+    Dir.
