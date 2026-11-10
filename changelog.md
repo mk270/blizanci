@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.17.1
+
+- Default a missing Titan `mime` parameter to `text/gemini`, as the Titan specification says, instead of crashing the request
+- Resolve a Titan upload's target path again immediately before writing it, so a directory swapped for a symlink during a long upload can no longer redirect the write outside the upload root
+
 ## 5.17.0
 
 - Reject Titan requests whose `size` is missing, not a number or negative, with a status 59 error instead of crashing the upload worker
