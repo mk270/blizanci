@@ -47,7 +47,8 @@
                       mime_type,
                       bytes_recv,
                       tmp_file,
-                      target_path,
+                      path,
+                      root_dir,
                       work_dir,
                       stream}).
 -type titan_state() :: #titan_state{}.
@@ -57,11 +58,12 @@
 -record(titan_job, {request     :: titan_request(),
                     rest        :: binary(),
                     work_dir    :: filepath(),
-                    target_path :: filepath()}).
+                    root_dir    :: filepath()}).
 -type titan_job() :: #titan_job{}.
 
 -type upload_status() :: titan_finished
                        | titan_enotdir
+                       | titan_not_found
                        | {titan_updated, integer()}.
 
 %%%===================================================================
@@ -168,19 +170,21 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             % up front, before any worker (sync or queued) is started,
             % the same mechanism CGI and static-file serving use. This
             % also catches a symlink inside RootDir that would
-            % otherwise let an upload land outside it.
+            % otherwise let an upload land outside it. It is only an
+            % early refusal: the target is resolved again, just before
+            % it is written (see finish_file/5), because a long upload
+            % leaves time for the directory tree to change.
             case blizanci_path:confine(binary_to_list(Path),
                                        binary_to_list(RootDir)) of
-                {ok, TargetPath} ->
+                {ok, _TargetPath} ->
                     Job = #titan_job{request=TitanReq,
                                      rest=Rest,
                                      work_dir=WorkDir,
-                                     target_path=TargetPath},
+                                     root_dir=RootDir},
                     RestSize = byte_size(Rest),
                     case RestSize >= Size of
-                        true -> handle_all_in_one_request(WorkDir,
-                                                          TargetPath,
-                                                          Rest, Size);
+                        true -> handle_all_in_one_request(WorkDir, RootDir,
+                                                          Path, Rest, Size);
                         false -> enqueue_titan_job(Job)
                     end;
                 {error, file_not_found} ->
@@ -196,17 +200,18 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
 %  concurrently with the payload; that is, the Titan request specifies
 %  that a certain number of bytes of payload will follow, and sufficient
 %  bytes are already available.
--spec handle_all_in_one_request(WorkDir, TargetPath, Rest, Size) -> Result
-              when WorkDir    :: filepath(),
-                   TargetPath :: filepath(),
-                   Rest       :: binary(),
-                   Size       :: integer(),
-                   Result     :: gateway_result().
+-spec handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) -> Result
+              when WorkDir :: filepath(),
+                   RootDir :: filepath(),
+                   Path    :: binary(),
+                   Rest    :: binary(),
+                   Size    :: integer(),
+                   Result  :: gateway_result().
 
-handle_all_in_one_request(WorkDir, TargetPath, Rest, Size) ->
+handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) ->
     {ok, Stream, TmpPath} = create_tmp_file(WorkDir, Rest),
 
-    UploadStatus = finish_file(Stream, TargetPath, TmpPath, Size),
+    UploadStatus = finish_file(Stream, Path, RootDir, TmpPath, Size),
     handle_upload_status(UploadStatus).
 
 
@@ -304,8 +309,8 @@ init({Parent, Job}) ->
     #titan_job{request=TitanReq,
                rest=Rest,
                work_dir=WorkDir,
-               target_path=TargetPath} = Job,
-    {titan_request, _Path, Size, MimeType} = TitanReq,
+               root_dir=RootDir} = Job,
+    {titan_request, Path, Size, MimeType} = TitanReq,
     BytesRecv = byte_size(Rest),
     {ok, Stream, TmpPath} = create_tmp_file(WorkDir, Rest),
     State = #titan_state{
@@ -314,7 +319,8 @@ init({Parent, Job}) ->
                mime_type=MimeType,
                bytes_recv=BytesRecv,
                tmp_file=TmpPath,
-               target_path=TargetPath,
+               path=Path,
+               root_dir=RootDir,
                work_dir=WorkDir,
                stream=Stream
               },
@@ -377,6 +383,8 @@ handle_upload_status(titan_finished) ->
     {gateway_finished, {success, <<"text/plain">>, <<"Uploaded.\r\n">>}};
 handle_upload_status(titan_enotdir) ->
     {gateway_finished, {error_code, cannot_overwrite}};
+handle_upload_status(titan_not_found) ->
+    {gateway_finished, {error_code, file_not_found}};
 handle_upload_status({titan_updated, NewSize}) ->
     {ok, in_progress, NewSize}.
 
@@ -388,7 +396,8 @@ handle_upload_status({titan_updated, NewSize}) ->
 
 recv_data(Data, #titan_state{stream=Stream,
                              size=Size,
-                             target_path=TargetPath,
+                             path=Path,
+                             root_dir=RootDir,
                              tmp_file=TmpPath,
                              bytes_recv=OldBytesRecv}) ->
     Len = byte_size(Data),
@@ -396,22 +405,46 @@ recv_data(Data, #titan_state{stream=Stream,
     NewSize = OldBytesRecv + Len,
     case NewSize >= Size of
         true ->
-            finish_file(Stream, TargetPath, TmpPath, Size);
+            finish_file(Stream, Path, RootDir, TmpPath, Size);
         _ ->
             {titan_updated, NewSize}
     end.
 
 
--spec finish_file(Stream, TargetPath, TmpPath, Size) -> Result
-              when Stream     :: io_device(),
-                   TargetPath :: filepath(),
-                   TmpPath    :: filepath(),
-                   Size       :: integer(),
-                   Result     :: upload_status().
+% Put the uploaded data in place. The target is resolved here, under
+% RootDir, immediately before it is replaced, and not taken from the
+% check made when the request arrived: an upload can take minutes, and
+% in that time a directory on the path could have been replaced by a
+% symbolic link pointing out of RootDir. This narrows the gap between
+% checking the path and using it to the few calls below; it can't close
+% it, since Erlang has no way to open a file without following links.
+-spec finish_file(Stream, Path, RootDir, TmpPath, Size) -> Result
+              when Stream  :: io_device(),
+                   Path    :: binary(),
+                   RootDir :: filepath(),
+                   TmpPath :: filepath(),
+                   Size    :: integer(),
+                   Result  :: upload_status().
 
-finish_file(Stream, TargetPath, TmpPath, Size) ->
+finish_file(Stream, Path, RootDir, TmpPath, Size) ->
     truncate(Stream, Size),
     ok = file:close(Stream),
+    case blizanci_path:confine(binary_to_list(Path),
+                               binary_to_list(RootDir)) of
+        {ok, TargetPath} ->
+            replace_target(TargetPath, TmpPath);
+        {error, file_not_found} ->
+            ok = delete(TmpPath),
+            titan_not_found
+    end.
+
+
+-spec replace_target(TargetPath, TmpPath) -> Result
+              when TargetPath :: filepath(),
+                   TmpPath    :: filepath(),
+                   Result     :: upload_status().
+
+replace_target(TargetPath, TmpPath) ->
     case delete(TargetPath) of
         {fail, enotdir} -> titan_enotdir;
         ok ->
@@ -508,3 +541,75 @@ parse_titan_request_test_() ->
                    P(<<"mime=text/plain">>)),
      ?_assertEqual({error, bad_query_string},
                    parse_titan_request(<<"dir/page">>))].
+
+
+%% finish_file/5 resolves the target afresh, so a path that has become
+%% unsafe since the request was checked is refused, not written.
+%% Fixture, under a fresh temporary directory:
+%%   Base/root/existing.txt  Base/root/escape -> ../outside  Base/outside
+%%   Base/work
+finish_file_test_() ->
+    {setup, fun finish_setup/0, fun finish_teardown/1, fun finish_tests/1}.
+
+finish_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("titan_test_" ++ Unique),
+    [ ok = filelib:ensure_path(filename:join(Base, D))
+      || D <- ["root", "outside", "work"] ],
+    ok = file:write_file(filename:join([Base, "root", "existing.txt"]),
+                         <<"old">>),
+    ok = file:make_symlink("../outside",
+                           filename:join([Base, "root", "escape"])),
+    Base.
+
+finish_teardown(Base) ->
+    file:del_dir_r(Base).
+
+finish_tests(Base) ->
+    Root = list_to_binary(filename:join(Base, "root")),
+    Work = list_to_binary(filename:join(Base, "work")),
+    Upload = fun(Path, Data) ->
+                 {ok, Stream, Tmp} = create_tmp_file(Work, Data),
+                 {finish_file(Stream, Path, Root, Tmp, byte_size(Data)),
+                  Tmp}
+             end,
+    InRoot = fun(Name) -> filename:join([Base, "root", Name]) end,
+    [?_test(begin
+                {Status, Tmp} = Upload(<<"new.txt">>, <<"hello">>),
+                ?assertEqual(titan_finished, Status),
+                ?assertEqual({ok, <<"hello">>},
+                             file:read_file(InRoot("new.txt"))),
+                ?assertNot(filelib:is_file(Tmp))
+            end),
+     ?_test(begin
+                {Status, _} = Upload(<<"existing.txt">>, <<"new">>),
+                ?assertEqual(titan_finished, Status),
+                ?assertEqual({ok, <<"new">>},
+                             file:read_file(InRoot("existing.txt")))
+            end),
+     % a directory on the path now leads out of the root
+     ?_test(begin
+                {Status, Tmp} = Upload(<<"escape/pwned.txt">>, <<"x">>),
+                ?assertEqual(titan_not_found, Status),
+                ?assertNot(filelib:is_file(
+                             filename:join([Base, "outside", "pwned.txt"]))),
+                ?assertNot(filelib:is_file(Tmp))
+            end),
+     % the race itself: the request-time check passes while "swap" is a
+     % real directory, then it is replaced by a link out of the root
+     % before the upload finishes
+     ?_test(begin
+                Swap = InRoot("swap"),
+                ok = filelib:ensure_path(Swap),
+                ?assertMatch({ok, _},
+                             blizanci_path:confine("swap/f.txt",
+                                                   binary_to_list(Root))),
+                ok = file:del_dir(Swap),
+                ok = file:make_symlink("../outside", Swap),
+                {Status, _} = Upload(<<"swap/f.txt">>, <<"x">>),
+                ?assertEqual(titan_not_found, Status),
+                ?assertNot(filelib:is_file(
+                             filename:join([Base, "outside", "f.txt"])))
+            end),
+     ?_assertEqual({gateway_finished, {error_code, file_not_found}},
+                   handle_upload_status(titan_not_found))].
