@@ -85,6 +85,10 @@ handle_line(Cmd, Config, Cert, Rest) when is_binary(Cmd) ->
 
 handle_parsed_url(#{ userinfo := _U}, _Config, _Cert, _Rest) ->
     {error_code, userinfo_supplied};
+% A fragment is for the client alone: the specification says clients MUST
+% NOT send one and servers MUST reject a request that has one.
+handle_parsed_url(#{ fragment := _F}, _Config, _Cert, _Rest) ->
+    {error_code, request_not_parsed};
 handle_parsed_url(URI, Config, Cert, Rest) ->
     try
         ReqHost = maps:get(host, URI, <<>>),
@@ -267,3 +271,40 @@ tests(_State) ->
 
     [[?_assertEqual(Expected, HandleLine(Arg))
       || {Expected, Arg} <- handle_line_test_data(Docroot)]].
+
+
+%% Request URLs, checked against the Gemini specification. These need no
+%% real file: a request that passes the URL checks and then names a file
+%% that doesn't exist is answered with file_not_found, which tells the
+%% two outcomes apart without involving MIME lookup.
+-define(NOT_FOUND, {error_code, file_not_found}).
+
+url_handler() ->
+    Opts = #{ docroot => "test-docroot" },
+    Routes = [{gemini, <<"(?<PATH>.*)">>, blizanci_static, public, Opts}],
+    {ok, Routing} = blizanci_router:prepare(Routes),
+    Config = #server_config{hostname = <<"this.host.dev">>,
+                            port = 1965,
+                            routing = Routing,
+                            docroot = "test-docroot"},
+    fun(Url) ->
+        handle_line(Url, Config, {error, no_peercert}, <<>>)
+    end.
+
+%% A server MUST reject a request with a fragment, with status 59.
+fragment_test_() ->
+    H = url_handler(),
+    [?_assertEqual({error_code, request_not_parsed},
+                   H(<<"gemini://this.host.dev/nothere#frag">>)),
+     ?_assertEqual({error_code, request_not_parsed},
+                   H(<<"gemini://this.host.dev/nothere#">>)),
+     ?_assertEqual({error_code, request_not_parsed},
+                   H(<<"gemini://this.host.dev/#top">>)),
+     ?_assertEqual({error_code, request_not_parsed},
+                   H(<<"gemini://this.host.dev/nothere?q=1#frag">>)),
+     ?_assertEqual({error_code, request_not_parsed},
+                   H(<<"titan://this.host.dev/x;size=1#frag">>)),
+     % an encoded "#" is part of the path, not a fragment
+     ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev/a%23b">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev/nothere">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"gemini://this.host.dev/nothere?q=1">>))].
