@@ -64,7 +64,7 @@ path_under_root(S, Root) ->
 %% requires an absolute path and most of the configured roots default
 %% to relative ones. This is a minimal, local fix to keep those
 %% defaults working; it does not address the broader FIXME in
-%% blizanci_config:proto_opts/2 about validating such config up front.
+%% blizanci_config:proto_opts/1 about validating such config up front.
 %%
 %% Root itself is canonicalised too, not just absname'd, before being
 %% used as the confinement prefix: if Root sits behind a symlink (e.g.

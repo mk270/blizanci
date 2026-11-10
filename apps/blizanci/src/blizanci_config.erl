@@ -60,7 +60,7 @@
 
 -export([from_app_env/0, make/3, find_site/2, route/5,
          global/2, site/3, add_route/2, insert_route/3, routes/1,
-         new/2, validate/1]).
+         new/2, validate/1, apply/1]).
 
 -define(PORT, 1965).
 -define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
@@ -234,6 +234,71 @@ validate_routes_use_servlets(#global{servlets = Servlets}, Sites) ->
     end.
 
 
+% Apply a configuration to the running instance, without restarting its
+% listener: the sites (certificates, routes) and the declared servlets
+% are replaced for every connection accepted from now on, while
+% connections already in progress finish with what they started with.
+% Added servlets are started before the switch and removed ones stopped
+% after it, so a route never names a servlet that isn't running; a
+% connection that is mid-request on a removed servlet may be cut off.
+%
+% The port is bound once when the listener opens, so a change of port
+% is refused rather than applied. Nothing is applied if the instance
+% isn't running, or the configuration doesn't validate.
+-spec apply(Config) -> Result
+              when Config :: config(),
+                   Result :: 'ok' | {'error', term()}.
+apply(Config = #config{global = #global{port = Port, servlets = Servlets},
+                       sites = Sites}) ->
+    case validate(Config) of
+        ok -> swap(blizanci_live:current(), Port, Servlets, Sites);
+        {error, _} = Error -> Error
+    end.
+
+
+-spec swap(Running, Port, Servlets, Sites) -> Result
+              when Running  :: {'ok', blizanci_live:running()}
+                             | 'not_running',
+                   Port     :: integer(),
+                   Servlets :: [module()],
+                   Sites    :: [site()],
+                   Result   :: 'ok' | {'error', term()}.
+swap(not_running, _Port, _Servlets, _Sites) ->
+    {error, not_running};
+swap({ok, #{port := OldPort}}, Port, _Servlets, _Sites)
+  when OldPort =/= Port ->
+    {error, {port_change_requires_restart, OldPort, Port}};
+swap({ok, #{servlets := OldServlets}}, Port, Servlets, Sites) ->
+    Added   = [ S || S <- Servlets, not lists:member(S, OldServlets) ],
+    Removed = [ S || S <- OldServlets, not lists:member(S, Servlets) ],
+    case start_servlets(Added, []) of
+        ok ->
+            ok = blizanci_live:publish(Port, Servlets, Sites),
+            [ ok = S:stop() || S <- Removed ],
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+% Start each servlet in turn; if one fails, stop those already started
+% so a failed apply leaves nothing behind.
+-spec start_servlets(Servlets, Started) -> Result
+              when Servlets :: [module()],
+                   Started  :: [module()],
+                   Result   :: 'ok' | {'error', term()}.
+start_servlets([], _Started) ->
+    ok;
+start_servlets([Servlet | Rest], Started) ->
+    try Servlet:start() of
+        ok -> start_servlets(Rest, [Servlet | Started])
+    catch
+        Class:Reason ->
+            [ ok = S:stop() || S <- Started ],
+            {error, {servlet_start_failed, Servlet, {Class, Reason}}}
+    end.
+
+
 % Build one site from explicit values.
 -spec make_site(Hostname, Cert, Key, Docroot, Routes) -> Result
               when Hostname :: string(),
@@ -259,14 +324,13 @@ find_site(Hostname, Sites) ->
     end.
 
 
--spec ssl_opts(Port, Sites) -> Result
+-spec ssl_opts(Port) -> Result
               when Port   :: integer(),
-                   Sites  :: [site()],
                    Result :: [{atom(), term()}].
 %% @doc
 %% Generate the options required for ranch to initialise SSL
 %% @end
-ssl_opts(Port, Sites) ->
+ssl_opts(Port) ->
     VerifyFn = fun (ClientCert, Ev, Init) ->
                    blizanci_x509:verify_cert(ClientCert, Ev, Init) end,
 
@@ -274,9 +338,13 @@ ssl_opts(Port, Sites) ->
     % credentials, so a client that doesn't send SNI (or sends SNI for
     % a hostname that isn't one of the configured sites) has nothing
     % to complete a handshake against and is refused at the TLS layer,
-    % before any Gemini request is ever parsed.
+    % before any Gemini request is ever parsed. ranch fixes these
+    % options when the listener opens, so the sites are looked up in
+    % blizanci_live at handshake time, which is what lets apply/1
+    % change them without restarting the listener.
     SniFun = fun(SniHostname) ->
-                 case find_site(erlang:list_to_binary(SniHostname), Sites) of
+                 case blizanci_live:find_site(
+                        erlang:list_to_binary(SniHostname)) of
                      {ok, Site} -> [{certfile, Site#site.certfile},
                                     {keyfile, Site#site.keyfile}];
                      not_found -> unrecognized
@@ -293,17 +361,14 @@ ssl_opts(Port, Sites) ->
      {versions, ['tlsv1.3']}
     ].
 
--spec proto_opts(Port, Sites) -> Result
+-spec proto_opts(Port) -> Result
               when Port   :: integer(),
-                   Sites  :: [site()],
                    Result :: [{atom(), term()}].
 %% @doc
 %% Generate the options required for ranch to initialise the TCP listener
 %% @end
-proto_opts(Port, Sites) ->
-    [{port, Port},
-     {sites, Sites}
-    ].
+proto_opts(Port) ->
+    [{port, Port}].
 
 
 -type route_entry() :: {atom(), string(), atom(), atom(), map()}.
@@ -370,9 +435,11 @@ get_pem_file_from_environment(App, Key, Default_Filename) ->
                    Result   :: map().
 make(Port, Servlets, Sites) ->
     #{
-      ssl_opts   => ssl_opts(Port, Sites),
-      proto_opts => proto_opts(Port, Sites),
-      servlets   => Servlets
+      ssl_opts   => ssl_opts(Port),
+      proto_opts => proto_opts(Port),
+      servlets   => Servlets,
+      port       => Port,
+      sites      => Sites
      }.
 
 
@@ -498,24 +565,36 @@ make_test() ->
     SSL = maps:get(ssl_opts, Config),
     Proto = maps:get(proto_opts, Config),
     ?assertEqual(1966, proplists:get_value(port, SSL)),
-    ?assertEqual(1966, proplists:get_value(port, Proto)),
-    ?assertEqual([Site], proplists:get_value(sites, Proto)).
+    ?assertEqual([{port, 1966}], Proto),
+    ?assertEqual(1966, maps:get(port, Config)),
+    ?assertEqual([Site], maps:get(sites, Config)).
 
 % SNI is the only source of TLS credentials: no top-level cert/key, and
 % the sni_fun serves exactly the configured sites.
 sni_fun_test_() ->
     A = site("a.example", "a.pem", "a.key"),
     B = site("b.example", "b.pem", "b.key"),
-    SSL = ssl_opts(1965, [A, B]),
+    SSL = ssl_opts(1965),
     SniFun = proplists:get_value(sni_fun, SSL),
-    [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
-                   SniFun("a.example")),
-     ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
-                   SniFun("b.example")),
-     ?_assertEqual(unrecognized, SniFun("evil.example")),
-     ?_assertEqual(undefined, proplists:get_value(certfile, SSL)),
-     ?_assertEqual(undefined, proplists:get_value(keyfile, SSL)),
-     ?_assertEqual(['tlsv1.3'], proplists:get_value(versions, SSL))].
+    {setup,
+     fun() -> blizanci_live:publish(1965, [], [A, B]) end,
+     fun(_) -> blizanci_live:clear() end,
+     [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
+                    SniFun("a.example")),
+      ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
+                    SniFun("b.example")),
+      ?_assertEqual(unrecognized, SniFun("evil.example")),
+      ?_assertEqual(undefined, proplists:get_value(certfile, SSL)),
+      ?_assertEqual(undefined, proplists:get_value(keyfile, SSL)),
+      ?_assertEqual(['tlsv1.3'], proplists:get_value(versions, SSL)),
+      % the same sni_fun sees a replaced site list: this is what lets
+      % apply/1 change certificates on a running listener
+      ?_test(begin
+                 ok = blizanci_live:publish(1965, [], [B]),
+                 ?assertEqual(unrecognized, SniFun("a.example")),
+                 ?assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
+                              SniFun("b.example"))
+             end)]}.
 
 %% Builder: routes and configuration.
 
@@ -582,3 +661,89 @@ write_test_pem() ->
                                   not_encrypted}]),
     ok = file:write_file(Path, Pem),
     Path.
+
+%% apply/1.
+
+apply_test_() ->
+    {setup, fun write_test_pem/0,
+     fun(Pem) -> file:delete(Pem), blizanci_live:clear() end,
+     fun apply_tests/1}.
+
+apply_tests(Pem) ->
+    {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static, public,
+                    #{ docroot => ?TEST_DOCROOT }),
+    Site = fun(Host) -> add_route(site(Host, Pem, Pem), R) end,
+    Conf = fun(Port, Servlets, Sites) ->
+               new(global(Port, Servlets), Sites)
+           end,
+    Reset = fun() -> blizanci_live:clear() end,
+    [?_test(begin
+                Reset(),
+                ?assertEqual({error, not_running},
+                             apply(Conf(1965, [blizanci_static],
+                                        [Site("a")])))
+            end),
+     ?_test(begin
+                Reset(),
+                ok = blizanci_live:publish(1965, [blizanci_static],
+                                       [Site("a")]),
+                ?assertEqual({error, no_sites},
+                             apply(Conf(1965, [blizanci_static], []))),
+                % an invalid configuration changes nothing
+                ?assertEqual([Site("a")], blizanci_live:sites())
+            end),
+     ?_test(begin
+                Reset(),
+                ok = blizanci_live:publish(1965, [blizanci_static],
+                                       [Site("a")]),
+                ?assertEqual(ok, apply(Conf(1965, [blizanci_static],
+                                            [Site("b"), Site("c")]))),
+                ?assertEqual(not_found, blizanci_live:find_site(<<"a">>)),
+                ?assertMatch({ok, _}, blizanci_live:find_site(<<"b">>)),
+                ?assertMatch({ok, _}, blizanci_live:find_site(<<"c">>))
+            end),
+     ?_test(begin
+                Reset(),
+                ok = blizanci_live:publish(1965, [blizanci_static],
+                                       [Site("a")]),
+                ?assertEqual({error, {port_change_requires_restart,
+                                      1965, 1966}},
+                             apply(Conf(1966, [blizanci_static],
+                                        [Site("b")]))),
+                ?assertEqual({ok, #{port => 1965,
+                                    servlets => [blizanci_static],
+                                    sites => [Site("a")]}},
+                             blizanci_live:current())
+            end)].
+
+%% Servlet pools start and stop as the declared list changes.
+apply_servlets_test_() ->
+    {setup,
+     fun() ->
+         {ok, _} = application:ensure_all_started(ppool),
+         write_test_pem()
+     end,
+     fun(Pem) ->
+         blizanci_cgi:stop(),
+         file:delete(Pem),
+         blizanci_live:clear()
+     end,
+     fun(Pem) ->
+         ?_test(begin
+             {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static,
+                             public, #{ docroot => ?TEST_DOCROOT }),
+             Site = add_route(site("a", Pem, Pem), R),
+             Conf = fun(Servlets) ->
+                        new(global(1965, Servlets), [Site])
+                    end,
+             ok = blizanci_live:publish(1965, [blizanci_static], [Site]),
+             ?assertEqual(undefined, whereis(blizanci_cgi)),
+             ?assertEqual(ok, apply(Conf([blizanci_static,
+                                          blizanci_cgi]))),
+             ?assertNotEqual(undefined, whereis(blizanci_cgi)),
+             ?assertEqual(ok, apply(Conf([blizanci_static]))),
+             ?assertEqual(undefined, whereis(blizanci_cgi)),
+             ?assertMatch({ok, #{servlets := [blizanci_static]}},
+                          blizanci_live:current())
+         end)
+     end}.

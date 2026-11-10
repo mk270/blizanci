@@ -86,8 +86,7 @@ init({Ref, Transport, Opts}) ->
     ok = activate(Transport, Socket),
     PeerCert = ssl:peercert(Socket),
     Port = proplists:get_value(port, Opts),
-    Sites = proplists:get_value(sites, Opts),
-    {ok, Site} = resolve_site(Socket, Transport, Sites),
+    {ok, Site} = resolve_site(Socket, Transport),
     Config = #server_config{
                 hostname=Site#site.hostname,
                 port=Port,
@@ -250,27 +249,26 @@ activate(Transport, Socket) ->
 % Resolve the site the TLS layer negotiated via SNI. Should always
 % succeed -- blizanci_config:ssl_opts/1's sni_fun already refuses any
 % hostname that isn't a known site (or no SNI at all) before the
-% handshake can even complete -- so failing to find a match here would
-% mean sni_fun and find_site/2 have drifted out of sync with each
-% other: a real bug, not a client-side event.
--spec resolve_site(Socket, Transport, Sites) -> Result
+% handshake can even complete. Both look sites up in blizanci_live, so
+% the only way to miss here is a reconfiguration landing between the
+% handshake and this lookup, which removed the site.
+-spec resolve_site(Socket, Transport) -> Result
               when Socket    :: ssl:sslsocket(),
                    Transport :: atom(),
-                   Sites     :: [site()],
                    Result    :: {'ok', site()}.
 
-resolve_site(Socket, Transport, Sites) ->
+resolve_site(Socket, Transport) ->
     {ok, [{sni_hostname, SniHostname}]} =
         ssl:connection_information(Socket, [sni_hostname]),
     Found = is_list(SniHostname) andalso
-            blizanci_config:find_site(erlang:list_to_binary(SniHostname),
-                                      Sites),
+            blizanci_live:find_site(erlang:list_to_binary(SniHostname)),
     case Found of
         {ok, Site} -> {ok, Site};
         _ ->
             logger:warning("SNI hostname ~p accepted at TLS layer but no "
-                           "matching site found -- sni_fun and find_site/2 "
-                           "are out of sync", [SniHostname]),
+                           "matching site found -- site removed by a "
+                           "reconfiguration mid-handshake?",
+                           [SniHostname]),
             Transport:close(Socket),
             exit(normal)
     end.

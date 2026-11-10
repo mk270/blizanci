@@ -17,10 +17,16 @@ start(_StartType, _StartArgs) ->
     ok = application:ensure_started(mime_lookup),
     ok = application:ensure_started(ranch),
     Config = blizanci_config:from_app_env(),
-    #{ servlets := Servlets } = Config,
     {ok, Pid} = blizanci_sup:start_link(Config),
-    {ok, Pid, Servlets}.
+    {ok, Pid}.
 
-stop(Servlets) ->
-    [ ok = Servlet:stop() || Servlet <- Servlets ],
-    ok.
+% The servlet list can change while running (blizanci_config:apply/1),
+% so stop whatever is running now, not what was started.
+stop(_State) ->
+    case blizanci_live:current() of
+        {ok, #{servlets := Servlets}} ->
+            [ ok = Servlet:stop() || Servlet <- Servlets ];
+        not_running ->
+            ok
+    end,
+    ok = blizanci_live:clear().

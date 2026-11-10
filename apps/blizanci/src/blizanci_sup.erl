@@ -27,10 +27,13 @@ init(Config) ->
     #{
       ssl_opts   := SSL_Opts,
       proto_opts := Proto_Opts,
-      servlets   := Servlets
+      servlets   := Servlets,
+      port       := Port,
+      sites      := Sites
      } = Config,
 
     [ ok = Servlet:start() || Servlet <- Servlets ],
+    ok = blizanci_live:publish(Port, Servlets, Sites),
 
     SupFlags = #{strategy => one_for_one,
                  intensity => 1,
