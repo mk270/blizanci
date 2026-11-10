@@ -1,5 +1,9 @@
 # Blizanci Changelog
 
+## 5.18.1
+
+- Create Titan upload temp files exclusively, with names built from the OS process id, time and a unique counter, so concurrent uploads can no longer overwrite each other's temp file and a symlink planted at a temp-file name is not followed
+
 ## 5.18.0
 
 - A Titan request with `size=0` now deletes the resource, as the Titan specification says, instead of creating an empty file; only regular files inside the upload root are deleted, and a zero-size request that carries data is refused
