@@ -1,5 +1,25 @@
 # Blizanci Changelog
 
+## 5.27.0
+
+- Supervise the servlets' worker pools in the application's own tree:
+  a new `blizanci_servlets` process starts and stops the declared
+  servlets' resources, and `blizanci_conf_serv` now only owns the
+  configuration table. The tree is `rest_for_one` (table, servlets,
+  listener), with restart intensity 3 per 10 seconds
+- Breaking for library callers: starting the live configuration by
+  hand now needs `blizanci_servlets:start_link/0` after
+  `blizanci_conf_serv:start_link/1`; the latter no longer starts the
+  servlets
+- A restart of the servlets process no longer reverts a configuration
+  applied with `blizanci_config:apply/1`, and the pools survive it
+- `blizanci_config:apply/1` now makes its changes through
+  `blizanci_servlets`, so concurrent applies are serialised
+- Declare `public_key` and `ssl` as applications blizanci depends on,
+  and drop the hand-kept module list from the `.app` file
+- Add the standard copyright header to the test support module and the
+  test stubs
+
 ## 5.26.0
 
 - Refuse at start-up a route whose regex has no named group PATH
