@@ -384,7 +384,7 @@ handle_request(Payload, #state{buffer=Buffer,
                                client_cert=Cert,
                                servlet_proc=no_proc
                               }) ->
-    AllInput = erlang:iolist_to_binary([Buffer, Payload]),
+    AllInput = <<Buffer/binary, Payload/binary>>,
     case binary:split(AllInput, ?CRLF) of
         [S] when size(S) > ?MAX_REQUEST_BYTES ->
             {<<>>, {error_code, request_too_long}};
@@ -400,7 +400,7 @@ handle_request(Payload, #state{buffer=Buffer,
 handle_request(Payload, #state{buffer=Buffer,
                                servlet_proc={proc, Proc}
                               }) when is_pid(Proc) ->
-    AllInput = erlang:iolist_to_binary([Buffer, Payload]),
+    AllInput = <<Buffer/binary, Payload/binary>>,
     logger:debug("~p about to send client data ~p", [self(), Payload]),
 
     try blizanci_servlet_container:handle_client_data(Proc, AllInput) of

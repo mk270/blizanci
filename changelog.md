@@ -16,6 +16,11 @@
 - Keep the existing resource, and remove the temporary file, when a Titan
   upload cannot be put in place (the work directory on another filesystem,
   or a directory as the target), answering 40
+- Log a CGI script's stderr at debug level (long chunks truncated); the
+  response to the client is unchanged
+- Stop a CGI script, and its worker, when the servlet container that
+  started it dies without cancelling it (the worker now monitors its
+  parent); previously the script ran on to completion
 
 ## 5.24.0
 
