@@ -146,8 +146,7 @@ create_test_() ->
     {setup, fun create_setup/0, fun create_teardown/1, fun create_tests/1}.
 
 create_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Dir = filename:absname("tmpdir_create_test_" ++ Unique),
+    Dir = blizanci_test_support:tmp_path("tmpdir_create_test"),
     ok = filelib:ensure_path(Dir),
     ok = file:write_file(filename:join(Dir, "taken"), <<"precious">>),
     ok = file:write_file(filename:join(Dir, "victim"), <<"victim">>),
@@ -212,8 +211,7 @@ stale_test_() ->
     {setup, fun stale_setup/0, fun stale_teardown/1, fun stale_tests/1}.
 
 stale_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Dir = filename:absname("tmpdir_test_" ++ Unique),
+    Dir = blizanci_test_support:tmp_path("tmpdir_test"),
     ok = filelib:ensure_path(Dir),
     Old = {{2000, 1, 1}, {0, 0, 0}},
     Make = fun(Name) ->

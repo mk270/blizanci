@@ -45,6 +45,7 @@
 
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-import(blizanci_test_support, [test_request/1]).
 
 -behaviour(gen_server).
 
@@ -583,20 +584,6 @@ make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
 handle_client_data(_, _) -> none.
 
 
-%% A complete request, for tests that care about only some of its parts.
--spec test_request(Extra) -> Result
-              when Extra  :: map(),
-                   Result :: request_details().
-test_request(Extra) ->
-    maps:merge(#{ client_cert => {error, no_peercert},
-                  query => <<>>,
-                  rest_of_input => <<>>,
-                  scheme => <<"gemini">>,
-                  host => <<"h">>,
-                  port => 1965,
-                  path => <<>> }, Extra).
-
-
 %% Hidden files are never run as CGI scripts: any path segment beginning
 %% with a dot is refused, ".well-known" included (nothing is served from
 %% there by CGI). The refusal comes before anything is queued, so these
@@ -609,8 +596,7 @@ hidden_scripts_test_() ->
     {setup, fun hidden_setup/0, fun hidden_teardown/1, fun hidden_tests/1}.
 
 hidden_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("cgi_hidden_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("cgi_hidden_test"),
     Dir = filename:join(Base, "cgi"),
     [ begin
           Path = filename:join(Dir, Rel),

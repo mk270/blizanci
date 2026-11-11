@@ -325,8 +325,7 @@ init_refusal_test_() ->
      fun refusal_tests/1}.
 
 refusal_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("container_refusal_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("container_refusal_test"),
     Dir = filename:join(Base, "cgi"),
     ok = filelib:ensure_path(Dir),
     [ ok = file:write_file(filename:join(Dir, F), <<"#!/bin/sh\n">>)

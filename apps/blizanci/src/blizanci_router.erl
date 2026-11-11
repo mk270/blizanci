@@ -333,8 +333,7 @@ upload_dirs_test_() ->
      fun upload_tests/1}.
 
 upload_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("router_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("router_test"),
     [ ok = filelib:ensure_path(filename:join(Base, D))
       || D <- ["cgi", "cgi-up", "up", "work", "cgi/inner"] ],
     ok = file:make_symlink(filename:join(Base, "cgi"),

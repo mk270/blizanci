@@ -305,13 +305,11 @@ handle_line_test_() ->
      fun tests/1
     }.
 
--define(APP, mime_lookup).
-
 setup() ->
-    {ok, _} = application:ensure_all_started(?APP).
+    blizanci_test_support:mime_up().
 
-teardown(_State) ->
-    ok = application:stop(?APP).
+teardown(Prior) ->
+    blizanci_test_support:mime_down(Prior).
 
 tests(_State) ->
     Docroot = "test-docroot",
@@ -455,15 +453,14 @@ kelvin_host_not_ascii_host_test_() ->
 %% directory:
 %%   Base/docs/{"a b", "100%", "%2e", "semi;colon", ".env",
 %%              "sp ace/plain"}
-%%   Base/titan/{"my file.txt", "x"}
+%%   Base/titan/{"my file.txt", "x", "y"}
 %% Files have no extension, so no MIME lookup is involved.
 percent_decoding_test_() ->
     {setup, fun percent_setup/0, fun percent_teardown/1,
      fun percent_tests/1}.
 
 percent_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("percent_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("percent_test"),
     ok = filelib:ensure_path(filename:join(Base, "docs/sp ace")),
     ok = filelib:ensure_path(filename:join(Base, "titan")),
     ok = filelib:ensure_path(filename:join(Base, "work")),
@@ -471,7 +468,7 @@ percent_setup() ->
       || F <- ["a b", "100%", "%2e", "semi;colon", ".env",
                "sp ace/plain"] ],
     [ ok = file:write_file(filename:join([Base, "titan", F]), <<"x">>)
-      || F <- ["my file.txt", "x"] ],
+      || F <- ["my file.txt", "x", "y"] ],
     Base.
 
 percent_teardown(Base) ->
@@ -541,9 +538,9 @@ percent_tests(Base) ->
      % (Titan runs as a separate process, so what is checked is its effect:
      % the file with the decoded name is the one deleted)
      ?_test(begin
-                ?assertMatch({init_servlet, _},
-                             T(<<"my%20file.txt;size=0">>)),
-                ?assert(gone(filename:join(Titan, "my file.txt")))
+                deleted_by(fun() -> T(<<"my%20file.txt;size=0">>) end),
+                ?assertNot(filelib:is_file(
+                             filename:join(Titan, "my file.txt")))
             end),
      % an escaped ";" cannot forge a parameter, nor be part of the name
      ?_assertEqual(BadName, T(<<"x%3Bsize=0;size=0">>)),
@@ -554,19 +551,21 @@ percent_tests(Base) ->
      % the parameters after the first ";" are the client's own, undecoded
      % here (Titan reads them)
      ?_test(begin
-                ?assertMatch({init_servlet, _},
-                             T(<<"x;size=0;mime=text/plain">>)),
-                ?assert(gone(filename:join(Titan, "x")))
+                deleted_by(fun() ->
+                               T(<<"y;size=0;mime=text/plain">>)
+                           end),
+                ?assertNot(filelib:is_file(filename:join(Titan, "y")))
             end)].
 
-% Wait (up to two seconds) for a file to be gone.
-gone(Path) ->
-    gone(Path, 40).
-
-gone(Path, 0) ->
-    not filelib:is_file(Path);
-gone(Path, N) ->
-    case filelib:is_file(Path) of
-        false -> true;
-        true -> timer:sleep(50), gone(Path, N - 1)
-    end.
+% Run a request that starts a Titan servlet, and wait for that servlet
+% to finish: it has done its deletion by then. Done in a process of its
+% own, as the request leaves it trapping exits.
+deleted_by(Request) ->
+    blizanci_test_support:isolated(
+      fun() ->
+          {init_servlet, Pid} = Request(),
+          Ref = erlang:monitor(process, Pid),
+          receive {'DOWN', Ref, process, Pid, _} -> ok
+          after 5000 -> error(titan_did_not_finish)
+          end
+      end).

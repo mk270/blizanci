@@ -126,7 +126,20 @@ terminate(_Reason, _State) ->
 %% Tests.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% These tests use the registered process, the named table and the
+%% blizanci_cgi pool, so each runs in a process of its own and removes
+%% all three afterwards, whether or not it passes.
+in_clean_state(Fun) ->
+    blizanci_test_support:isolated(
+      fun() ->
+          blizanci_test_support:live_down(),
+          try Fun() after blizanci_test_support:live_down() end
+      end).
+
 live_test() ->
+    in_clean_state(fun live/0).
+
+live() ->
     {ok, A} = blizanci_config:site("a.example", "a.pem", "a.key"),
     {ok, B} = blizanci_config:site("b.example", "b.pem", "b.key"),
     ?assertEqual(not_running, current()),
@@ -145,6 +158,9 @@ live_test() ->
 %% Stopping the process calls stop/0 on the servlets declared at that
 %% moment, not on those it was started with.
 terminate_stops_current_servlets_test() ->
+    in_clean_state(fun terminate_stops_current_servlets/0).
+
+terminate_stops_current_servlets() ->
     {ok, _} = application:ensure_all_started(ppool),
     {ok, Pid} = start_link(#{port => 1965, servlets => [],
                              sites => []}),
