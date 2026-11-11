@@ -27,13 +27,13 @@
 %    should expect to receive a set of out-of-band info messages from the
 %    former advising of subprocess outputs and termination.
 %
-% Once the external UNIX process has terminated, a message is sent to the
-% servlet, in the form {cgi_exit, Result}, where Result may be:
+% Once the external UNIX process has terminated, the servlet is told the
+% result, which may be:
 %
 %   {gateway_output, binary()}
 % | {gateway_error, cgi_error()}
 %
-% This message is sent by calling blizanci_servlet_container:gateway_exit/2.
+% This is done by calling blizanci_servlet_container:gateway_exit/2.
 %
 % The servlet has an analogous protocol for communicating back to the
 % connection handler.

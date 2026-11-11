@@ -15,8 +15,9 @@
 % the servlet process it creates.
 %
 % On completion of the request, which may well not be synchronous, results
-% may be communicated back to the Gemini parent (the original caller) by
-% sending a message in the following form:
+% are communicated back to the Gemini parent (the original caller) by
+% a gen_server:call of {servlet_result, Result} on the connection
+% process, where Result has one of the following forms:
 %
 %    {servlet_failed, ErrorCode :: atom()}
 %  | {servlet_complete, Output :: binary()}
@@ -124,10 +125,11 @@ actually_handle_client_data(Pid, Payload) ->
 %% @param ServerConfig the configuration for the Gemini server
 %% @param RouteOpts the configuration to be passed to the servlet module
 %%
-%% The function calls Module:request(Matches, Request, Config), which may
-%% return either an immediate Gemini response or the atom 'defer'. Where it
-%% is indicated that the response will be deferred, a new process is started
-%% and Module:serve(Matches, Req, Config) is called. This sets things up
+%% The function calls Module:request(Matches, Request, ServerConfig,
+%% RouteOpts), which may return either {immediate, Response} or the atom
+%% 'defer'. Where it is indicated that the response will be deferred, a
+%% new process is started and Module:serve(Matches, Req, ServerConfig,
+%% RouteOpts) is called. This sets things up
 %% for the results of the request to be notified back to the caller
 %% (of request/5), which is a ranch handler for the Gemini protocol.
 %% @end
