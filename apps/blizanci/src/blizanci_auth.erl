@@ -5,8 +5,9 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
-% TBD
-% private: certificate must be signed by a particular CA
+% The authorisation policies of a route are:
+%
+% private: certificate must be signed by one of the listed CAs
 % restricted: certificate must be presented
 % public: no certificate requirement
 

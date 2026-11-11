@@ -11,12 +11,20 @@
 %   handle_info({ssl, ...}):
 %     new data from TLS, add it to buffer
 %
+%   handle_ssl(...):
+%     calls handle_request/2, turns any exception into a 40 response,
+%     re-activates the socket and sends the response
+%
 %   handle_request(...):
 %     extract line from buffer if one is complete
 %
-%   handle_line(...):
-%     decode URL from line (i.e., Unicode, RFC-3986 percent escaping)
-%     (now in a separate module)
+%   blizanci_request:handle_line(...):
+%     decode URL from line (i.e., Unicode, RFC-3986 percent escaping);
+%     the rest of the request pipeline continues in that module
+%
+% Once a servlet has been started, further client data is instead
+% passed to it by handle_request/2 via
+% blizanci_servlet_container:handle_client_data/2.
 
 -module(blizanci_connection).
 -behaviour(gen_server).

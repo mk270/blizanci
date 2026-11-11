@@ -22,7 +22,6 @@
                        Opts       :: map()
                       }.
 
-% TBD
 %% @doc
 %% Check that a routing table entry is valid.
 %% @end
