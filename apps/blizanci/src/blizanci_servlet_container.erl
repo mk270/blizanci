@@ -83,18 +83,16 @@ cancel({proc, Pid}) ->
     end.
 
 
-% Called by the CGI runner
-%-spec gateway_exit(pid(), gateway_result()) -> 'ok'.
+% Called by the CGI runner. This is a cast: the container's reply was
+% always 'ok' and no caller used it, and a cast cannot fail or block if
+% the container has already gone (no check-then-act race, no timeout).
 -spec gateway_exit(Pid, GWResult) -> Result
               when Pid      :: pid(),
                    GWResult :: gateway_result(),
                    Result   :: 'ok'.
 
 gateway_exit(Pid, Result) when is_pid(Pid) ->
-    case is_process_alive(Pid) of
-        true -> gen_server:call(Pid, {gateway_result, Result});
-        _ -> ok
-    end.
+    gen_server:cast(Pid, {gateway_result, Result}).
 
 
 % TODO: document what on earth is going on here
@@ -201,9 +199,6 @@ init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
 %% @doc
 %% @hidden
 %% @end
-handle_call({gateway_result, Result}, _From, State) ->
-    do_handle_gateway_result(Result, State);
-
 handle_call({client_data, Payload}, _From, State) ->
     do_handle_payload(Payload, State);
 
@@ -215,6 +210,9 @@ handle_call(_Request, _From, State) ->
 %% @doc
 %% @hidden
 %% @end
+handle_cast({gateway_result, Result}, State) ->
+    do_handle_gateway_result(Result, State);
+
 handle_cast(servlet_quit, State=#servlet_state{gateway_module=Module}) ->
     Pid = State#servlet_state.gateway_pid,
     Module:cancel(Pid),
@@ -263,7 +261,7 @@ do_handle_gateway_result(GWResult, State=#servlet_state{parent=Parent}) ->
                         {gateway_error, Error} -> {servlet_failed, Error}
                     end,
     report_result(Parent, ServletResult),
-    {reply, ok, State}.
+    {noreply, State}.
 
 
 -spec do_handle_payload(Payload, State) -> Result
@@ -541,7 +539,16 @@ gateway_exit_test_() ->
      ?_assertEqual({{servlet_failed, unimplemented}, ok, true},
                    gateway_exit_result({gateway_error, unimplemented})),
      % a container that is already gone is not an error
-     ?_assertEqual(ok, gateway_exit(dead_pid(), {gateway_output, <<>>}))].
+     ?_assertEqual(ok, gateway_exit(dead_pid(), {gateway_output, <<>>})),
+     % containers dying concurrently with the report never crash the
+     % reporting worker
+     ?_assert(lists:all(fun(_) -> gateway_exit_race() end,
+                        lists:seq(1, 200)))].
+
+gateway_exit_race() ->
+    Pid = spawn(fun() -> receive stop -> ok end end),
+    spawn(fun() -> exit(Pid, kill) end),
+    ok =:= gateway_exit(Pid, {gateway_output, <<>>}).
 
 handle_client_data_test_() ->
     Reply = fun(Handler, Payload) ->
