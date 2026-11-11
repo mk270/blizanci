@@ -184,6 +184,28 @@ stop() ->
 %% Tests.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% A complete request, for tests that care about only some of its parts.
+-spec test_request(Extra) -> Result
+              when Extra  :: map(),
+                   Result :: request_details().
+test_request(Extra) ->
+    maps:merge(#{ client_cert => {error, no_peercert},
+                  query => <<>>,
+                  rest_of_input => <<>>,
+                  scheme => <<"gemini">>,
+                  host => <<"h">>,
+                  port => 1965,
+                  path => <<>> }, Extra).
+
+
+%% A server configuration, for tests that do not use it.
+-spec test_config() -> Result
+              when Result :: server_config().
+test_config() ->
+    #server_config{hostname = <<"h">>, port = 1965, routing = [],
+                   docroot = "docs"}.
+
+
 %% A request path is a binary of UTF-8 bytes. A symbolic link out of the
 %% docroot whose name is not ASCII must not be followable, however the
 %% name is spelled: the check and the file opened must be the same name.
@@ -216,7 +238,8 @@ nonascii_tests(Base) ->
     Docs = binary_to_list(filename:join(Base, <<"docs">>)),
     Opts = maps:merge(default_options(), #{ docroot => Docs }),
     Request = fun(Path) ->
-                  request(#{ <<"PATH">> => Path }, #{}, none, Opts)
+                  request(#{ <<"PATH">> => Path }, test_request(#{}),
+                          test_config(), Opts)
               end,
     NotFound = {immediate, {error_code, file_not_found}},
     [?_assertEqual(NotFound, Request(<<195, 169>>)),
@@ -258,7 +281,8 @@ hidden_tests(Base) ->
     Docs = filename:join(Base, "docs"),
     Opts = maps:merge(default_options(), #{ docroot => Docs }),
     Request = fun(Path) ->
-                  request(#{ <<"PATH">> => Path }, #{}, none, Opts)
+                  request(#{ <<"PATH">> => Path }, test_request(#{}),
+                          test_config(), Opts)
               end,
     NotFound = {immediate, {error_code, file_not_found}},
     [?_assertMatch({immediate, {file, _, _}}, Request(<<"readme">>)),

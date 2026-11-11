@@ -681,6 +681,20 @@ finish_tests(Base) ->
                    handle_upload_status(titan_not_found))].
 
 
+%% A complete request, for tests that care about only some of its parts.
+-spec test_request(Extra) -> Result
+              when Extra  :: map(),
+                   Result :: request_details().
+test_request(Extra) ->
+    maps:merge(#{ client_cert => {error, no_peercert},
+                  query => <<>>,
+                  rest_of_input => <<>>,
+                  scheme => <<"gemini">>,
+                  host => <<"h">>,
+                  port => 1965,
+                  path => <<>> }, Extra).
+
+
 %% size=0 deletes the resource (see delete_resource/2). Driven through
 %% serve/4, so path confinement and parsing are exercised too.
 %% Fixture, under a fresh temporary directory:
@@ -715,7 +729,7 @@ delete_tests(Base) ->
                          routing = [], docroot = Root},
     Serve = fun(Fragment, Rest) ->
                 serve(#{ <<"PATH">> => Fragment },
-                      #{ rest_of_input => Rest }, Cfg, Opts)
+                      test_request(#{ rest_of_input => Rest }), Cfg, Opts)
             end,
     Exists = fun(Name) -> filelib:is_file(filename:join(Root, Name)) end,
     [?_test(begin
@@ -781,7 +795,9 @@ size_cap_test_() ->
                     ?assertEqual({gateway_finished,
                                   {error_code, request_too_long}},
                                  serve(#{ <<"PATH">> => Big },
-                                       #{ rest_of_input => <<"some data">> },
+                                       test_request(
+                                         #{ rest_of_input =>
+                                                <<"some data">> }),
                                        Cfg, Opts)),
                     ?assertEqual({ok, []}, file:list_dir(Work)),
                     ?assertNot(filelib:is_file(
@@ -804,7 +820,7 @@ excess_tests(Base) ->
                          routing = [], docroot = Root},
     Serve = fun(Fragment, Rest) ->
                 serve(#{ <<"PATH">> => Fragment },
-                      #{ rest_of_input => Rest }, Cfg, Opts)
+                      test_request(#{ rest_of_input => Rest }), Cfg, Opts)
             end,
     TooLong = {gateway_finished, {error_code, request_too_long}},
     Inner = filename:join([Root, "dir", "inner.txt"]),
@@ -875,7 +891,7 @@ hidden_tests(Base) ->
                          routing = [], docroot = Root},
     Serve = fun(Fragment, Rest) ->
                 serve(#{ <<"PATH">> => Fragment },
-                      #{ rest_of_input => Rest }, Cfg, Opts)
+                      test_request(#{ rest_of_input => Rest }), Cfg, Opts)
             end,
     NotFound = {gateway_finished, {error_code, file_not_found}},
     Read = fun(Name) -> file:read_file(filename:join(Root, Name)) end,

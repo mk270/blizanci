@@ -582,6 +582,20 @@ make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
 handle_client_data(_, _) -> none.
 
 
+%% A complete request, for tests that care about only some of its parts.
+-spec test_request(Extra) -> Result
+              when Extra  :: map(),
+                   Result :: request_details().
+test_request(Extra) ->
+    maps:merge(#{ client_cert => {error, no_peercert},
+                  query => <<>>,
+                  rest_of_input => <<>>,
+                  scheme => <<"gemini">>,
+                  host => <<"h">>,
+                  port => 1965,
+                  path => <<>> }, Extra).
+
+
 %% Hidden files are never run as CGI scripts: any path segment beginning
 %% with a dot is refused, ".well-known" included (nothing is served from
 %% there by CGI). The refusal comes before anything is queued, so these
@@ -615,7 +629,7 @@ hidden_tests(Base) ->
                          routing = [], docroot = Dir},
     Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
     Serve = fun(Path) ->
-                serve(#{ <<"PATH">> => Path }, #{ query => <<>> }, Cfg, Opts)
+                serve(#{ <<"PATH">> => Path }, test_request(#{}), Cfg, Opts)
             end,
     [% CGI script paths are restricted to letters, digits and "._-/" for
      % now (see serve/4): spaces and shell metacharacters, from decoded
