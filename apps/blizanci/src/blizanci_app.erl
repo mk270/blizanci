@@ -25,7 +25,7 @@ start(_StartType, _StartArgs) ->
     end.
 
 % The declared servlets' resources are set up and torn down by
-% blizanci_conf_serv, which tracks the declared list as it changes
+% blizanci_servlets, which tracks the declared list as it changes
 % (blizanci_config:apply/1).
 stop(_State) ->
     ok.

@@ -6,8 +6,8 @@
 %% the terms of the Apache Software Licence v2.0.
 
 %% @hidden
-%% Manages the configuration of the running instance: its port, the
-%% servlet modules it declares, and its sites.
+%% Owns the configuration table of the running instance: its port,
+%% the servlet modules it declares, and its sites.
 %%
 %% The configuration is held in a public ETS table owned by this
 %% process, and is the single source of truth for site lookup. It is
@@ -17,17 +17,15 @@
 %% handshake after it without touching the listener. Readers see either
 %% the old value or the new one, never a mixture.
 %%
-%% It also owns the lifecycle of the declared servlets' shared
-%% resources. A servlet is a module implementing the blizanci_servlet
-%% behaviour; its start/0 sets up whatever the module needs in order to
-%% serve requests (for blizanci_cgi and blizanci_titan, a pool of
-%% worker processes) and its stop/0 tears that down again. This process
-%% calls start/0 on each declared servlet when it starts, and stop/0 on
-%% each servlet declared at that moment when it terminates.
+%% This process does nothing else, deliberately: it creates the table
+%% from the initial configuration and then only waits, so that nothing
+%% in it can crash and take the table (and every applied change) with
+%% it. Readers and writers use the table directly. The servlets'
+%% lifecycle is blizanci_servlets, supervised after this process, so a
+%% crash there leaves the table alone.
 %%
-%% It is supervised ahead of the listener, so the table and the
-%% servlets' resources exist before anything is accepted, and outlive
-%% the listener on shutdown.
+%% It is supervised first (see blizanci_sup), so the table exists
+%% before anything else starts, and is stopped last.
 
 -module(blizanci_conf_serv).
 -behaviour(gen_server).
@@ -36,7 +34,7 @@
 
 -export([start_link/1]).
 -export([publish/3, current/0, sites/0, find_site/1]).
--export([init/1, handle_call/3, handle_cast/2, terminate/2]).
+-export([init/1, handle_call/3, handle_cast/2]).
 
 -define(TABLE, ?MODULE).
 -define(ROW, running).
@@ -100,9 +98,7 @@ find_site(Hostname) ->
 %%%===================================================================
 
 init(Running = #{port := Port, servlets := Servlets, sites := Sites}) ->
-    process_flag(trap_exit, true),
     ?TABLE = ets:new(?TABLE, [named_table, public, {read_concurrency, true}]),
-    [ ok = Servlet:start() || Servlet <- Servlets ],
     ok = publish(Port, Servlets, Sites),
     {ok, Running}.
 
@@ -112,23 +108,14 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
-    case current() of
-        {ok, #{servlets := Servlets}} ->
-            [ ok = Servlet:stop() || Servlet <- Servlets ],
-            ok;
-        not_running ->
-            ok
-    end.
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Tests.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% These tests use the registered process, the named table and the
-%% blizanci_cgi pool, so each runs in a process of its own and removes
-%% all three afterwards, whether or not it passes.
+%% These tests use the registered process and the named table, so each
+%% runs in a process of its own and removes both afterwards, whether or
+%% not it passes.
 in_clean_state(Fun) ->
     blizanci_test_support:isolated(
       fun() ->
@@ -154,19 +141,3 @@ live() ->
     ?assertEqual(not_found, find_site(<<"b.example">>)),
     ok = gen_server:stop(Pid),
     ?assertEqual(not_running, current()).
-
-%% Stopping the process calls stop/0 on the servlets declared at that
-%% moment, not on those it was started with.
-terminate_stops_current_servlets_test() ->
-    in_clean_state(fun terminate_stops_current_servlets/0).
-
-terminate_stops_current_servlets() ->
-    {ok, _} = application:ensure_all_started(ppool),
-    {ok, Pid} = start_link(#{port => 1965, servlets => [],
-                             sites => []}),
-    ok = publish(1965, [], []),
-    ok = blizanci_cgi:start(),
-    ok = publish(1965, [blizanci_cgi], []),
-    ?assertNotEqual(undefined, whereis(blizanci_cgi)),
-    ok = gen_server:stop(Pid),
-    ?assertEqual(undefined, whereis(blizanci_cgi)).
