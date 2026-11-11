@@ -102,10 +102,9 @@ serve_file(Path, Opts) ->
     Docroot = ensure_list(maps:get(docroot, Opts, ?DEFAULT_DOCROOT)),
     % hidden files are never served, except under a ".well-known"
     % directory at the top of the docroot
-    case blizanci_path:confine(binary_to_list(Path), Docroot,
-                               #{ well_known => true }) of
+    case blizanci_path:confine(Path, Docroot, #{ well_known => true }) of
         {error, file_not_found} -> {error_code, file_not_found};
-        {ok, Cmd} -> serve_confined_file(list_to_binary(Cmd), Path, Opts)
+        {ok, Cmd} -> serve_confined_file(Cmd, Path, Opts)
     end.
 
 

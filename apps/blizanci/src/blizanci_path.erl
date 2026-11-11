@@ -11,12 +11,16 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-%% @doc Canonicalise and normalise (q.v.) the path S
+%% @doc Canonicalise and normalise (q.v.) the path S, which may be a
+%% string or a binary; the result has the same type.
 %% @todo does not support relative paths
 %% @end
 -spec fix_path(S) -> Result
-              when S      :: list(),
-                   Result :: {ok, string()} | {error, atom()}.
+              when S      :: string(),
+                   Result :: {ok, string()} | {error, atom()};
+                  (S) -> Result
+              when S      :: binary(),
+                   Result :: {ok, binary()} | {error, atom()}.
 fix_path(S) ->
     fix_path2(realpath:normalise(S)).
 
@@ -34,7 +38,7 @@ fix_path3(Error) -> Error.
 %% Is the path S underneath Root (or Root itself)? S must equal Root, or
 %% begin with Root followed by a path separator: a bare string-prefix
 %% test would wrongly accept a sibling such as /srv/docs-secret for a
-%% Root of /srv/docs.
+%% Root of /srv/docs. S and Root are both strings or both binaries.
 %%
 %% It is (currently) the responsibility of the caller to canonicalise/normalise
 %% the paths before calling this function.
@@ -42,10 +46,18 @@ fix_path3(Error) -> Error.
 %% @param Root the directory under which S is supposed to be located
 %% @end
 -spec path_under_root(S, Root) -> Result
-              when S      :: string(),
-                   Root   :: string(),
+              when S      :: string() | binary(),
+                   Root   :: string() | binary(),
                    Result :: boolean().
-path_under_root(S, Root) ->
+path_under_root(S, Root) when is_binary(S), is_binary(Root) ->
+    Prefix = case binary:last(Root) of
+                 $/ -> Root;
+                 _  -> <<Root/binary, "/">>
+             end,
+    N = byte_size(Prefix),
+    S =:= Root orelse (byte_size(S) >= N andalso
+                       binary:part(S, 0, N) =:= Prefix);
+path_under_root(S, Root) when is_list(S), is_list(Root) ->
     Prefix = case lists:suffix("/", Root) of
                  true  -> Root;
                  false -> Root ++ "/"
@@ -58,6 +70,16 @@ path_under_root(S, Root) ->
 %% lie under Root -- the pattern shared by every servlet that resolves
 %% a request path against a configured root directory (CGI, static
 %% files, Titan uploads).
+%%
+%% File names are bytes. SubPath is a binary and so is the result; Root
+%% may be a binary or a string. A string, which is a list of code points,
+%% is turned into the bytes the VM itself would use for it (its file-name
+%% encoding: UTF-8 or Latin-1, chosen from the locale), once, here; after
+%% that nothing is a string, so the name that is checked is exactly the
+%% name that is opened. (Checking a string and opening it under another
+%% encoding once let a symlink named with a non-ASCII character lead out
+%% of the docroot.) A Root that cannot be represented in the VM's
+%% encoding could never be opened by it, and is refused.
 %%
 %% Root is resolved to an absolute path first (via filename:absname/1,
 %% as blizanci_titan already does for its own root), since fix_path/1
@@ -80,17 +102,13 @@ path_under_root(S, Root) ->
 %% doesn't exist" from "you tried to escape the root". The real reason
 %% is still logged.
 %%
-%% SubPath may contain only printable ASCII (space to tilde), whatever
-%% the caller has decoded or not: control characters (NUL included) and
-%% anything non-ASCII are refused. A name is checked in one
-%% representation and later opened in another, and how Erlang maps a
-%% list of integers to the bytes of a file name depends on the VM's
-%% file-name encoding (UTF-8 or Latin-1, chosen from the locale), so for
-%% non-ASCII text the name checked and the name opened can differ.
-%% ASCII is the same in every encoding. This is deliberately the
-%% narrowest rule that is safe; names that aren't ASCII can be served
-%% once confine/2 handles names as bytes end to end. Root is not
-%% restricted this way (it is the operator's), but may not contain NUL.
+%% SubPath may contain any bytes except control characters: NUL, the
+%% other bytes below 16#20, and 16#7F (DEL) are refused. Bytes 16#80 and
+%% above are allowed, whether or not they form valid UTF-8: that is a
+%% question for whoever decoded the URL, not for a name that is only
+%% bytes. Root is not restricted this way (it is the operator's), but may
+%% not contain NUL, which operating systems treat as the end of a name.
+%% Anything other than a binary as SubPath is refused.
 %%
 %% Hidden files are refused: any path segment beginning with a dot is
 %% denied (as file_not_found, so the response does not reveal whether
@@ -107,9 +125,9 @@ path_under_root(S, Root) ->
 %% confine/2 allows no exception.
 %% @end
 -spec confine(SubPath, Root) -> Result
-              when SubPath :: string(),
-                   Root    :: string(),
-                   Result  :: {ok, string()}
+              when SubPath :: binary(),
+                   Root    :: binary() | string(),
+                   Result  :: {ok, binary()}
                             | {error, file_not_found}.
 
 confine(SubPath, Root) ->
@@ -117,21 +135,34 @@ confine(SubPath, Root) ->
 
 
 -spec confine(SubPath, Root, Opts) -> Result
-              when SubPath :: string(),
-                   Root    :: string(),
+              when SubPath :: binary(),
+                   Root    :: binary() | string(),
                    Opts    :: #{ well_known => boolean() },
-                   Result  :: {ok, string()}
+                   Result  :: {ok, binary()}
                             | {error, file_not_found}.
 
-confine(SubPath, Root, Opts) ->
-    case {printable_ascii(SubPath), has_nul(Root)} of
-        {true, false} ->
+confine(SubPath, Root, Opts) when is_binary(SubPath) ->
+    case root_bytes(Root) of
+        {ok, RootBin} -> confine0(SubPath, RootBin, Opts);
+        error ->
+            logger:warning("root ~w cannot be represented as a file name",
+                           [Root]),
+            {error, file_not_found}
+    end;
+confine(SubPath, Root, _Opts) ->
+    logger:warning("path ~w under root ~p is not a binary", [SubPath, Root]),
+    {error, file_not_found}.
+
+
+confine0(SubPath, Root, Opts) ->
+    case {has_control(SubPath), has_nul(Root)} of
+        {false, false} ->
             confine1(SubPath, Root, Opts);
-        {false, _} ->
-            logger:warning("path ~w under root ~p has characters other "
-                           "than printable ASCII", [SubPath, Root]),
+        {true, _} ->
+            logger:warning("path ~w under root ~p has a control character",
+                           [SubPath, Root]),
             {error, file_not_found};
-        {true, true} ->
+        {false, true} ->
             % Operating systems end a name at a NUL, so a name containing
             % one means something other than what was checked.
             logger:warning("root ~w contains a NUL", [Root]),
@@ -139,30 +170,44 @@ confine(SubPath, Root, Opts) ->
     end.
 
 
--spec printable_ascii(Path) -> Result
-              when Path   :: string() | binary(),
+% The bytes the VM would use to open the file named by Root.
+-spec root_bytes(Root) -> Result
+              when Root   :: binary() | string(),
+                   Result :: {ok, binary()} | error.
+root_bytes(Root) when is_binary(Root) ->
+    {ok, Root};
+root_bytes(Root) when is_list(Root) ->
+    try unicode:characters_to_binary(Root, unicode,
+                                     file:native_name_encoding()) of
+        Bin when is_binary(Bin) -> {ok, Bin};
+        _ -> error
+    catch
+        error:badarg -> error
+    end;
+root_bytes(_Root) ->
+    error.
+
+
+% Bytes below 16#20 (NUL included) and DEL.
+-spec has_control(Path) -> Result
+              when Path   :: binary(),
                    Result :: boolean().
-printable_ascii(Path) when is_binary(Path) ->
-    printable_ascii(binary_to_list(Path));
-printable_ascii(Path) when is_list(Path) ->
-    lists:all(fun (C) -> is_integer(C) andalso C >= 16#20 andalso C =< 16#7E
-              end, lists:flatten(Path)).
+has_control(Path) ->
+    re:run(Path, <<"[\\0-\\x1f\\x7f]">>, [{capture, none}]) =:= match.
 
 
 -spec has_nul(Path) -> Result
-              when Path   :: string() | binary(),
+              when Path   :: binary(),
                    Result :: boolean().
-has_nul(Path) when is_binary(Path) ->
-    binary:match(Path, <<0>>) =/= nomatch;
-has_nul(Path) when is_list(Path) ->
-    lists:member(0, lists:flatten(Path)).
+has_nul(Path) ->
+    binary:match(Path, <<0>>) =/= nomatch.
 
 
 -spec confine1(SubPath, Root, Opts) -> Result
-              when SubPath :: string(),
-                   Root    :: string(),
+              when SubPath :: binary(),
+                   Root    :: binary(),
                    Opts    :: map(),
-                   Result  :: {ok, string()}
+                   Result  :: {ok, binary()}
                             | {error, file_not_found}.
 
 confine1(SubPath, Root, Opts) ->
@@ -181,44 +226,45 @@ confine1(SubPath, Root, Opts) ->
 % ".well-known" as the first segment where the caller allows it. "." and
 % ".." are not hidden names; they are dealt with by resolving the path.
 -spec visible(SubPath, Cmd, CanonRoot, Opts) -> Result
-              when SubPath   :: string(),
-                   Cmd       :: string(),
-                   CanonRoot :: string(),
+              when SubPath   :: binary(),
+                   Cmd       :: binary(),
+                   CanonRoot :: binary(),
                    Opts      :: map(),
                    Result    :: boolean().
 visible(SubPath, Cmd, CanonRoot, Opts) ->
     WellKnown = maps:get(well_known, Opts, false),
-    Resolved = lists:nthtail(length(CanonRoot), Cmd),
+    N = byte_size(CanonRoot),
+    Resolved = binary:part(Cmd, N, byte_size(Cmd) - N),
     none_hidden(segments(SubPath), WellKnown)
         andalso none_hidden(segments(Resolved), WellKnown).
 
 
 -spec segments(Path) -> Result
-              when Path   :: string(),
-                   Result :: [string()].
+              when Path   :: binary(),
+                   Result :: [binary()].
 segments(Path) ->
-    [ S || S <- string:split(Path, "/", all),
-           S =/= "", S =/= ".", S =/= ".." ].
+    [ S || S <- binary:split(Path, <<"/">>, [global]),
+           S =/= <<>>, S =/= <<".">>, S =/= <<"..">> ].
 
 
 -spec none_hidden(Segments, WellKnown) -> Result
-              when Segments  :: [string()],
+              when Segments  :: [binary()],
                    WellKnown :: boolean(),
                    Result    :: boolean().
-none_hidden([".well-known" | Rest], true) ->
+none_hidden([<<".well-known">> | Rest], true) ->
     none_hidden(Rest, false);
 none_hidden(Segments, _WellKnown) ->
-    not lists:any(fun ([$. | _]) -> true;
+    not lists:any(fun (<<$., _/binary>>) -> true;
                       (_) -> false
                   end, Segments).
 
 
 -spec confine2(SubPath, AbsRoot, CanonRoot, Opts) -> Result
-              when SubPath   :: string(),
-                   AbsRoot   :: string(),
-                   CanonRoot :: string(),
+              when SubPath   :: binary(),
+                   AbsRoot   :: binary(),
+                   CanonRoot :: binary(),
                    Opts      :: map(),
-                   Result    :: {ok, string()}
+                   Result    :: {ok, binary()}
                               | {error, file_not_found}.
 
 confine2(SubPath, AbsRoot, CanonRoot, Opts) ->
@@ -304,6 +350,16 @@ confine_setup() ->
                            <<BaseBin/binary, "/docs/badlink">>),
     ok = file:make_symlink(<<"../outside_", 233, "/secret.txt">>,
                            <<BaseBin/binary, "/docs/badrel">>),
+    ok = file:write_file(<<BaseBin/binary, "/docs/", 195, 169, ".txt">>,
+                         <<"x">>),
+    ok = file:write_file(<<BaseBin/binary, "/docs/bad", 233>>, <<"x">>),
+    ok = filelib:ensure_path(<<BaseBin/binary, "/docs/sub/", 233>>),
+    ok = file:write_file(<<BaseBin/binary, "/docs/sub/", 233, "/f">>,
+                         <<"x">>),
+    ok = file:make_symlink(<<BaseBin/binary, "/outside/secret.txt">>,
+                           <<BaseBin/binary, "/docs/", 195, 169>>),
+    ok = file:make_symlink(<<BaseBin/binary, "/outside/secret.txt">>,
+                           <<BaseBin/binary, "/docs/", 233>>),
     ok = filelib:ensure_path(filename:join(Base, [$d, 243, $c, $s])),
     Mk = fun (Rel) ->
              Path = filename:join(Docs, Rel),
@@ -325,12 +381,18 @@ confine_teardown(Base) ->
 
 confine_tests(Base) ->
     BaseBin = list_to_binary(Base),
-    Docs = filename:join(Base, "docs"),
+    Docs = filename:join(BaseBin, <<"docs">>),
     {ok, CanonDocs} = fix_path(Docs),
+    % a root given as a string, with a character that is not ASCII; what
+    % is opened is the bytes the VM makes of it
     Odd = filename:join(Base, [$d, 243, $c, $s]),
-    {ok, CanonOdd} = fix_path(Odd),
+    % (called through apply/3 so that dialyzer does not object)
+    NotBinary = fun(P) -> apply(?MODULE, confine, [P, Docs]) end,
+    OddBytes = unicode:characters_to_binary(Odd, unicode,
+                                            file:native_name_encoding()),
+    {ok, CanonOdd} = fix_path(OddBytes),
     [?_assertEqual({ok, filename:join(CanonDocs, "inside.txt")},
-                   confine("inside.txt", Docs)),
+                   confine(<<"inside.txt">>, Docs)),
      % a symbolic link whose target is not valid UTF-8 is not skipped
      % over: the operating system follows it, out of the root, so it is
      % refused, whatever the VM's file-name encoding (this needs realpath
@@ -339,71 +401,81 @@ confine_tests(Base) ->
                    file:read_file(<<BaseBin/binary, "/docs/badlink">>)),
      ?_assertEqual({ok, <<"x">>},
                    file:read_file(<<BaseBin/binary, "/docs/badrel">>)),
-     ?_assertEqual({error, file_not_found}, confine("badlink", Docs)),
-     ?_assertEqual({error, file_not_found}, confine("badrel", Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<"badlink">>, Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<"badrel">>, Docs)),
      ?_assertEqual({error, file_not_found},
-                   confine("../outside/secret.txt", Docs)),
+                   confine(<<"../outside/secret.txt">>, Docs)),
      % regression: sibling directory sharing the root's name as a prefix
      ?_assertEqual({error, file_not_found},
-                   confine("../docs-secret/secret.txt", Docs)),
+                   confine(<<"../docs-secret/secret.txt">>, Docs)),
      ?_assertEqual({error, file_not_found},
-                   confine("escape/secret.txt", Docs)),
+                   confine(<<"escape/secret.txt">>, Docs)),
      % a NUL anywhere in the path is refused, even where the name before
      % it is fine
      ?_assertEqual({error, file_not_found},
-                   confine("inside.txt\0.png", Docs)),
-     ?_assertEqual({error, file_not_found}, confine("inside.txt\0", Docs)),
-     ?_assertEqual({error, file_not_found}, confine("\0inside.txt", Docs)),
-     ?_assertEqual({error, file_not_found}, confine([0], Docs)),
+                   confine(<<"inside.txt\0.png">>, Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<"inside.txt\0">>, Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<"\0inside.txt">>, Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<0>>, Docs)),
      ?_assertEqual({error, file_not_found},
-                   confine("sub\0/../../outside/secret.txt", Docs)),
+                   confine(<<"sub\0/../../outside/secret.txt">>, Docs)),
      ?_assertEqual({error, file_not_found},
                    confine(<<"inside.txt", 0, ".png">>, Docs)),
      ?_assertEqual({error, file_not_found},
-                   confine("inside.txt", Docs ++ "\0")),
+                   confine(<<"inside.txt">>, <<Docs/binary, 0>>)),
      % control characters other than NUL are refused too
-     ?_assertEqual({error, file_not_found}, confine("inside\t.txt", Docs)),
-     ?_assertEqual({error, file_not_found}, confine("inside\n.txt", Docs)),
-     ?_assertEqual({error, file_not_found}, confine("inside\r.txt", Docs)),
-     ?_assertEqual({error, file_not_found}, confine("inside\e.txt", Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<"inside\t.txt">>, Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<"inside\n.txt">>, Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<"inside\r.txt">>, Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<"inside\e.txt">>, Docs)),
      ?_assertEqual({error, file_not_found},
-                   confine([$a, 127, $b], Docs)),
-     % non-ASCII is refused, in any representation: a code point, the
-     % UTF-8 bytes of it as a list (what binary_to_list/1 of a request
-     % path gives), and as a binary
-     ?_assertEqual({error, file_not_found},
-                   confine([233, $., $t, $x, $t], Docs)),
-     ?_assertEqual({error, file_not_found},
-                   confine([195, 169, $., $t, $x, $t], Docs)),
-     ?_assertEqual({error, file_not_found},
+                   confine(<<$a, 127, $b>>, Docs)),
+     % names are bytes: confine/2 accepts anything but control characters,
+     % valid UTF-8 or not, and resolves the file whatever the VM's
+     % encoding. (Whether such a name can arrive in a request is up to
+     % the URL layer, which does not decode percent-escapes yet.)
+     ?_assertEqual({ok, filename:join(CanonDocs, <<195, 169, ".txt">>)},
                    confine(<<195, 169, ".txt">>, Docs)),
+     ?_assertEqual({ok, <<"x">>},
+                   file:read_file(filename:join(CanonDocs,
+                                                <<195, 169, ".txt">>))),
+     ?_assertEqual({ok, filename:join(CanonDocs, <<"bad", 233>>)},
+                   confine(<<"bad", 233>>, Docs)),
+     ?_assertEqual({ok, filename:join(CanonDocs, <<"sub/", 233, "/f">>)},
+                   confine(<<"sub/", 233, "/f">>, Docs)),
+     % but a link with such a name is judged by where it leads: outside
      ?_assertEqual({error, file_not_found},
-                   confine([16#4E2D, 16#6587], Docs)),
-     ?_assertEqual({error, file_not_found}, confine("sub/\x{e9}", Docs)),
-     % non-integers are refused, not crashed on
-     ?_assertEqual({error, file_not_found}, confine([$a, b, $c], Docs)),
+                   confine(<<195, 169>>, Docs)),
+     ?_assertEqual({error, file_not_found}, confine(<<233>>, Docs)),
+     % only a binary is a path
+     ?_assertEqual({error, file_not_found}, NotBinary("inside.txt")),
+     ?_assertEqual({error, file_not_found}, NotBinary([$a, b, $c])),
+     ?_assertEqual({error, file_not_found}, NotBinary(inside)),
      % printable ASCII, space included, is fine whether or not the file
      % exists
      ?_assertEqual({ok, filename:join(CanonDocs, "inside.txt")},
-                   confine("inside.txt", Docs)),
+                   confine(<<"inside.txt">>, Docs)),
      ?_assertEqual({ok, filename:join(CanonDocs, "a b-c_d~e!.txt")},
-                   confine("a b-c_d~e!.txt", Docs)),
+                   confine(<<"a b-c_d~e!.txt">>, Docs)),
      ?_assertEqual({ok, filename:join(CanonDocs, "sub/new file.txt")},
-                   confine("sub/new file.txt", Docs)),
+                   confine(<<"sub/new file.txt">>, Docs)),
      % the root is the operator's and may be non-ASCII (but not hold a NUL)
      ?_assertEqual({ok, filename:join(CanonOdd, "f.txt")},
-                   confine("f.txt", Odd))]
+                   confine(<<"f.txt">>, Odd)),
+     ?_assertEqual({ok, filename:join(CanonOdd, "f.txt")},
+                   confine(<<"f.txt">>, OddBytes))]
     ++ hidden_tests(Base, Docs, CanonDocs).
 
 %% Hidden files: a path segment beginning with a dot is refused, except
 %% ".well-known" as the first segment where the caller allows it.
 hidden_tests(Base, Docs, CanonDocs) ->
-    Strict = fun(P) -> confine(P, Docs) end,
-    WK = fun(P) -> confine(P, Docs, #{ well_known => true }) end,
+    Strict = fun(P) -> confine(list_to_binary(P), Docs) end,
+    WK = fun(P) -> confine(list_to_binary(P), Docs,
+                           #{ well_known => true }) end,
     Refused = {error, file_not_found},
     In = fun(P) -> {ok, filename:join(CanonDocs, P)} end,
     DotRoot = filename:join(Base, ".dotroot"),
-    {ok, CanonDotRoot} = fix_path(DotRoot),
+    {ok, CanonDotRoot} = fix_path(list_to_binary(DotRoot)),
     [% any segment starting with a dot, at any depth, whether or not the
      % file exists
      ?_assertEqual(Refused, Strict(".env")),
@@ -453,5 +525,5 @@ hidden_tests(Base, Docs, CanonDocs) ->
      ?_assertEqual(In("inside.txt"), WK(".well-known/../inside.txt")),
      % only segments below the root count: a root under a dot name is fine
      ?_assertEqual({ok, filename:join(CanonDotRoot, "f.txt")},
-                   confine("f.txt", DotRoot)),
-     ?_assertEqual(Refused, confine(".x", DotRoot))].
+                   confine(<<"f.txt">>, DotRoot)),
+     ?_assertEqual(Refused, confine(<<".x">>, DotRoot))].

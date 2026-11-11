@@ -188,9 +188,7 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
             % early refusal: the target is resolved again, just before
             % it is written (see finish_file/5), because a long upload
             % leaves time for the directory tree to change.
-            case blizanci_path:confine(binary_to_list(Path),
-                                       binary_to_list(RootDir),
-                                       ?CONFINE_OPTS) of
+            case blizanci_path:confine(Path, RootDir, ?CONFINE_OPTS) of
                 {ok, _TargetPath} when byte_size(Rest) > Size ->
                     % more data than the request declared: refused
                     % before anything is written
@@ -492,9 +490,7 @@ recv_data(Data, #titan_state{stream=Stream,
 finish_file(Stream, Path, RootDir, TmpPath, Size) ->
     truncate(Stream, Size),
     ok = file:close(Stream),
-    case blizanci_path:confine(binary_to_list(Path),
-                               binary_to_list(RootDir),
-                               ?CONFINE_OPTS) of
+    case blizanci_path:confine(Path, RootDir, ?CONFINE_OPTS) of
         {ok, TargetPath} ->
             replace_target(TargetPath, TmpPath);
         {error, file_not_found} ->
@@ -673,8 +669,7 @@ finish_tests(Base) ->
                 Swap = InRoot("swap"),
                 ok = filelib:ensure_path(Swap),
                 ?assertMatch({ok, _},
-                             blizanci_path:confine("swap/f.txt",
-                                                   binary_to_list(Root))),
+                             blizanci_path:confine(<<"swap/f.txt">>, Root)),
                 ok = file:del_dir(Swap),
                 ok = file:make_symlink("../outside", Swap),
                 {Status, _} = Upload(<<"swap/f.txt">>, <<"x">>),

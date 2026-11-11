@@ -234,11 +234,34 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
     % currently forbidden anyway. blizanci_path:confine/2 fails closed
     % (returning file_not_found rather than crashing) if the resolved
     % path can't be canonicalised, or resolves outside CGIRoot.
-    case blizanci_path:confine(binary_to_list(Path), CGIRoot) of
-        {error, file_not_found} -> {gateway_error, file_not_found};
-        {ok, Cmd} -> serve_cgi(Cmd, Path, Matches, Req,
-                               {Hostname, Port}, CGIPrefix)
+    %
+    % Until the CGI boundary (erlexec) has been shown to handle names as
+    % bytes, the script's name must be printable ASCII, and it is handed
+    % over as a string, as before.
+    case {printable_ascii(Path), blizanci_path:confine(Path, CGIRoot)} of
+        {true, {ok, Cmd}} -> serve_cgi_bytes(Cmd, Path, Matches, Req,
+                                              {Hostname, Port}, CGIPrefix);
+        _ -> {gateway_error, file_not_found}
     end.
+
+
+% The confined script name is bytes; it becomes the string the VM would
+% have given for that name (so a configured root that is not ASCII still
+% works), or the request is refused.
+serve_cgi_bytes(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
+    case unicode:characters_to_list(Cmd, file:native_name_encoding()) of
+        CmdString when is_list(CmdString) ->
+            serve_cgi(CmdString, Path, Matches, Req, HostPort, CGIPrefix);
+        _ ->
+            {gateway_error, file_not_found}
+    end.
+
+
+-spec printable_ascii(Path) -> Result
+              when Path   :: binary(),
+                   Result :: boolean().
+printable_ascii(Path) ->
+    re:run(Path, <<"^[\\x20-\\x7e]*$">>, [{capture, none}]) =:= match.
 
 
 -spec serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) -> Result
@@ -588,7 +611,10 @@ hidden_tests(Base) ->
     Serve = fun(Path) ->
                 serve(#{ <<"PATH">> => Path }, #{ query => <<>> }, Cfg, Opts)
             end,
-    [?_assertEqual({gateway_error, file_not_found}, Serve(<<".hidden">>)),
+    [% CGI script names stay ASCII-only for now (see serve/4)
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<195, 169>>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"ok", 233>>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<".hidden">>)),
      ?_assertEqual({gateway_error, file_not_found}, Serve(<<"sub/.y">>)),
      ?_assertEqual({gateway_error, file_not_found},
                    Serve(<<".well-known/x">>))].
