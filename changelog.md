@@ -4,6 +4,9 @@
 
 - Fold the host and the scheme of a request, and site names, with an
   ASCII-only lowercase, exported as `blizanci_config:ascii_lowercase/1`
+- Keep the existing resource, and remove the temporary file, when a Titan
+  upload cannot be put in place (the work directory on another filesystem,
+  or a directory as the target), answering 40
 
 ## 5.24.0
 
