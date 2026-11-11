@@ -127,8 +127,8 @@ terminate(_Reason, _State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 live_test() ->
-    A = blizanci_config:site("a.example", "a.pem", "a.key"),
-    B = blizanci_config:site("b.example", "b.pem", "b.key"),
+    {ok, A} = blizanci_config:site("a.example", "a.pem", "a.key"),
+    {ok, B} = blizanci_config:site("b.example", "b.pem", "b.key"),
     ?assertEqual(not_running, current()),
     ?assertEqual([], sites()),
     ?assertEqual(not_found, find_site(<<"a.example">>)),

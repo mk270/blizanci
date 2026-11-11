@@ -91,17 +91,38 @@ global(Port, Servlets) ->
 
 % A site with no routes yet: fully self-contained, knowing nothing of
 % any other site. Add routes with add_route/2.
+%
+% Hostnames are compared case-insensitively, by being stored in lower
+% case (see find_site/2), so a name with an upper-case letter is
+% refused here rather than silently altered. Use ascii_lowercase/1
+% first if folding is what the caller wants.
 -spec site(Hostname, CertFile, KeyFile) -> Result
               when Hostname :: string(),
                    CertFile :: string(),
                    KeyFile  :: string(),
-                   Result   :: site().
+                   Result   :: {'ok', site()}
+                             | {'error', 'hostname_not_lowercase'}.
 site(Hostname, CertFile, KeyFile) ->
-    #site{hostname = erlang:list_to_binary(Hostname),
-          certfile = CertFile,
-          keyfile  = KeyFile,
-          routing  = [],
-          docroot  = undefined}.
+    case Hostname =:= ascii_lowercase(Hostname) of
+        false -> {error, hostname_not_lowercase};
+        true  -> {ok, #site{hostname = erlang:list_to_binary(Hostname),
+                            certfile = CertFile,
+                            keyfile  = KeyFile,
+                            routing  = [],
+                            docroot  = undefined}}
+    end.
+
+
+% Lower-case A-Z only. Not string:lowercase/1, which folds Unicode
+% (U+212A, the Kelvin sign, becomes "k"), and a hostname here is ASCII.
+-spec ascii_lowercase(String) -> Result
+              when String :: string(),
+                   Result :: string().
+ascii_lowercase(String) ->
+    [ case C of
+          _ when C >= $A, C =< $Z -> C + ($a - $A);
+          _ -> C
+      end || C <- String ].
 
 
 % Append a route to a site's routing table. Routes are tried in order,
@@ -311,11 +332,14 @@ start_servlets([Servlet | Rest], Started) ->
                    Key      :: string(),
                    Docroot  :: string(),
                    Routes   :: [route_entry()],
-                   Result   :: site().
+                   Result   :: {'ok', site()}
+                             | {'error', 'hostname_not_lowercase'}.
 make_site(Hostname, Cert, Key, Docroot, Routes) ->
     {ok, Routing} = blizanci_router:prepare(Routes),
-    Site = site(Hostname, Cert, Key),
-    Site#site{routing = Routing, docroot = Docroot}.
+    case site(Hostname, Cert, Key) of
+        {ok, Site} -> {ok, Site#site{routing = Routing, docroot = Docroot}};
+        {error, _} = Error -> Error
+    end.
 
 
 -spec find_site(Hostname, Sites) -> Result
@@ -323,7 +347,11 @@ make_site(Hostname, Cert, Key, Docroot, Routes) ->
                    Sites    :: [site()],
                    Result   :: {'ok', site()} | 'not_found'.
 find_site(Hostname, Sites) ->
-    case lists:keyfind(Hostname, #site.hostname, Sites) of
+    % Site names are stored in lower case (see site/3), so fold the name
+    % being looked up. This is the one place SNI and request lookups
+    % get their case-insensitivity.
+    Folded = list_to_binary(ascii_lowercase(binary_to_list(Hostname))),
+    case lists:keyfind(Folded, #site.hostname, Sites) of
         false -> not_found;
         Site -> {ok, Site}
     end.
@@ -457,7 +485,10 @@ make(Port, Servlets, Sites) ->
 from_app_env() ->
     {ok, App} = application:get_application(),
     {ok, Default_Hostname} = inet:gethostname(),
-    Hostname = application:get_env(App, hostname, Default_Hostname),
+    % The operator's name, or the machine's own, may have capitals: fold
+    % it here, at the edge, so that site/3 can insist on lower case.
+    Hostname = ascii_lowercase(application:get_env(App, hostname,
+                                                   Default_Hostname)),
     {ok, Cert} = get_pem_file_from_environment(App, certfile,
                                                "./ssl/certificate.pem"),
     {ok, Key} = get_pem_file_from_environment(App, keyfile,
@@ -470,7 +501,8 @@ from_app_env() ->
     % Today's sys.config only ever describes a single site, so this
     % is a one-element list; everything downstream looks sites up by
     % hostname and doesn't assume that.
-    Sites = [make_site(Hostname, Cert, Key, Docroot, Routes)],
+    {ok, Site} = make_site(Hostname, Cert, Key, Docroot, Routes),
+    Sites = [Site],
     Port = application:get_env(App, port, ?PORT),
     Servlets = application:get_env(App, servlets, ?DEFAULT_SERVLETS),
     make(Port, Servlets, Sites).
@@ -481,6 +513,10 @@ from_app_env() ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -define(TEST_DOCROOT, "test-docroot").
+
+test_site(Hostname, Cert, Key) ->
+    {ok, Site} = site(Hostname, Cert, Key),
+    Site.
 
 route_ok_test_() ->
     Opts = #{ docroot => ?TEST_DOCROOT },
@@ -544,13 +580,27 @@ site_test() ->
                        keyfile  = "k.pem",
                        routing  = [],
                        docroot  = undefined},
-                 site("example.org", "c.pem", "k.pem")).
+                 test_site("example.org", "c.pem", "k.pem")).
+
+site_rejects_uppercase_test_() ->
+    [?_assertEqual({error, hostname_not_lowercase},
+                   site("Example.org", "c.pem", "k.pem")),
+     ?_assertEqual({error, hostname_not_lowercase},
+                   site("EXAMPLE.ORG", "c.pem", "k.pem")),
+     ?_assertMatch({ok, #site{hostname = <<"example.org">>}},
+                   site("example.org", "c.pem", "k.pem"))].
+
+ascii_lowercase_test_() ->
+    [?_assertEqual("example.org", ascii_lowercase("Example.ORG")),
+     ?_assertEqual("a-1.b", ascii_lowercase("A-1.B")),
+     % only A-Z: the Kelvin sign is left alone, not folded to "k"
+     ?_assertEqual([16#212A], ascii_lowercase([16#212A]))].
 
 add_route_appends_test() ->
     Opts = #{ docroot => ?TEST_DOCROOT },
     {ok, R1} = route(gemini, "a", blizanci_static, public, Opts),
     {ok, R2} = route(gemini, "b", blizanci_static, restricted, Opts),
-    Site0 = site("example.org", "c.pem", "k.pem"),
+    Site0 = test_site("example.org", "c.pem", "k.pem"),
     Site1 = add_route(Site0, R1),
     Site2 = add_route(Site1, R2),
     ?assertEqual([R1], Site1#site.routing),
@@ -558,21 +608,24 @@ add_route_appends_test() ->
     ?assertEqual([], Site0#site.routing).
 
 add_route_rejects_non_route_test() ->
-    Site = site("example.org", "c.pem", "k.pem"),
+    Site = test_site("example.org", "c.pem", "k.pem"),
     % (through apply/3, as the argument deliberately breaks the spec)
     ?assertError(function_clause,
                  apply(?MODULE, add_route, [Site, {not_a_route}])).
 
 find_site_test_() ->
-    A = site("a.example", "a.pem", "a.key"),
-    B = site("b.example", "b.pem", "b.key"),
+    A = test_site("a.example", "a.pem", "a.key"),
+    B = test_site("b.example", "b.pem", "b.key"),
     [?_assertEqual({ok, A}, find_site(<<"a.example">>, [A, B])),
      ?_assertEqual({ok, B}, find_site(<<"b.example">>, [A, B])),
      ?_assertEqual(not_found, find_site(<<"c.example">>, [A, B])),
+     ?_assertEqual({ok, A}, find_site(<<"A.EXAMPLE">>, [A, B])),
+     ?_assertEqual({ok, B}, find_site(<<"B.Example">>, [A, B])),
+     ?_assertEqual(not_found, find_site(<<"a.example.">>, [A, B])),
      ?_assertEqual(not_found, find_site(<<"a.example">>, []))].
 
 make_test() ->
-    Site = site("a.example", "a.pem", "a.key"),
+    Site = test_site("a.example", "a.pem", "a.key"),
     Config = make(1966, [blizanci_static], [Site]),
     ?assertEqual([blizanci_static], maps:get(servlets, Config)),
     SSL = maps:get(ssl_opts, Config),
@@ -585,8 +638,8 @@ make_test() ->
 % SNI is the only source of TLS credentials: no top-level cert/key, and
 % the sni_fun serves exactly the configured sites.
 sni_fun_test_() ->
-    A = site("a.example", "a.pem", "a.key"),
-    B = site("b.example", "b.pem", "b.key"),
+    A = test_site("a.example", "a.pem", "a.key"),
+    B = test_site("b.example", "b.pem", "b.key"),
     SSL = ssl_opts(1965),
     SniFun = proplists:get_value(sni_fun, SSL),
     {setup,
@@ -614,23 +667,11 @@ sni_fun_test_() ->
                               SniFun("b.example"))
              end)]}.
 
-%% PENDING, so compiled out: a host name is case-insensitive, so the same
-%% site must be found whatever the case of the name the client sent in
-%% its SNI. Blizanci doesn't do this yet: today these tests fail (the
-%% lookup gets "unrecognized").
-%%
-%% To enable them, either delete the -ifdef and -endif lines around them,
-%% or build with the macro defined, e.g. put
-%%     {eunit_compile_opts, [{d, 'PENDING_CASE_INSENSITIVE'}]}.
-%% on a line of its own in rebar.config (the file may lack a final
-%% newline) and touch this file, since rebar3 won't notice the change.
-%% Once the code is fixed, delete the -ifdef/-endif lines for good. The
-%% matching request-URL tests are in blizanci_request.erl, under the
-%% same macro.
--ifdef(PENDING_CASE_INSENSITIVE).
+%% A host name is case-insensitive, so the same site is found whatever
+%% the case of the name the client sent in its SNI.
 sni_fun_case_insensitive_test_() ->
-    A = site("a.example", "a.pem", "a.key"),
-    B = site("b.example", "b.pem", "b.key"),
+    A = test_site("a.example", "a.pem", "a.key"),
+    B = test_site("b.example", "b.pem", "b.key"),
     SniFun = proplists:get_value(sni_fun, ssl_opts(1965)),
     {setup,
      fun() -> live_up(1965, [], [A, B]) end,
@@ -641,7 +682,6 @@ sni_fun_case_insensitive_test_() ->
                     SniFun("A.Example")),
       ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
                     SniFun("B.example"))]}.
--endif.
 
 %% Builder: routes and configuration.
 
@@ -650,7 +690,7 @@ insert_route_test_() ->
     {ok, R1} = route(gemini, "a", blizanci_static, public, Opts),
     {ok, R2} = route(gemini, "b", blizanci_static, public, Opts),
     {ok, R3} = route(gemini, "c", blizanci_static, public, Opts),
-    Site = add_route(add_route(site("h", "c.pem", "k.pem"), R1), R2),
+    Site = add_route(add_route(test_site("h", "c.pem", "k.pem"), R1), R2),
     [?_assertEqual({ok, [R3, R1, R2]},
                    rmap(insert_route(Site, 1, R3))),
      ?_assertEqual({ok, [R1, R3, R2]},
@@ -661,7 +701,7 @@ insert_route_test_() ->
      ?_assertEqual({error, {index_out_of_range, 0, 2}},
                    apply(?MODULE, insert_route, [Site, 0, R3])),
      ?_assertEqual({error, {index_out_of_range, 1, 0}},
-                   insert_route(site("h", "c.pem", "k.pem"), 1, R3)),
+                   insert_route(test_site("h", "c.pem", "k.pem"), 1, R3)),
      ?_assertEqual([R1, R2], routes(Site))].
 
 rmap({ok, Site}) -> {ok, routes(Site)};
@@ -669,7 +709,7 @@ rmap(Error) -> Error.
 
 new_test() ->
     G = global(1965, [blizanci_static]),
-    S = site("a.example", "c.pem", "k.pem"),
+    S = test_site("a.example", "c.pem", "k.pem"),
     ?assertEqual(#config{global = G, sites = [S]}, new(G, [S])).
 
 %% validate/1. Uses a real PEM file so the cert/key checks can pass.
@@ -679,7 +719,7 @@ validate_test_() ->
 validate_tests(Pem) ->
     {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static, public,
                     #{ docroot => ?TEST_DOCROOT }),
-    Good = fun(Host) -> add_route(site(Host, Pem, Pem), R) end,
+    Good = fun(Host) -> add_route(test_site(Host, Pem, Pem), R) end,
     G = global(1965, [blizanci_static]),
     V = fun(Gl, Sites) -> validate(new(Gl, Sites)) end,
     [?_assertEqual(ok, V(G, [Good("a"), Good("b")])),
@@ -693,11 +733,11 @@ validate_tests(Pem) ->
      ?_assertEqual({error, {duplicate_site, <<"a">>}},
                    V(G, [Good("a"), Good("a")])),
      % a site with no routes is valid
-     ?_assertEqual(ok, V(G, [site("a", Pem, Pem)])),
+     ?_assertEqual(ok, V(G, [test_site("a", Pem, Pem)])),
      ?_assertEqual({error, {bad_certfile, <<"a">>, couldnt_open_pem_file}},
-                   V(G, [add_route(site("a", "/no/such.pem", Pem), R)])),
+                   V(G, [add_route(test_site("a", "/no/such.pem", Pem), R)])),
      ?_assertEqual({error, {bad_keyfile, <<"a">>, couldnt_open_pem_file}},
-                   V(G, [add_route(site("a", Pem, "/no/such.pem"), R)])),
+                   V(G, [add_route(test_site("a", Pem, "/no/such.pem"), R)])),
      ?_assertEqual({error, {undeclared_servlet, <<"a">>, blizanci_static}},
                    V(global(1965, []), [Good("a")]))].
 
@@ -733,7 +773,7 @@ apply_test_() ->
 apply_tests(Pem) ->
     {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static, public,
                     #{ docroot => ?TEST_DOCROOT }),
-    Site = fun(Host) -> add_route(site(Host, Pem, Pem), R) end,
+    Site = fun(Host) -> add_route(test_site(Host, Pem, Pem), R) end,
     Conf = fun(Port, Servlets, Sites) ->
                new(global(Port, Servlets), Sites)
            end,
@@ -790,7 +830,7 @@ apply_servlets_test_() ->
          ?_test(begin
              {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static,
                              public, #{ docroot => ?TEST_DOCROOT }),
-             Site = add_route(site("a", Pem, Pem), R),
+             Site = add_route(test_site("a", Pem, Pem), R),
              Conf = fun(Servlets) ->
                         new(global(1965, Servlets), [Site])
                     end,
@@ -818,7 +858,7 @@ validate_upload_in_cgi_dir_test_() ->
                          #{ cgiroot => Dir }),
          {ok, T} = route(titan, "t", blizanci_titan, public,
                          #{ docroot => Dir, work_dir => Dir }),
-         Site = add_route(add_route(site("a", Pem, Pem), C), T),
+         Site = add_route(add_route(test_site("a", Pem, Pem), C), T),
          G = global(1965, [blizanci_cgi, blizanci_titan]),
          ?_assertMatch({error, {bad_routes, <<"a">>,
                                 {upload_dir_overlaps_cgiroot, _, _, _}}},
