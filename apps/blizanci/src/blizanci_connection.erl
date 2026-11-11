@@ -83,6 +83,10 @@ servlet_result(Pid, Result) when is_pid(Pid) ->
 %% @end
 init({Ref, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
+    %% This process owns the flag: it is linked to its servlet and must
+    %% turn the servlet's exit into a response.  gen_server also needs it
+    %% to see the parent's shutdown and run terminate/2.
+    process_flag(trap_exit, true),
     {ok, Socket} = ranch:handshake(Ref),
     ok = activate(Transport, Socket),
     PeerCert = ssl:peercert(Socket),
@@ -153,10 +157,18 @@ handle_info({'EXIT', Pid, {shutdown, {gateway_complete, RPid, Response}}},
     {noreply, State};
 
 
-handle_info({'EXIT', Pid, Reason}, State) ->
+handle_info({'EXIT', Pid, Reason},
+            State=#state{servlet_proc={proc, ServletPid}})
+  when Pid =:= ServletPid ->
     logger:info("Abend of process ~p ~p", [Pid, Reason]),
     respond({error_code, internal_server_error}, State),
     self() ! finished,
+    {noreply, State};
+
+%% Some other linked process (the parent's own shutdown never gets here:
+%% gen_server handles it first).
+handle_info({'EXIT', Pid, Reason}, State) ->
+    logger:info("Ignoring exit of unrelated process ~p ~p", [Pid, Reason]),
     {noreply, State};
 
 handle_info(Msg, State) ->
@@ -169,13 +181,11 @@ handle_info(Msg, State) ->
 %% @hidden
 %% @end
 handle_call({servlet_result, {servlet_failed, Result}}, _From, State) ->
-    process_flag(trap_exit, false),
     respond({error_code, Result}, State),
     self() ! finished,
     {reply, ok, State};
 
 handle_call({servlet_result, {servlet_complete, Output}}, _From, State) ->
-    process_flag(trap_exit, false),
     respond({servlet_output, Output}, State),
     self() ! finished,
     {reply, ok, State};
@@ -992,19 +1002,64 @@ handle_info_exit_test_() ->
                                       <<"hi">>}}})),
      ?_assertEqual({noreply, <<>>},
                    Ex(P, {shutdown, {gateway_complete, P, none}})),
-     % from a process other than the servlet, or for a different one, or
-     % any other reason: an internal error
+     % the servlet dying any other way: an internal error
      ?_assertEqual({noreply, <<"40 Internal server error\r\n">>},
                    Ex(self(), crashed)),
-     ?_assertEqual({noreply, <<"40 Internal server error\r\n">>},
-                   Ex(dead_pid(), normal)),
-     ?_assertEqual({noreply, <<"40 Internal server error\r\n">>},
+     % an exit from a process that is not the servlet is not an answer
+     ?_assertEqual({noreply, <<>>}, Ex(dead_pid(), normal)),
+     ?_assertEqual({noreply, <<>>}, Ex(dead_pid(), crashed)),
+     ?_assertEqual({noreply, <<>>},
                    Ex(dead_pid(), {shutdown, {gateway_complete, P,
                                               {error_code,
                                                file_not_found}}})),
-     ?_assertEqual({noreply, <<"40 Internal server error\r\n">>},
+     ?_assertEqual({noreply, <<>>},
                    info({'EXIT', P, {shutdown, {gateway_init_error, P,
-                                                why}}}, no_proc))].
+                                                why}}}, no_proc)),
+     ?_assertEqual({noreply, <<>>}, info({'EXIT', P, crashed}, no_proc))].
+
+%% The connection traps exits from init on (the test stops it in the
+%% handshake, which never comes), and a shutdown from the parent still
+%% ends it.
+connection_traps_exits_test_() ->
+    [?_test(begin
+                Pid = proc_lib:spawn(?MODULE, init,
+                                     [{no_such_ref, ranch_tcp, []}]),
+                Ref = erlang:monitor(process, Pid),
+                ok = wait_trapping(Pid, 100),
+                exit(Pid, kill),
+                receive {'DOWN', Ref, process, Pid, _} -> ok end
+            end),
+     ?_test(begin
+                % under gen_server:enter_loop, as the connection runs,
+                % the parent's shutdown stops it
+                Self = self(),
+                {Parent, PRef} = spawn_monitor(fun() ->
+                    Child = proc_lib:spawn_link(fun() ->
+                        process_flag(trap_exit, true),
+                        gen_server:enter_loop(?MODULE, [], blank_state())
+                    end),
+                    Self ! {child, Child},
+                    receive stop -> exit(Child, shutdown) end,
+                    receive never -> ok end
+                end),
+                Child = receive {child, C} -> C after 2000 -> error(no) end,
+                CRef = erlang:monitor(process, Child),
+                Parent ! stop,
+                receive {'DOWN', CRef, process, Child, Why} ->
+                    ?assertEqual(shutdown, Why)
+                after 2000 -> error(still_alive)
+                end,
+                exit(Parent, kill),
+                receive {'DOWN', PRef, process, Parent, _} -> ok end
+            end)].
+
+wait_trapping(_Pid, 0) ->
+    timeout;
+wait_trapping(Pid, N) ->
+    case erlang:process_info(Pid, trap_exit) of
+        {trap_exit, true} -> ok;
+        _ -> timer:sleep(10), wait_trapping(Pid, N - 1)
+    end.
 
 %% Data from the client (messages {ssl, Socket, Data} on the real thing).
 handle_info_data_test_() ->
@@ -1091,12 +1146,11 @@ handle_info_servlet_data_test_() ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% handle_call/3 (the servlet's report), terminate/2, servlet_result/2
 
-%% Report a servlet result as the container does; the process stops
-%% trapping exits, a finished message is queued, and the client is sent
+%% Report a servlet result as the container does; the trap_exit flag is
+%% left alone, a finished message is queued, and the client is sent
 %% the response.
 report(Result) ->
     with_client(fun(S) ->
-        process_flag(trap_exit, true),
         {reply, ok, _} = handle_call({servlet_result, Result}, from,
                                      conn_state(S)),
         {trap_exit, TE} = process_info(self(), trap_exit),
