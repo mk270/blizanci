@@ -59,6 +59,14 @@
          terminate/2, code_change/3]).
 
 -record(cgi_proc, {pid, os_pid, buffer, script}).
+% The per-request inputs from which the CGI environment is built.
+-record(cgi_req, {cmd       :: binary() | string(),
+                  path      :: binary(),
+                  matches   :: path_matches(),
+                  req       :: request_details(),
+                  host_port :: {binary(), integer()},
+                  prefix    :: string()}).
+-type cgi_req() :: #cgi_req{}.
 -record(worker_state, {parent, parent_ref, cgi_status}).
 -type worker_state() :: #worker_state{}.
 -type options() :: #{
@@ -244,8 +252,13 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
     % as a string, as before.
     Confined = blizanci_path:resolve_request(Matches, CGIRoot, #{}),
     case {cgi_alphabet(Path), Confined} of
-        {true, {ok, Cmd}} -> serve_cgi_bytes(Cmd, Path, Matches, Req,
-                                              {Hostname, Port}, CGIPrefix);
+        {true, {ok, Cmd}} ->
+            serve_cgi_bytes(#cgi_req{cmd=Cmd,
+                                     path=Path,
+                                     matches=Matches,
+                                     req=Req,
+                                     host_port={Hostname, Port},
+                                     prefix=CGIPrefix});
         _ -> {gateway_error, file_not_found}
     end.
 
@@ -253,10 +266,14 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
 % The confined script name is bytes; it becomes the string the VM would
 % have given for that name (so a configured root that is not ASCII still
 % works), or the request is refused.
-serve_cgi_bytes(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
+-spec serve_cgi_bytes(CgiReq) -> Result
+              when CgiReq :: cgi_req(),
+                   Result :: gateway_result().
+
+serve_cgi_bytes(#cgi_req{cmd=Cmd} = CgiReq) ->
     case unicode:characters_to_list(Cmd, file:native_name_encoding()) of
         CmdString when is_list(CmdString) ->
-            serve_cgi(CmdString, Path, Matches, Req, HostPort, CGIPrefix);
+            serve_cgi(CgiReq#cgi_req{cmd=CmdString});
         _ ->
             {gateway_error, file_not_found}
     end.
@@ -269,22 +286,14 @@ cgi_alphabet(Path) ->
     re:run(Path, <<"^[A-Za-z0-9._/-]*$">>, [{capture, none}]) =:= match.
 
 
--spec serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) -> Result
-              when Cmd       :: string(),
-                   Path      :: binary(),
-                   Matches   :: path_matches(),
-                   Req       :: request_details(),
-                   HostPort  :: {binary(), integer()},
-                   CGIPrefix :: string(),
-                   Result    :: gateway_result().
+-spec serve_cgi(CgiReq) -> Result
+              when CgiReq :: cgi_req(),
+                   Result :: gateway_result().
 
-serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
+serve_cgi(#cgi_req{cmd=Cmd} = CgiReq) ->
     case filelib:is_file(Cmd) of
         false -> {gateway_error, file_not_found};
         true ->
-            #{ query := QueryString, client_cert := Cert } = Req,
-            PathInfo = maps:get(<<"PATH_INFO">>, Matches, <<>>),
-
             % Args represents a UNIX commandline comprising the path of
             % the executable with zero arguments.
             Args = [Cmd],
@@ -296,9 +305,7 @@ serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
             % silently launching the CGI script without REMOTE_USER: a
             % certificate we can't understand is exactly the kind of
             % input we don't want to guess about.
-            case cgi_environment(CGIPrefix, Path, Cmd,
-                                 HostPort, QueryString,
-                                 Cert, PathInfo) of
+            case cgi_environment(CgiReq) of
                 {ok, Env} -> enqueue_cgi(Args, Env);
                 {error, Reason} -> {gateway_error, Reason}
             end
@@ -547,22 +554,14 @@ cgi_finished(Reason, State=#worker_state{parent=Parent}) ->
 %
 % This basically ensures that both the key and value are strings, and
 % values like 'undefined' are handled. The actual details of the variables
-% are determined by make_environment/6
--spec cgi_environment(CGIPrefix, Path, Bin, HostPort,
-                      QueryString, Cert, PathInfo) -> Result
-              when CGIPrefix   :: string(),
-                   Path        :: binary(),
-                   Bin         :: string(),
-                   HostPort    :: {binary(), integer()},
-                   QueryString :: binary(),
-                   Cert        :: peer_cert(),
-                   PathInfo    :: binary(),
-                   Result      :: {ok, env_list()}
-                                | {error, atom()}.
+% are determined by make_environment/1
+-spec cgi_environment(CgiReq) -> Result
+              when CgiReq :: cgi_req(),
+                   Result :: {ok, env_list()}
+                           | {error, atom()}.
 
-cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
-    Env = make_environment(CGIPrefix, Path, Bin, HostPort,
-                           QueryString, Cert, PathInfo),
+cgi_environment(CgiReq) ->
+    Env = make_environment(CgiReq),
     case Env of
         {ok, Env0} ->
             {ok, blizanci_osenv:sanitise(preserved_env() ++ Env0)};
@@ -572,7 +571,7 @@ cgi_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
 
 % The subset of the Erlang VM's own OS environment (per ?ALLOWED_ENV)
 % that gets passed through to every CGI child, alongside the
-% per-request variables built by make_environment/7. Only variables
+% per-request variables built by make_environment/1. Only variables
 % actually set are included -- os:getenv/1 returns 'false' for one
 % that isn't, and that's not a value to hand to the CGI child.
 -spec preserved_env() -> Result
@@ -595,21 +594,17 @@ preserved_env() ->
 % to a NUL-terminated C string only at the point of building execve's
 % envp array, so an embedded NUL truncates that one variable's value --
 % it cannot smuggle in an additional, independent environment variable.
--spec make_environment(CGIPrefix, Path, Bin, HostPort,
-                       QueryString, Cert, PathInfo) -> Result
-              when CGIPrefix   :: string(),
-                   Path        :: binary(),
-                   Bin         :: string(),
-                   HostPort    :: {binary(), integer()},
-                   QueryString :: binary(),
-                   Cert        :: peer_cert(),
-                   PathInfo    :: binary(),
-                   Result      :: {ok, [{string(), term()}]}
-                                | {error, atom()}.
+-spec make_environment(CgiReq) -> Result
+              when CgiReq :: cgi_req(),
+                   Result :: {ok, [{string(), term()}]}
+                           | {error, atom()}.
 
-make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
+make_environment(#cgi_req{cmd=Bin, path=Path, matches=Matches, req=Req,
+                          host_port={Hostname, Port},
+                          prefix=CGIPrefix}) ->
+    #{ query := QueryString, client_cert := Cert } = Req,
+    PathInfo = maps:get(<<"PATH_INFO">>, Matches, <<>>),
     ScriptName = CGIPrefix ++ binary_to_list(Path),
-    {Hostname, Port} = HostPort,
 
     KVPs = [
      {"PATH_TRANSLATED", Bin},
