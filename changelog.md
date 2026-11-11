@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 5.28.0
+
+- Add a Common Test suite (`rebar3 ct`) exercising the running
+  application over TLS: static files, CGI, Titan uploads, SNI with a
+  live `blizanci_config:apply/1`, and stop/start in one VM
+
 ## 5.27.0
 
 - Supervise the servlets' worker pools in the application's own tree:
