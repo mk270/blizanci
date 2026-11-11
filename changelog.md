@@ -7,6 +7,9 @@
 - Answer a CGI request refused before the script runs with the refusal's own
   status: 51 for a missing or hidden script, 60 for an unreadable client
   certificate
+- Keep the existing resource, and remove the temporary file, when a Titan
+  upload cannot be put in place (the work directory on another filesystem,
+  or a directory as the target), answering 40
 
 ## 5.24.0
 

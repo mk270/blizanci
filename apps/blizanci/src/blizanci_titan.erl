@@ -78,6 +78,7 @@
                        | titan_enotdir
                        | titan_not_found
                        | titan_too_much
+                       | titan_failed
                        | {titan_updated, integer()}.
 
 %%%===================================================================
@@ -262,7 +263,16 @@ delete_resource(TargetPath) ->
 handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size) ->
     {ok, Stream, TmpPath} = create_tmp_file(WorkDir, Rest),
 
-    UploadStatus = finish_file(Stream, Path, RootDir, TmpPath, Size),
+    % No Titan worker is involved here, so nothing else would remove the
+    % temporary file if finishing the upload went wrong.
+    UploadStatus =
+        try finish_file(Stream, Path, RootDir, TmpPath, Size)
+        catch
+            Class:Reason:Stacktrace ->
+                _ = file:close(Stream),
+                _ = delete(TmpPath),
+                erlang:raise(Class, Reason, Stacktrace)
+        end,
     handle_upload_status(UploadStatus).
 
 
@@ -440,6 +450,8 @@ handle_upload_status(titan_not_found) ->
     {gateway_finished, {error_code, file_not_found}};
 handle_upload_status(titan_too_much) ->
     {gateway_finished, {error_code, request_too_long}};
+handle_upload_status(titan_failed) ->
+    {gateway_finished, {error_code, internal_server_error}};
 handle_upload_status({titan_updated, NewSize}) ->
     {ok, in_progress, NewSize}.
 
@@ -499,19 +511,86 @@ finish_file(Stream, Path, RootDir, TmpPath, Size) ->
     end.
 
 
+% Install the finished upload as the target. The old resource is never
+% removed first: the new content is linked into the target's own
+% directory under a hidden, unique name (so a failure to link, such as
+% exdev when the work dir is on another filesystem, changes nothing),
+% and only then renamed over the target, which replaces it in one step.
+% Whatever happens, the temporary file is gone afterwards.
 -spec replace_target(TargetPath, TmpPath) -> Result
               when TargetPath :: filepath(),
                    TmpPath    :: filepath(),
                    Result     :: upload_status().
 
 replace_target(TargetPath, TmpPath) ->
-    case delete(TargetPath) of
-        {fail, enotdir} -> titan_enotdir;
+    Staging = staging_path(TargetPath),
+    Status = case file:make_link(TmpPath, Staging) of
+                 ok -> install(Staging, TargetPath);
+                 {error, Reason} -> link_failed(Reason, TmpPath, Staging)
+             end,
+    case delete(TmpPath) of
+        ok -> ok;
+        Error -> logger:warning("titan: cannot remove ~p: ~p",
+                                [TmpPath, Error])
+    end,
+    Status.
+
+
+-spec install(Staging, TargetPath) -> Result
+              when Staging    :: filepath(),
+                   TargetPath :: filepath(),
+                   Result     :: upload_status().
+
+install(Staging, TargetPath) ->
+    case file:rename(Staging, TargetPath) of
         ok ->
-            ok = file:make_link(TmpPath, TargetPath),
-            ok = delete(TmpPath),
-            titan_finished
+            titan_finished;
+        {error, Reason} ->
+            _ = delete(Staging),
+            case Reason of
+                % the target is a directory: it is not replaced
+                eisdir -> titan_enotdir;
+                enotdir -> titan_enotdir;
+                _ -> upload_failed(TargetPath, Reason)
+            end
     end.
+
+
+-spec link_failed(Reason, TmpPath, Staging) -> Result
+              when Reason  :: atom(),
+                   TmpPath :: filepath(),
+                   Staging :: filepath(),
+                   Result  :: upload_status().
+
+% a file where a directory is needed: the same refusal as before
+link_failed(enotdir, _TmpPath, _Staging) -> titan_enotdir;
+link_failed(enoent, _TmpPath, _Staging) -> titan_not_found;
+link_failed(Reason, TmpPath, Staging) ->
+    upload_failed({TmpPath, Staging}, Reason).
+
+
+-spec upload_failed(What, Reason) -> Result
+              when What   :: term(),
+                   Reason :: term(),
+                   Result :: upload_status().
+
+upload_failed(What, Reason) ->
+    logger:warning("titan: cannot install upload ~p: ~p", [What, Reason]),
+    titan_failed.
+
+
+% A name in the target's own directory, so that renaming it over the
+% target stays on one filesystem. Dot-named, so it is never served.
+-spec staging_path(TargetPath) -> Result
+              when TargetPath :: filepath(),
+                   Result     :: filepath().
+
+staging_path(TargetPath) ->
+    Name = lists:flatten(io_lib:format(".blizanci-new-~s-~B-~B",
+                                       [os:getpid(),
+                                        erlang:system_time(microsecond),
+                                        erlang:unique_integer([positive])])),
+    filename:join(filename:dirname(TargetPath), Name).
 
 
 -spec delete(Path) -> Result
@@ -679,6 +758,140 @@ finish_tests(Base) ->
             end),
      ?_assertEqual({gateway_finished, {error_code, file_not_found}},
                    handle_upload_status(titan_not_found))].
+
+
+%% A failed install leaves the old page alone and the temporary file
+%% removed, whichever way the upload arrived. Fixture, under a fresh
+%% temporary directory:
+%%   Base/root/{old.txt,dir/inner.txt}  Base/work
+%% and, where /dev/shm is a different filesystem, Shm/work (the
+%% work_dir of the cross-device case, which is how a link from the work
+%% dir into the docroot fails with exdev).
+failed_install_test_() ->
+    {setup, fun failed_setup/0, fun failed_teardown/1, fun failed_tests/1}.
+
+failed_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("titan_failed_test_" ++ Unique),
+    [ ok = filelib:ensure_path(filename:join(Base, D))
+      || D <- ["root/dir", "work"] ],
+    ok = file:write_file(filename:join([Base, "root", "old.txt"]), <<"old">>),
+    ok = file:write_file(filename:join([Base, "root", "dir", "inner.txt"]),
+                         <<"inner">>),
+    Shm = filename:join("/dev/shm", "titan_failed_test_" ++ Unique),
+    {Base, other_filesystem(Base, Shm)}.
+
+% {ok, Dir} when a directory can be made on a filesystem that files in
+% Base cannot be hard-linked from, else unavailable.
+other_filesystem(Base, Shm) ->
+    Link = filename:join(Base, "probe"),
+    Result = case filelib:ensure_path(Shm) of
+                 ok ->
+                     ShmProbe = filename:join(Shm, "probe"),
+                     ok = file:write_file(ShmProbe, <<>>),
+                     case file:make_link(ShmProbe, Link) of
+                         {error, exdev} -> {ok, Shm};
+                         _ -> file:del_dir_r(Shm), unavailable
+                     end;
+                 _ -> unavailable
+             end,
+    file:delete(Link),
+    Result.
+
+failed_teardown({Base, Other}) ->
+    file:del_dir_r(Base),
+    case Other of
+        {ok, Shm} -> file:del_dir_r(Shm);
+        unavailable -> ok
+    end.
+
+failed_tests({Base, Other}) ->
+    Root = filename:join(Base, "root"),
+    Cfg = #server_config{hostname = <<"h">>, port = 1965,
+                         routing = [], docroot = Root},
+    Serve = fun(Work, Fragment, Rest) ->
+                Opts = #{ docroot => Root, work_dir => list_to_binary(Work) },
+                serve(#{ <<"PATH">> => Fragment },
+                      test_request(#{ rest_of_input => Rest }), Cfg, Opts)
+            end,
+    Work = filename:join(Base, "work"),
+    Read = fun(Name) -> file:read_file(filename:join(Root, Name)) end,
+    % nothing but the files the fixture made: no temporary or staging
+    % file in the work dir, and none beside the target
+    Clean = fun(WorkDir) ->
+                ?assertEqual({ok, []}, file:list_dir(WorkDir)),
+                {ok, Names} = file:list_dir(Root),
+                ?assertEqual(["dir", "old.txt"], lists:sort(Names))
+            end,
+    Upload = fun(WorkDir, Path, Data) ->
+                 {ok, Stream, Tmp} =
+                     create_tmp_file(list_to_binary(WorkDir), Data),
+                 finish_file(Stream, Path, list_to_binary(Root), Tmp,
+                             byte_size(Data))
+             end,
+    [% the target is a directory: it is not overwritten, and the upload
+     % is refused with the status for "cannot overwrite"
+     ?_test(begin
+                ?assertEqual(titan_enotdir, Upload(Work, <<"dir">>, <<"x">>)),
+                ?assertEqual({ok, <<"inner">>}, Read("dir/inner.txt")),
+                Clean(Work)
+            end),
+     ?_test(begin
+                ?assertEqual({gateway_finished,
+                              {error_code, cannot_overwrite}},
+                             Serve(Work, <<"dir;size=3">>, <<"new">>)),
+                ?assertEqual({ok, <<"inner">>}, Read("dir/inner.txt")),
+                Clean(Work)
+            end),
+     % a file where a directory is needed: refused, temporary file removed
+     ?_test(begin
+                Status = Upload(Work, <<"old.txt/sub">>, <<"x">>),
+                ?assert(lists:member(Status,
+                                     [titan_enotdir, titan_not_found])),
+                ?assertEqual({ok, <<"old">>}, Read("old.txt")),
+                Clean(Work)
+            end),
+     % a failure part-way through is cleaned up, then re-raised
+     ?_test(begin
+                ?assertError(_, apply(?MODULE, handle_all_in_one_request,
+                                      [list_to_binary(Work), not_a_path,
+                                       <<"new.txt">>, <<"x">>, 1])),
+                Clean(Work)
+            end)]
+    ++ exdev_tests(Other, Serve, Upload, Read, Clean).
+
+% The work dir is on another filesystem from the docroot, so the link
+% from one to the other fails (exdev): the old page must survive, the
+% temporary file must go, and the client sees a server error.
+exdev_tests(unavailable, _Serve, _Upload, _Read, _Clean) ->
+    [];
+exdev_tests({ok, Shm}, Serve, Upload, Read, Clean) ->
+    Work = filename:join(Shm, "work"),
+    [?_test(begin
+                ok = filelib:ensure_path(Work),
+                ?assertEqual(titan_failed,
+                             Upload(Work, <<"old.txt">>, <<"new">>)),
+                ?assertEqual({ok, <<"old">>}, Read("old.txt")),
+                Clean(Work)
+            end),
+     ?_test(begin
+                ok = filelib:ensure_path(Work),
+                ?assertEqual({gateway_finished,
+                              {error_code, internal_server_error}},
+                             Serve(Work, <<"old.txt;size=3">>, <<"new">>)),
+                ?assertEqual({ok, <<"old">>}, Read("old.txt")),
+                Clean(Work)
+            end),
+     % and the same for a page that does not exist yet
+     ?_test(begin
+                ok = filelib:ensure_path(Work),
+                ?assertEqual(titan_failed,
+                             Upload(Work, <<"fresh.txt">>, <<"new">>)),
+                ?assertEqual({error, enoent}, Read("fresh.txt")),
+                Clean(Work)
+            end),
+     ?_assertEqual({gateway_finished, {error_code, internal_server_error}},
+                   handle_upload_status(titan_failed))].
 
 
 %% A complete request, for tests that care about only some of its parts.
