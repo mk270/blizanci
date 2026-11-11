@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.21.1
+
+- Update realpath to 1.4.1, which resolves a symlink whose target is not valid UTF-8 instead of ignoring it; in a UTF-8 VM the old version let a symlink in the served tree lead out of the root unnoticed, and such a link is now refused
+- Track rebar.lock in git, so builds pin the exact version and content hash of every dependency
+
 ## 5.21.0
 
 - Refuse hidden files: a request path with any segment beginning with a dot (such as `.git/config` or `.env`) now gets 51 File not found, from static, Titan (creating, overwriting and deleting) and CGI; the path is checked as requested and as resolved, so symlinks to or from dot names are caught, and there is no opt-out yet
