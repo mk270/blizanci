@@ -53,7 +53,7 @@
 % TODO: plumb this through to the config system one day, as a route
 % option so each Titan route can set its own limit, instead of being
 % fixed here at compile time.
--define(MAX_UPLOAD_BYTES, 10 * 1024 * 1024). % 10 MiB
+-define(MAX_UPLOAD_BYTES, (10 * 1024 * 1024)). % 10 MiB
 
 -record(titan_state, {parent,
                       size,
