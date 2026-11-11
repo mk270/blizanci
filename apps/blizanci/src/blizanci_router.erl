@@ -154,7 +154,9 @@ make_route(_) ->
 valid_authz(AuthPolicy) ->
     case blizanci_auth:valid_authz_policy(AuthPolicy) of
         {ok, _} -> ok;
-        {error, Reason} -> throw({Reason, AuthPolicy})
+        {error, invalid_authz_policy} ->
+            throw({invalid_authz_policy, AuthPolicy});
+        {error, Reason} -> throw(Reason)
     end.
 
 

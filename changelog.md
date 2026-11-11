@@ -13,6 +13,15 @@
   `{ok, Config} | {error, Reason}` instead of the bare config map; the
   application now fails to start with a one-line message naming the
   route and the reason
+- Check a private route's issuer files (`ca_certs`) when the route is
+  built: each must exist, be readable and hold a PEM certificate that
+  decodes, else the route is refused with
+  `{invalid_ca_file, File, Why}` (`Why` is a posix atom,
+  `no_certificate_in_file`, `certificate_not_decodable` or
+  `not_a_path`); previously a bad file raised on the first request from
+  a client with a certificate. `blizanci_auth:valid_authz_policy/1` does
+  the check and `{private, X}` with a non-list X is now
+  `{error, invalid_authz_policy}`; new `blizanci_x509:validate_ca_file/1`
 - `blizanci_router`: the regex of a `route_info()` may now be given as
   a string as well as a binary, as `build_route/5` already allowed
 

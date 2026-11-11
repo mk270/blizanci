@@ -376,6 +376,9 @@ describe_error(Other) ->
 describe_route_error({route_without_path_group, Regex, Module}) ->
     flat("route ~0p (servlet ~0p) has no named group PATH in its regex; "
          "add one, e.g. (?<PATH>.*)", [Regex, Module]);
+describe_route_error({invalid_ca_file, File, Why}) ->
+    flat("a private route's CA file ~ts cannot be used (~0p); check that "
+         "it exists and holds a PEM certificate", [File, Why]);
 describe_route_error({invalid_route_options, Module, Reason}) ->
     flat("route for servlet ~p has invalid options: ~0p", [Module, Reason]);
 describe_route_error(Reason) ->
@@ -581,8 +584,31 @@ route_ok_test_() ->
      ?_assertMatch({ok, #route{}}, Static(<<"(?<PATH>.*)">>, public)),
      ?_assertMatch({ok, #route{auth_policy = restricted}},
                    Static(?RX, restricted)),
-     ?_assertMatch({ok, #route{auth_policy = {private, ["ca.pem"]}}},
-                   Static(?RX, {private, ["ca.pem"]}))].
+     ?_assertMatch({ok, #route{auth_policy = {private, []}}},
+                   Static(?RX, {private, []}))].
+
+% A private route's CA files are checked when it is built
+route_private_ca_test_() ->
+    {setup,
+     fun() -> blizanci_x509:test_tmp_dir() end,
+     fun(Dir) -> file:del_dir_r(Dir) end,
+     fun(Dir) ->
+         Opts = #{ docroot => ?TEST_DOCROOT },
+         Static = fun(CAs) ->
+                      route(gemini, ?RX, blizanci_static,
+                            {private, CAs}, Opts)
+                  end,
+         CA = blizanci_x509:test_write_pem(
+                Dir, "ca.pem",
+                [{'Certificate',
+                  maps:get(ca, blizanci_x509:test_pki()),
+                  not_encrypted}]),
+         Missing = filename:join(Dir, "missing.pem"),
+         [?_assertMatch({ok, #route{auth_policy = {private, [CA]}}},
+                        Static([CA])),
+          ?_assertEqual({error, {invalid_ca_file, Missing, enoent}},
+                        Static([CA, Missing]))]
+     end}.
 
 route_merges_default_options_test() ->
     {ok, #route{options = Options}} =
@@ -649,6 +675,12 @@ describe_error_test_() ->
                    describe_error(
                      {invalid_routing,
                       {route_without_path_group, "x", blizanci_static}})),
+     ?_assertEqual("invalid routing table: a private route's CA file "
+                   "/x/ca.pem cannot be used (enoent); check that it "
+                   "exists and holds a PEM certificate",
+                   describe_error(
+                     {invalid_routing,
+                      {invalid_ca_file, "/x/ca.pem", enoent}})),
      ?_assertEqual("invalid routing table: route for servlet "
                    "blizanci_static has invalid options: "
                    "{docroot_not_a_directory,\"/nope\"}",

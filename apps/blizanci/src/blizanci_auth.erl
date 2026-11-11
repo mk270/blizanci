@@ -22,7 +22,7 @@
 %% @end
 -spec authorisation_policy(Options) -> Result
               when Options :: map(),
-                   Result  :: {'ok', authorisation()} | {'error', atom()}.
+                   Result  :: {'ok', authorisation()} | {'error', term()}.
 
 authorisation_policy(Options) when is_map(Options) ->
     #{ authorisation := Auth } = Options,
@@ -33,12 +33,31 @@ authorisation_policy(Options) when is_map(Options) ->
 %% @end
 -spec valid_authz_policy(Policy) -> Result
               when Policy :: term(),
-                   Result :: {ok, authorisation()} | {error, atom()}.
+                   Result :: {ok, authorisation()} | {error, term()}.
 
 valid_authz_policy(public) -> {ok, public};
 valid_authz_policy(restricted) -> {ok, restricted};
-valid_authz_policy({private, Keys}) -> {ok, {private, Keys}};
+valid_authz_policy({private, Files}) when is_list(Files) ->
+    % the issuer files are read at request time, so a bad one is
+    % refused here, when routes are built, rather than crash a request
+    case valid_ca_files(Files) of
+        ok -> {ok, {private, Files}};
+        {error, _} = Error -> Error
+    end;
 valid_authz_policy(_) -> {error, invalid_authz_policy}.
+
+
+-spec valid_ca_files(Files) -> Result
+              when Files  :: [term()],
+                   Result :: 'ok' | {'error', {'invalid_ca_file', term(),
+                                              term()}}.
+valid_ca_files([]) ->
+    ok;
+valid_ca_files([File | Rest]) ->
+    case blizanci_x509:validate_ca_file(File) of
+        ok -> valid_ca_files(Rest);
+        {error, Why} -> {error, {invalid_ca_file, File, Why}}
+    end.
 
 
 %% @doc Check if a route's authorisation policy permits a given request
@@ -140,8 +159,6 @@ cert_issued_by(DerCert, Issuer) ->
 policy_test_() ->
     [?_assertEqual({ok, public}, valid_authz_policy(public)),
      ?_assertEqual({ok, restricted}, valid_authz_policy(restricted)),
-     ?_assertEqual({ok, {private, ["ca.pem"]}},
-                   valid_authz_policy({private, ["ca.pem"]})),
      ?_assertEqual({ok, {private, []}}, valid_authz_policy({private, []})),
      ?_assertEqual({error, invalid_authz_policy},
                    valid_authz_policy(private)),
@@ -149,17 +166,59 @@ policy_test_() ->
                    valid_authz_policy(secret)),
      ?_assertEqual({error, invalid_authz_policy},
                    valid_authz_policy({restricted, []})),
-     % the list of CA files in a private policy is not itself checked
-     ?_assertEqual({ok, {private, not_a_list}},
+     % the CA files of a private policy must be a list
+     ?_assertEqual({error, invalid_authz_policy},
                    apply(?MODULE, valid_authz_policy,
                          [{private, not_a_list}]))].
+
+% The CA files of a private policy are checked when the policy is
+% validated (that is, when the route is built), not on the first request.
+policy_private_ca_files_test_() ->
+    authorised_fixture(
+      fun(_Pki, #{ca := CA, ca2 := CA2, text := Text, missing := Missing,
+                  dir := Dir}) ->
+          Valid = fun(Files) -> valid_authz_policy({private, Files}) end,
+          Bad = fun(File, Why) ->
+                    {error, {invalid_ca_file, File, Why}}
+                end,
+          Write = fun(Name, Data) ->
+                      File = filename:join(Dir, Name),
+                      ok = file:write_file(File, Data),
+                      File
+                  end,
+          Key = Write("key.pem", <<"-----BEGIN PRIVATE KEY-----\n"
+                                   "AQID\n"
+                                   "-----END PRIVATE KEY-----\n">>),
+          Junk = Write("junk.pem", <<"-----BEGIN CERTIFICATE-----\n"
+                                     "AQID\n"
+                                     "-----END CERTIFICATE-----\n">>),
+          Empty = Write("empty.pem", <<>>),
+          [?_assertEqual({ok, {private, [CA]}}, Valid([CA])),
+           ?_assertEqual({ok, {private, [CA, CA2]}}, Valid([CA, CA2])),
+           ?_assertEqual({ok, {private, []}}, Valid([])),
+           ?_assertEqual(Bad(Missing, enoent), Valid([Missing])),
+           ?_assertEqual(Bad(Dir, eisdir), Valid([Dir])),
+           ?_assertEqual(Bad(Text, no_certificate_in_file), Valid([Text])),
+           ?_assertEqual(Bad(Empty, no_certificate_in_file),
+                         Valid([Empty])),
+           ?_assertEqual(Bad(Key, no_certificate_in_file), Valid([Key])),
+           ?_assertEqual(Bad(Junk, certificate_not_decodable),
+                         Valid([Junk])),
+           % the first bad file is the one reported, wherever it is
+           ?_assertEqual(Bad(Missing, enoent), Valid([CA, Missing, Text])),
+           % a CA must be a string, not a binary or anything else
+           ?_assertEqual(Bad(list_to_binary(CA), not_a_path),
+                         apply(?MODULE, valid_authz_policy,
+                               [{private, [list_to_binary(CA)]}])),
+           ?_assertEqual(Bad("", not_a_path), Valid([""]))]
+      end).
 
 authorisation_policy_test_() ->
     [?_assertEqual({ok, restricted},
                    authorisation_policy(#{ authorisation => restricted })),
-     ?_assertEqual({ok, {private, ["ca.pem"]}},
+     ?_assertEqual({ok, {private, []}},
                    authorisation_policy(
-                     #{ authorisation => {private, ["ca.pem"]},
+                     #{ authorisation => {private, []},
                         other => option })),
      ?_assertEqual({error, invalid_authz_policy},
                    authorisation_policy(#{ authorisation => nonsense })),
@@ -193,7 +252,8 @@ authorised_fixture(Tests) ->
          Files = #{ca      => Pem("ca.pem", CA),
                    ca2     => Pem("ca2.pem", CA2),
                    text    => Text,
-                   missing => filename:join(Dir, "missing.pem")},
+                   missing => filename:join(Dir, "missing.pem"),
+                   dir     => Dir},
          {Dir, Pki, Files}
      end,
      fun({Dir, _, _}) -> file:del_dir_r(Dir) end,
@@ -273,11 +333,12 @@ authorised_private_test_() ->
                          Auth([CAFile], {ok, <<"garbage">>}))]
       end).
 
-% What happens when a private route's CA file cannot be used. Nothing
-% catches the failure: it raises, from authorised/2, on the first request
-% that carries a (valid) certificate, which would end the connection (see
-% F4 in the code smell scan). A CA that comes after the one that matches
-% is never read.
+% What happens when a private route's CA file cannot be used by
+% authorised/2 itself, i.e. if the file goes bad after the route was
+% built (building the route refuses it, see policy_private_ca_files_test_).
+% Nothing catches the failure: it raises, on the first request that
+% carries a (valid) certificate. A CA that comes after the one that
+% matches is never read.
 authorised_private_bad_ca_file_test_() ->
     authorised_fixture(
       fun(#{peer := Peer}, #{ca := CAFile, text := Text,
