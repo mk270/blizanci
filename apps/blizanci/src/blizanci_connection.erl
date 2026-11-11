@@ -485,16 +485,40 @@ construct_local_url(Config, Path) ->
                    Path     :: binary(),
                    URI      :: binary().
 
+% Path is a decoded path (as served), so it is percent-encoded here, a
+% segment at a time; otherwise a name containing a space, "%", "?" or "#"
+% would make a malformed or misleading URL.
 construct_url(Scheme, Hostname, Port, Path) ->
     uri_string:recompose(#{ scheme => Scheme,
                             host => Hostname,
                             port => Port,
-                            path => Path }).
+                            path => blizanci_urlpath:encode_path(Path) }).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Tests.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% A redirect's location is the decoded path, encoded again.
+construct_url_test_() ->
+    U = fun(Path) -> construct_url(<<"gemini">>, <<"h">>, 1965, Path) end,
+    [?_assertEqual(<<"gemini://h:1965/dir1/index.gemini">>,
+                   U(<<"dir1/index.gemini">>)),
+     ?_assertEqual(<<"gemini://h:1965/sp%20ace/index.gemini">>,
+                   U(<<"sp ace/index.gemini">>)),
+     ?_assertEqual(<<"gemini://h:1965/100%25/index.gemini">>,
+                   U(<<"100%/index.gemini">>)),
+     ?_assertEqual(<<"gemini://h:1965/x%3Fy%23z/index.gemini">>,
+                   U(<<"x?y#z/index.gemini">>)),
+     % what the client receives decodes back to the path
+     ?_test(begin
+                Path = <<"a b/100%/x?y#z;w/index.gemini">>,
+                Url = U(Path),
+                #{ path := Encoded } = uri_string:parse(Url),
+                <<"/", Raw/binary>> = Encoded,
+                ?assertEqual({ok, {decoded_path, Path}},
+                             blizanci_urlpath:decode_path(Raw))
+            end)].
 
 %% A client that disconnects right after the handshake must make the
 %% connection process exit normally, not crash.

@@ -235,10 +235,12 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
     % (returning file_not_found rather than crashing) if the resolved
     % path can't be canonicalised, or resolves outside CGIRoot.
     %
-    % Until the CGI boundary (erlexec) has been shown to handle names as
-    % bytes, the script's name must be printable ASCII, and it is handed
-    % over as a string, as before.
-    case {printable_ascii(Path), blizanci_path:confine(Path, CGIRoot)} of
+    % The request path arrives percent-decoded (so it may hold a space or
+    % shell metacharacters). How erlexec treats such characters has not
+    % been audited, so until then the script's path may contain only
+    % letters, digits and ". _ - /" (see issues.md), and it is handed over
+    % as a string, as before.
+    case {cgi_alphabet(Path), blizanci_path:confine(Path, CGIRoot)} of
         {true, {ok, Cmd}} -> serve_cgi_bytes(Cmd, Path, Matches, Req,
                                               {Hostname, Port}, CGIPrefix);
         _ -> {gateway_error, file_not_found}
@@ -257,11 +259,11 @@ serve_cgi_bytes(Cmd, Path, Matches, Req, HostPort, CGIPrefix) ->
     end.
 
 
--spec printable_ascii(Path) -> Result
+-spec cgi_alphabet(Path) -> Result
               when Path   :: binary(),
                    Result :: boolean().
-printable_ascii(Path) ->
-    re:run(Path, <<"^[\\x20-\\x7e]*$">>, [{capture, none}]) =:= match.
+cgi_alphabet(Path) ->
+    re:run(Path, <<"^[A-Za-z0-9._/-]*$">>, [{capture, none}]) =:= match.
 
 
 -spec serve_cgi(Cmd, Path, Matches, Req, HostPort, CGIPrefix) -> Result
@@ -586,6 +588,8 @@ handle_client_data(_, _) -> none.
 %% tests need no worker pool.
 %% Fixture, under a fresh temporary directory:
 %%   Base/cgi/{.hidden,.well-known/x,sub/.y}
+%%   Base/cgi/<scripts with awkward names: "a b", "a;b", "a&b", "a|b",
+%%             "a$b", "a`b", "a'b", "a\"b", "a\\b", "a%b">>
 hidden_scripts_test_() ->
     {setup, fun hidden_setup/0, fun hidden_teardown/1, fun hidden_tests/1}.
 
@@ -597,7 +601,9 @@ hidden_setup() ->
           Path = filename:join(Dir, Rel),
           ok = filelib:ensure_path(filename:dirname(Path)),
           ok = file:write_file(Path, <<"#!/bin/sh\n">>)
-      end || Rel <- [".hidden", ".well-known/x", "sub/.y"] ],
+      end || Rel <- [".hidden", ".well-known/x", "sub/.y", "a b", "a;b",
+                     "a&b", "a|b", "a$b", "a`b", "a'b", "a\"b", "a\\b",
+                     "a%b"] ],
     Base.
 
 hidden_teardown(Base) ->
@@ -611,7 +617,19 @@ hidden_tests(Base) ->
     Serve = fun(Path) ->
                 serve(#{ <<"PATH">> => Path }, #{ query => <<>> }, Cfg, Opts)
             end,
-    [% CGI script names stay ASCII-only for now (see serve/4)
+    [% CGI script paths are restricted to letters, digits and "._-/" for
+     % now (see serve/4): spaces and shell metacharacters, from decoded
+     % escapes, are refused, as is anything non-ASCII
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a b">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a;b">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a&b">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a|b">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a$b">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a`b">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a'b">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a\"b">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a\\b">>)),
+     ?_assertEqual({gateway_error, file_not_found}, Serve(<<"a%b">>)),
      ?_assertEqual({gateway_error, file_not_found}, Serve(<<195, 169>>)),
      ?_assertEqual({gateway_error, file_not_found}, Serve(<<"ok", 233>>)),
      ?_assertEqual({gateway_error, file_not_found}, Serve(<<".hidden">>)),

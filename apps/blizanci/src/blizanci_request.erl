@@ -162,7 +162,10 @@ handle_gemini_url(Proto,
                          port := Port,
                          path := Path },
                   Config=#server_config{hostname=Host, port=Port}) ->
-    handle_path(Proto, uri_string:normalize(Path), Req, Config);
+    case uri_string:normalize(Path) of
+        {error, _, _} -> {error_code, request_not_parsed};
+        Normalised    -> handle_path(Proto, Normalised, Req, Config)
+    end;
 
 handle_gemini_url(_Proto, #{ host := <<>>, port := Port },
                   #server_config{port=Port}) ->
@@ -194,7 +197,10 @@ handle_path(Proto, Path, Req, Config) ->
     handle_file(Proto, Path, Req, Config).
 
 
-% Disallow URLs with a ".." in them
+% Percent-decode the path (see blizanci_urlpath for the rules), and
+% disallow URLs with a ".." in them. This is the only place a request path
+% is decoded: from here on, Path is the decoded path, and must never be
+% decoded again. The query is not touched.
 -spec handle_file(Proto, Path, Req, Config) -> Result
               when Proto  :: atom(),
                    Path   :: binary(),
@@ -203,9 +209,53 @@ handle_path(Proto, Path, Req, Config) ->
                    Result :: gemini_response().
 
 handle_file(Proto, Path, Req, Config) when is_binary(Path) ->
+    case decode(Proto, Path) of
+        {ok, Decoded} -> handle_decoded(Proto, Decoded, Req, Config);
+        {error, Code} -> {error_code, Code}
+    end.
+
+
+-spec handle_decoded(Proto, Path, Req, Config) -> Result
+              when Proto  :: atom(),
+                   Path   :: binary(),
+                   Req    :: request_details(),
+                   Config :: server_config(),
+                   Result :: gemini_response().
+
+handle_decoded(Proto, Path, Req, Config) ->
     case string:split(Path, "..") of
         [_] -> serve(Proto, Path, Req, Config);
         [_, _] -> {error_code, bad_filename}
+    end.
+
+
+% A Titan path is "file;parameters": the parameters are split off the RAW
+% path first, so that an escaped ";" in the file name can never be taken
+% for their start, and only the file part is decoded. A decoded ";" is
+% refused for Titan, since it could not be told from the delimiter if the
+% path were split again. The parameters are passed on exactly as sent
+% (the Titan servlet reads them).
+-spec decode(Proto, Path) -> Result
+              when Proto  :: atom(),
+                   Path   :: binary(),
+                   Result :: {ok, binary()}
+                           | {error, request_not_parsed | bad_filename}.
+
+decode(titan, Path) ->
+    {File, Params} = blizanci_urlpath:split_titan(Path),
+    case blizanci_urlpath:decode_path(File) of
+        {ok, {decoded_path, Decoded}} ->
+            case binary:match(Decoded, <<";">>) of
+                nomatch when Params =:= none -> {ok, Decoded};
+                nomatch -> {ok, <<Decoded/binary, ";", Params/binary>>};
+                _ -> {error, bad_filename}
+            end;
+        {error, _} = Error -> Error
+    end;
+decode(_Proto, Path) ->
+    case blizanci_urlpath:decode_path(Path) of
+        {ok, {decoded_path, Decoded}} -> {ok, Decoded};
+        {error, _} = Error -> Error
     end.
 
 
@@ -374,3 +424,126 @@ case_insensitive_scheme_and_host_test_() ->
      ?_assertEqual(?NOT_FOUND, H(<<"gemini://This.Host.Dev:1965/nothere">>)),
      ?_assertEqual(?NOT_FOUND, H(<<"GEMINI://THIS.HOST.DEV/nothere">>))].
 -endif.
+
+
+%% Percent-escapes in the path are decoded, exactly once, after the path
+%% structure is known; the result must be printable ASCII, and must not
+%% contain a "/" that was escaped. Fixture, under a fresh temporary
+%% directory:
+%%   Base/docs/{"a b", "100%", "%2e", "semi;colon", ".env",
+%%              "sp ace/plain"}
+%%   Base/titan/{"my file.txt", "x"}
+%% Files have no extension, so no MIME lookup is involved.
+percent_decoding_test_() ->
+    {setup, fun percent_setup/0, fun percent_teardown/1,
+     fun percent_tests/1}.
+
+percent_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("percent_test_" ++ Unique),
+    ok = filelib:ensure_path(filename:join(Base, "docs/sp ace")),
+    ok = filelib:ensure_path(filename:join(Base, "titan")),
+    ok = filelib:ensure_path(filename:join(Base, "work")),
+    [ ok = file:write_file(filename:join([Base, "docs", F]), <<"x">>)
+      || F <- ["a b", "100%", "%2e", "semi;colon", ".env",
+               "sp ace/plain"] ],
+    [ ok = file:write_file(filename:join([Base, "titan", F]), <<"x">>)
+      || F <- ["my file.txt", "x"] ],
+    Base.
+
+percent_teardown(Base) ->
+    file:del_dir_r(Base).
+
+percent_tests(Base) ->
+    Docs = filename:join(Base, "docs"),
+    Titan = filename:join(Base, "titan"),
+    Routes = [{gemini, <<"(?<PATH>.*)">>, blizanci_static, public,
+               #{ docroot => Docs }},
+              {titan, <<"(?<PATH>.*)">>, blizanci_titan, public,
+               #{ docroot => Titan,
+                  work_dir => list_to_binary(filename:join(Base, "work")) }}],
+    {ok, Routing} = blizanci_router:prepare(Routes),
+    Config = #server_config{hostname = <<"this.host.dev">>, port = 1965,
+                            routing = Routing, docroot = Docs},
+    H = fun(Path) ->
+            handle_line(<<"gemini://this.host.dev/", Path/binary>>,
+                        Config, {error, no_peercert}, <<>>)
+        end,
+    T = fun(Path) ->
+            handle_line(<<"titan://this.host.dev/", Path/binary>>,
+                        Config, {error, no_peercert}, <<>>)
+        end,
+    Malformed = {error_code, request_not_parsed},
+    BadName = {error_code, bad_filename},
+    [% escapes are decoded: a space, a percent sign, upper or lower case
+     ?_assertMatch({file, _, _}, H(<<"a%20b">>)),
+     ?_assertMatch({file, _, _}, H(<<"100%25">>)),
+     ?_assertMatch({file, _, _}, H(<<"semi%3Bcolon">>)),
+     ?_assertMatch({file, _, _}, H(<<"semi%3bcolon">>)),
+     ?_assertEqual({redirect, <<"sp ace/index.gemini">>},
+                   H(<<"sp%20ace/">>)),
+     ?_assertMatch({file, _, _}, H(<<"sp%20ace/plain">>)),
+     % decoded once only: %252e is the text "%2e", a file that exists
+     ?_assertMatch({file, _, _}, H(<<"%252e">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"%252e%252e/x">>)),
+     % an escape for "/" would make a new separator: refused, either case
+     ?_assertEqual(BadName, H(<<"a%2Fb">>)),
+     ?_assertEqual(BadName, H(<<"a%2fb">>)),
+     % NUL, control characters, DEL
+     ?_assertEqual(BadName, H(<<"a%00b">>)),
+     ?_assertEqual(BadName, H(<<"a%0Ab">>)),
+     ?_assertEqual(BadName, H(<<"a%09b">>)),
+     ?_assertEqual(BadName, H(<<"a%7Fb">>)),
+     % anything that decodes to a non-ASCII byte: valid UTF-8 or not
+     ?_assertEqual(BadName, H(<<"%C3%A9.txt">>)),
+     ?_assertEqual(BadName, H(<<"caf%E9">>)),
+     ?_assertEqual(BadName, H(<<"%FF">>)),
+     % malformed escapes
+     ?_assertEqual(Malformed, H(<<"a%zzb">>)),
+     ?_assertEqual(Malformed, H(<<"a%4">>)),
+     ?_assertEqual(Malformed, H(<<"a%">>)),
+     ?_assertEqual(Malformed, H(<<"%">>)),
+     ?_assertEqual(Malformed, H(<<"%2">>)),
+     ?_assertEqual(Malformed, H(<<"a%G0">>)),
+     % dot segments, escaped or not, cannot climb out, and a hidden name
+     % written with an escape is still hidden
+     ?_assertEqual(?NOT_FOUND, H(<<"%2e%2e/x">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"%2E%2E/%2E%2E/x">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"%2Eenv">>)),
+     ?_assertEqual(?NOT_FOUND, H(<<"sp%20ace/%2e%2e/%2eenv">>)),
+     % the query is not touched
+     ?_assertMatch({file, _, _}, H(<<"a%20b?x=%zz">>)),
+     % Titan: the parameters are split off the raw path before the file
+     % name is decoded
+     % (Titan runs as a separate process, so what is checked is its effect:
+     % the file with the decoded name is the one deleted)
+     ?_test(begin
+                ?assertMatch({init_servlet, _},
+                             T(<<"my%20file.txt;size=0">>)),
+                ?assert(gone(filename:join(Titan, "my file.txt")))
+            end),
+     % an escaped ";" cannot forge a parameter, nor be part of the name
+     ?_assertEqual(BadName, T(<<"x%3Bsize=0;size=0">>)),
+     ?_assertEqual(BadName, T(<<"x%3bsize=0;size=0">>)),
+     ?_assert(filelib:is_file(filename:join(Titan, "x"))),
+     ?_assertEqual(Malformed, T(<<"x%zz;size=0">>)),
+     ?_assertEqual(BadName, T(<<"x%2Fy;size=0">>)),
+     % the parameters after the first ";" are the client's own, undecoded
+     % here (Titan reads them)
+     ?_test(begin
+                ?assertMatch({init_servlet, _},
+                             T(<<"x;size=0;mime=text/plain">>)),
+                ?assert(gone(filename:join(Titan, "x")))
+            end)].
+
+% Wait (up to two seconds) for a file to be gone.
+gone(Path) ->
+    gone(Path, 40).
+
+gone(Path, 0) ->
+    not filelib:is_file(Path);
+gone(Path, N) ->
+    case filelib:is_file(Path) of
+        false -> true;
+        true -> timer:sleep(50), gone(Path, N - 1)
+    end.

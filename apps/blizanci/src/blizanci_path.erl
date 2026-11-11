@@ -104,10 +104,13 @@ path_under_root(S, Root) when is_list(S), is_list(Root) ->
 %%
 %% SubPath may contain any bytes except control characters: NUL, the
 %% other bytes below 16#20, and 16#7F (DEL) are refused. Bytes 16#80 and
-%% above are allowed, whether or not they form valid UTF-8: that is a
-%% question for whoever decoded the URL, not for a name that is only
-%% bytes. Root is not restricted this way (it is the operator's), but may
-%% not contain NUL, which operating systems treat as the end of a name.
+%% above are allowed, whether or not they form valid UTF-8. This is
+%% deliberately NOT a policy on which names are acceptable: invisible,
+%% bidirectional and look-alike characters (zero-width characters, bidi
+%% overrides and so on) pass through here, and are for the caller, in the
+%% URL layer, to refuse. Root is not restricted this way (it is the
+%% operator's), but may not contain NUL, which operating systems treat as
+%% the end of a name.
 %% Anything other than a binary as SubPath is refused.
 %%
 %% Hidden files are refused: any path segment beginning with a dot is
