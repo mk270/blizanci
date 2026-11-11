@@ -30,9 +30,11 @@
          docroot  :: string() | 'undefined'}).
 -type site() :: #site{}.
 
+%% The fields are not trusted to have the right types until validated (see
+%% blizanci_config:validate/1), since they may come from unchecked config.
 -record(global,
-        {port     :: integer(),
-         servlets :: [module()]}).
+        {port     :: term(),
+         servlets :: term()}).
 -type global_config() :: #global{}.
 
 -record(config,

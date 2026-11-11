@@ -155,9 +155,8 @@ mime_type(Path, BareMimeType, UnknownMimeType)
         [] -> BareMimeType;
         [_Dot|Rest] -> Key = erlang:list_to_binary(Rest),
                       case mime_lookup:lookup(Key) of
-                          {ok, Result} when is_binary(Result) -> Result;
-                          notfound -> UnknownMimeType;
-                          _ -> UnknownMimeType
+                          {ok, Result} -> Result;
+                          notfound -> UnknownMimeType
                       end
     end.
 

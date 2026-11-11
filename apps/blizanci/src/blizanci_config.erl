@@ -82,8 +82,8 @@ route(Proto, Regex, Module, AuthPolicy, Opts) ->
 % The global part of a configuration: one per blizanci instance,
 % however many sites it serves.
 -spec global(Port, Servlets) -> Result
-              when Port     :: integer(),
-                   Servlets :: [module()],
+              when Port     :: term(),
+                   Servlets :: term(),
                    Result   :: global_config().
 global(Port, Servlets) ->
     #global{port = Port, servlets = Servlets}.
