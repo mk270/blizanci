@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## Unreleased
+
+- Fold the host and the scheme of a request, and site names, with an
+  ASCII-only lowercase, exported as `blizanci_config:ascii_lowercase/1`
+
 ## 5.24.0
 
 - Treat the URL scheme, the URL host and the SNI name as case-insensitive;
