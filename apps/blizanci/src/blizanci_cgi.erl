@@ -33,7 +33,8 @@
 %   {gateway_output, binary()}
 % | {gateway_error, cgi_error()}
 %
-% This is done by calling blizanci_servlet_container:gateway_exit/2.
+% This is done by calling blizanci_servlet_container:gateway_exit/2
+% (an asynchronous cast, which is safe if the servlet has gone).
 %
 % The servlet has an analogous protocol for communicating back to the
 % connection handler.
