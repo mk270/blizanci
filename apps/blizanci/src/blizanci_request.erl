@@ -104,9 +104,13 @@ handle_parsed_url(URI, Config, Cert, Rest) ->
                       <<>> -> <<"/">>;
                       P -> P
                   end,
+
+        SchemeLC  = strings:lowercase(Scheme),
+        ReqHostLC = strings:lowercase(ReqHost),
+
         Query = maps:get(query, URI, <<>>),
-        #{ scheme        => Scheme,
-           host          => ReqHost,
+        #{ scheme        => SchemeLC,
+           host          => ReqHostLC,
            port          => ReqPort,
            path          => ReqPath,
            query         => Query,
