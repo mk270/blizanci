@@ -376,6 +376,13 @@ describe_error(Other) ->
 describe_route_error({route_without_path_group, Regex, Module}) ->
     flat("route ~0p (servlet ~0p) has no named group PATH in its regex; "
          "add one, e.g. (?<PATH>.*)", [Regex, Module]);
+describe_route_error({invalid_route_options, blizanci_titan,
+                      {work_dir_not_a_directory, Dir}}) ->
+    {ok, Cwd} = file:get_cwd(),
+    flat("the Titan route's work_dir ~ts is not a directory (a relative "
+         "path is taken from the working directory, ~ts); create it, "
+         "or set work_dir in the Titan route's options to an existing "
+         "directory", [Dir, Cwd]);
 describe_route_error({invalid_ca_file, File, Why}) ->
     flat("a private route's CA file ~ts cannot be used (~0p); check that "
          "it exists and holds a PEM certificate", [File, Why]);
@@ -681,6 +688,35 @@ make_site_test_() ->
                         [{gopher, ?RX, blizanci_static, public, Opts}])),
      ?_assertEqual({error, hostname_not_lowercase},
                    Make("Example.org", [Good]))].
+
+% The default Titan route has a relative work_dir, which is missing
+% unless the working directory has a titan-temp in it.
+describe_titan_work_dir_test() ->
+    {ok, Cwd} = file:get_cwd(),
+    Work = filename:join(blizanci_x509:test_tmp_dir(), "no-such-dir"),
+    {error, Reason} =
+        blizanci_router:prepare([{titan, ?RX, blizanci_titan, public,
+                                  #{ docroot => ?TEST_DOCROOT,
+                                     work_dir => list_to_binary(Work) }}]),
+    ?assertEqual({invalid_route_options, blizanci_titan,
+                  {work_dir_not_a_directory, list_to_binary(Work)}},
+                 Reason),
+    ?assertEqual("invalid routing table: the Titan route's work_dir "
+                 ++ Work ++ " is not a directory (a relative path is "
+                 "taken from the working directory, " ++ Cwd ++ "); "
+                 "create it, or set work_dir in the Titan route's "
+                 "options to an existing directory",
+                 describe_error({invalid_routing, Reason})),
+    % and for the default relative directory
+    ?assertEqual("invalid routing table: the Titan route's work_dir "
+                 "titan-temp is not a directory (a relative path is "
+                 "taken from the working directory, " ++ Cwd ++ "); "
+                 "create it, or set work_dir in the Titan route's "
+                 "options to an existing directory",
+                 describe_error(
+                   {invalid_routing,
+                    {invalid_route_options, blizanci_titan,
+                     {work_dir_not_a_directory, <<"titan-temp">>}}})).
 
 describe_error_test_() ->
     [?_assertEqual("invalid routing table: route \"x\" (servlet "

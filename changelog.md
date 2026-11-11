@@ -29,6 +29,13 @@
   to be accepted and fail with `undef` on the first request). A
   non-module is still `{not_a_servlet, Term}`; a module `lists` now gives
   the new term rather than `{not_a_servlet, lists}`
+- Say what is wrong, at start-up, when the Titan route's work_dir (by
+  default the relative `titan-temp`) is not a directory: the message
+  names the directory and the route, says relative paths are taken
+  from the working directory, and says to create it or set work_dir;
+  new `blizanci_config:describe_error/1` formats errors from
+  `make_site/5` and `from_app_env/0`. The directory is not created and
+  the default is unchanged
 - `blizanci_router`: the regex of a `route_info()` may now be given as
   a string as well as a binary, as `build_route/5` already allowed
 
