@@ -1,5 +1,3 @@
-%%%-------------------------------------------------------------------
-
 %% blizanci, a Gemini protocol server, by Martin Keegan
 %%
 %% To the extent (if any) permissible by law, Copyright (C) 2020  Martin Keegan
@@ -7,7 +5,12 @@
 %% This programme is free software; you may redistribute and/or modify it under
 %% the terms of the Apache Software Licence v2.0.
 
-% TBD: module-level docs
+% A servlet accepting Titan uploads into a route's docroot. Its
+% request/4 always defers: the upload body arrives after the request
+% line, and is passed to a worker process (run in a ppool queue, and
+% also a gen_server) via handle_client_data/2. The data is staged in
+% the route's work_dir and moved to its place under the docroot once
+% complete; a request of size 0 deletes the resource instead.
 %
 % The Titan protocol, for uploading to Gemini servers, is specified at
 %   gemini://transjovian.org/titan/The%20Titan%20Specification
