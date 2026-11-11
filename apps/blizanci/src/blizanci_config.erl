@@ -60,7 +60,8 @@
 
 -export([from_app_env/0, make/3, find_site/2, route/5,
          global/2, site/3, add_route/2, insert_route/3, routes/1,
-         new/2, validate/1, apply/1, ascii_lowercase/1]).
+         new/2, validate/1, apply/1, ascii_lowercase/1,
+         describe_error/1]).
 
 -define(PORT, 1965).
 -define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
@@ -343,13 +344,49 @@ start_servlets([Servlet | Rest], Started) ->
                    Docroot  :: string(),
                    Routes   :: [route_entry()],
                    Result   :: {'ok', site()}
-                             | {'error', 'hostname_not_lowercase'}.
+                             | {'error', 'hostname_not_lowercase'}
+                             | {'error', {'invalid_routing', term()}}.
 make_site(Hostname, Cert, Key, Docroot, Routes) ->
-    {ok, Routing} = blizanci_router:prepare(Routes),
-    case site(Hostname, Cert, Key) of
-        {ok, Site} -> {ok, Site#site{routing = Routing, docroot = Docroot}};
-        {error, _} = Error -> Error
+    case blizanci_router:prepare(Routes) of
+        {ok, Routing} ->
+            case site(Hostname, Cert, Key) of
+                {ok, Site} ->
+                    {ok, Site#site{routing = Routing, docroot = Docroot}};
+                {error, _} = Error -> Error
+            end;
+        {error, Reason} -> {error, {invalid_routing, Reason}}
     end.
+
+
+% A one-line, human-readable account of an error from make_site/5 or
+% from_app_env/0, for the log at start-up.
+-spec describe_error(Error) -> Result
+              when Error  :: term(),
+                   Result :: string().
+describe_error({invalid_routing, Reason}) ->
+    "invalid routing table: " ++ describe_route_error(Reason);
+describe_error(hostname_not_lowercase) ->
+    "hostname is not lower case";
+describe_error(Other) ->
+    flat("configuration error: ~0p", [Other]).
+
+-spec describe_route_error(Reason) -> Result
+              when Reason :: term(),
+                   Result :: string().
+describe_route_error({route_without_path_group, Regex, Module}) ->
+    flat("route ~0p (servlet ~0p) has no named group PATH in its regex; "
+         "add one, e.g. (?<PATH>.*)", [Regex, Module]);
+describe_route_error({invalid_route_options, Module, Reason}) ->
+    flat("route for servlet ~p has invalid options: ~0p", [Module, Reason]);
+describe_route_error(Reason) ->
+    flat("~0p", [Reason]).
+
+-spec flat(Format, Args) -> Result
+              when Format :: string(),
+                   Args   :: [term()],
+                   Result :: string().
+flat(Format, Args) ->
+    lists:flatten(io_lib:format(Format, Args)).
 
 
 -spec find_site(Hostname, Sites) -> Result
@@ -491,7 +528,7 @@ make(Port, Servlets, Sites) ->
 % blizanci's own application context (application:get_application/0
 % resolves via the calling process), i.e. from blizanci_app:start/2.
 -spec from_app_env() -> Result
-              when Result :: map().
+              when Result :: {'ok', map()} | {'error', term()}.
 from_app_env() ->
     {ok, App} = application:get_application(),
     {ok, Default_Hostname} = inet:gethostname(),
@@ -511,11 +548,14 @@ from_app_env() ->
     % Today's sys.config only ever describes a single site, so this
     % is a one-element list; everything downstream looks sites up by
     % hostname and doesn't assume that.
-    {ok, Site} = make_site(Hostname, Cert, Key, Docroot, Routes),
-    Sites = [Site],
-    Port = application:get_env(App, port, ?PORT),
-    Servlets = application:get_env(App, servlets, ?DEFAULT_SERVLETS),
-    make(Port, Servlets, Sites).
+    case make_site(Hostname, Cert, Key, Docroot, Routes) of
+        {ok, Site} ->
+            Port = application:get_env(App, port, ?PORT),
+            Servlets = application:get_env(App, servlets,
+                                           ?DEFAULT_SERVLETS),
+            {ok, make(Port, Servlets, [Site])};
+        {error, _} = Error -> Error
+    end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -523,6 +563,7 @@ from_app_env() ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -define(TEST_DOCROOT, "test-docroot").
+-define(RX, "(?<PATH>x)").
 
 test_site(Hostname, Cert, Key) ->
     {ok, Site} = site(Hostname, Cert, Key),
@@ -539,13 +580,13 @@ route_ok_test_() ->
                    Static("(?<PATH>.*)", public)),
      ?_assertMatch({ok, #route{}}, Static(<<"(?<PATH>.*)">>, public)),
      ?_assertMatch({ok, #route{auth_policy = restricted}},
-                   Static("x", restricted)),
+                   Static(?RX, restricted)),
      ?_assertMatch({ok, #route{auth_policy = {private, ["ca.pem"]}}},
-                   Static("x", {private, ["ca.pem"]}))].
+                   Static(?RX, {private, ["ca.pem"]}))].
 
 route_merges_default_options_test() ->
     {ok, #route{options = Options}} =
-        route(gemini, "x", blizanci_static, public,
+        route(gemini, ?RX, blizanci_static, public,
               #{ docroot => ?TEST_DOCROOT }),
     Defaults = blizanci_static:default_options(),
     ?assertEqual(maps:merge(Defaults, #{ docroot => ?TEST_DOCROOT }),
@@ -560,25 +601,61 @@ route_errors_test_() ->
                          [Proto, Regex, Module, Authz, RouteOpts])
                end,
     [?_assertMatch({error, {invalid_proto, gopher}},
-                   route(gopher, "x", blizanci_static, public, Opts)),
+                   route(gopher, ?RX, blizanci_static, public, Opts)),
      ?_assertMatch({error, {invalid_regex, "(", _}},
                    route(gemini, "(", blizanci_static, public, Opts)),
      ?_assertMatch({error, {invalid_regex, 42, not_a_string}},
                    BadRoute(gemini, 42, blizanci_static, public, Opts)),
      ?_assertEqual({error, {unknown_servlet, no_such_servlet}},
-                   route(gemini, "x", no_such_servlet, public, Opts)),
+                   route(gemini, ?RX, no_such_servlet, public, Opts)),
      ?_assertEqual({error, {not_a_servlet, lists}},
-                   route(gemini, "x", lists, public, Opts)),
+                   route(gemini, ?RX, lists, public, Opts)),
      ?_assertEqual({error, {not_a_servlet, "blizanci_static"}},
-                   BadRoute(gemini, "x", "blizanci_static", public, Opts)),
+                   BadRoute(gemini, ?RX, "blizanci_static", public, Opts)),
      ?_assertEqual({error, {invalid_authz_policy, bogus}},
-                   BadRoute(gemini, "x", blizanci_static, bogus, Opts)),
+                   BadRoute(gemini, ?RX, blizanci_static, bogus, Opts)),
      ?_assertEqual({error, {invalid_route_opts, not_a_map}},
-                   BadRoute(gemini, "x", blizanci_static, public, not_a_map)),
+                   BadRoute(gemini, ?RX, blizanci_static, public, not_a_map)),
      ?_assertEqual({error, {invalid_route_options, blizanci_static,
                             {docroot_not_a_directory, "/no/such/dir"}}},
-                   route(gemini, "x", blizanci_static, public,
+                   route(gemini, ?RX, blizanci_static, public,
                          #{ docroot => "/no/such/dir" }))].
+
+make_site_test_() ->
+    Opts = #{ docroot => ?TEST_DOCROOT },
+    Good = {gemini, ?RX, blizanci_static, public, Opts},
+    Bad = {gemini, "x", blizanci_static, public, Opts},
+    Make = fun(Host, Routes) ->
+               make_site(Host, "c.pem", "k.pem", "docroot", Routes)
+           end,
+    [?_assertMatch({ok, #site{docroot = "docroot",
+                              routing = [#route{}]}},
+                   Make("example.org", [Good])),
+     % a route error is returned, not raised as a badmatch
+     ?_assertEqual({error, {invalid_routing,
+                            {route_without_path_group, "x",
+                             blizanci_static}}},
+                   Make("example.org", [Good, Bad])),
+     ?_assertMatch({error, {invalid_routing, {invalid_proto, gopher}}},
+                   Make("example.org",
+                        [{gopher, ?RX, blizanci_static, public, Opts}])),
+     ?_assertEqual({error, hostname_not_lowercase},
+                   Make("Example.org", [Good]))].
+
+describe_error_test_() ->
+    [?_assertEqual("invalid routing table: route \"x\" (servlet "
+                   "blizanci_static) has no named group PATH in its "
+                   "regex; add one, e.g. (?<PATH>.*)",
+                   describe_error(
+                     {invalid_routing,
+                      {route_without_path_group, "x", blizanci_static}})),
+     ?_assertEqual("invalid routing table: route for servlet "
+                   "blizanci_static has invalid options: "
+                   "{docroot_not_a_directory,\"/nope\"}",
+                   describe_error(
+                     {invalid_routing,
+                      {invalid_route_options, blizanci_static,
+                       {docroot_not_a_directory, "/nope"}}}))].
 
 global_test() ->
     ?assertEqual(#global{port = 1965, servlets = [blizanci_static]},
@@ -614,8 +691,8 @@ ascii_lowercase_test_() ->
 
 add_route_appends_test() ->
     Opts = #{ docroot => ?TEST_DOCROOT },
-    {ok, R1} = route(gemini, "a", blizanci_static, public, Opts),
-    {ok, R2} = route(gemini, "b", blizanci_static, restricted, Opts),
+    {ok, R1} = route(gemini, "(?<PATH>a)", blizanci_static, public, Opts),
+    {ok, R2} = route(gemini, "(?<PATH>b)", blizanci_static, restricted, Opts),
     Site0 = test_site("example.org", "c.pem", "k.pem"),
     Site1 = add_route(Site0, R1),
     Site2 = add_route(Site1, R2),
@@ -703,9 +780,9 @@ sni_fun_case_insensitive_test_() ->
 
 insert_route_test_() ->
     Opts = #{ docroot => ?TEST_DOCROOT },
-    {ok, R1} = route(gemini, "a", blizanci_static, public, Opts),
-    {ok, R2} = route(gemini, "b", blizanci_static, public, Opts),
-    {ok, R3} = route(gemini, "c", blizanci_static, public, Opts),
+    {ok, R1} = route(gemini, "(?<PATH>a)", blizanci_static, public, Opts),
+    {ok, R2} = route(gemini, "(?<PATH>b)", blizanci_static, public, Opts),
+    {ok, R3} = route(gemini, "(?<PATH>c)", blizanci_static, public, Opts),
     Site = add_route(add_route(test_site("h", "c.pem", "k.pem"), R1), R2),
     [?_assertEqual({ok, [R3, R1, R2]},
                    rmap(insert_route(Site, 1, R3))),
@@ -863,9 +940,9 @@ validate_upload_in_cgi_dir_test_() ->
      fun() -> {write_test_pem(), make_test_dir()} end,
      fun({Pem, Dir}) -> file:delete(Pem), file:del_dir_r(Dir) end,
      fun({Pem, Dir}) ->
-         {ok, C} = route(gemini, "c", blizanci_cgi, public,
+         {ok, C} = route(gemini, "(?<PATH>c)", blizanci_cgi, public,
                          #{ cgiroot => Dir }),
-         {ok, T} = route(titan, "t", blizanci_titan, public,
+         {ok, T} = route(titan, "(?<PATH>t)", blizanci_titan, public,
                          #{ docroot => Dir, work_dir => Dir }),
          Site = add_route(add_route(test_site("a", Pem, Pem), C), T),
          G = global(1965, [blizanci_cgi, blizanci_titan]),

@@ -1,5 +1,21 @@
 # Blizanci Changelog
 
+## Unreleased
+
+- Refuse at start-up a route whose regex has no named group PATH, with
+  `{route_without_path_group, Regex, Servlet}` from
+  `blizanci_router:prepare/1` and `build_route/5`; every servlet takes
+  the path to serve from that group, and such a route used to crash on
+  its first request (or never match)
+- Breaking for library callers: `blizanci_config:make_site/5` returns
+  `{error, {invalid_routing, Reason}}` for a bad route instead of
+  crashing with a badmatch, and `blizanci_config:from_app_env/0` returns
+  `{ok, Config} | {error, Reason}` instead of the bare config map; the
+  application now fails to start with a one-line message naming the
+  route and the reason
+- `blizanci_router`: the regex of a `route_info()` may now be given as
+  a string as well as a binary, as `build_route/5` already allowed
+
 ## 5.25.0
 
 - Fold the host and the scheme of a request, and site names, with an
