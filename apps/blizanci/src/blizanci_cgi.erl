@@ -67,7 +67,7 @@
 
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
--define(MAX_CGI_OUTPUT_BYTES, 10 * 1024 * 1024). % 10 MiB
+-define(MAX_CGI_OUTPUT_BYTES, (10 * 1024 * 1024)). % 10 MiB
 
 % A note re environment variables.
 %
