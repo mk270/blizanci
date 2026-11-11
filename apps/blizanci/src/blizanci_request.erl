@@ -170,7 +170,7 @@ handle_gemini_url(Proto,
     HostLC     = string:lowercase(Host),
     ConfHostLC = string:lowercase(ConfHost),
 
-    if HostLC =/= ConfHostLC -> {error, host_unrecognised};
+    if HostLC =/= ConfHostLC -> {error_code, host_unrecognised};
        true -> case uri_string:normalize(Path) of
                    {error, _, _} -> {error_code, request_not_parsed};
                    Normalised    -> handle_path(Proto, Normalised, Req, Config)
