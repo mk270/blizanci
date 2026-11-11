@@ -561,3 +561,75 @@ resolve_site_client_gone() ->
         error(server_did_not_exit)
     end,
     ssl:close(Listen).
+
+
+%% What the client is sent when the servlet container reports that a
+%% servlet refused the request before its worker started: the reason
+%% reaches the client where the status table has a failure status for it
+%% (a missing CGI script gives 51), and anything else is a 40. The exit
+%% message fed to handle_info/2 is the container's real one, and the
+%% client is a real TCP socket. Fixture, under a fresh temporary directory:
+%%   Base/cgi/            (empty)
+refused_request_test_() ->
+    {setup, fun refused_setup/0, fun refused_teardown/1,
+     fun refused_tests/1}.
+
+refused_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("connection_refused_test_" ++ Unique),
+    ok = filelib:ensure_path(filename:join(Base, "cgi")),
+    Base.
+
+refused_teardown(Base) ->
+    file:del_dir_r(Base).
+
+%% Feed handle_info/2 the exit message of a container whose servlet
+%% module's serve/4 refused the request, and return the bytes the client
+%% receives.
+-spec client_sees(Module, Matches, RouteOpts) -> Result
+              when Module    :: module(),
+                   Matches   :: path_matches(),
+                   RouteOpts :: map(),
+                   Result    :: binary().
+client_sees(Module, Matches, RouteOpts) ->
+    process_flag(trap_exit, true),
+    Cfg = #server_config{hostname = <<"h">>, port = 1965, routing = []},
+    Req = #{ client_cert => {error, no_peercert}, query => <<>>,
+             rest_of_input => <<>>, scheme => <<"gemini">>, host => <<"h">>,
+             port => 1965, path => <<>> },
+    {ok, Listen} = gen_tcp:listen(0, [binary, {active, false}]),
+    {ok, Port} = inet:port(Listen),
+    {ok, Client} = gen_tcp:connect({127, 0, 0, 1}, Port,
+                                   [binary, {active, false}]),
+    {ok, Server} = gen_tcp:accept(Listen, 5000),
+    {ok, Pid} = proc_lib:start_link(blizanci_servlet_container, init,
+                                    [[self(), Module, Matches, Req, Cfg,
+                                      RouteOpts]]),
+    receive
+        {'EXIT', Pid, _} = Exit ->
+            State = #state{transport = ranch_tcp, socket = Server,
+                           buffer = <<>>, config = Cfg, requested = true,
+                           servlet_proc = {proc, Pid},
+                           client_cert = {error, no_peercert}},
+            {noreply, _} = handle_info(Exit, State)
+    after 5000 ->
+        error(servlet_did_not_exit)
+    end,
+    {ok, Data} = gen_tcp:recv(Client, 0, 5000),
+    ok = gen_tcp:close(Client),
+    ok = gen_tcp:close(Server),
+    ok = gen_tcp:close(Listen),
+    Data.
+
+refused_tests(Base) ->
+    Opts = #{ cgiroot => filename:join(Base, "cgi"),
+              cgiprefix => "/cgi-bin/" },
+    Cgi = fun(Path) ->
+              client_sees(blizanci_cgi, #{ <<"PATH">> => Path }, Opts)
+          end,
+    [?_assertEqual(<<"51 File not found\r\n">>, Cgi(<<"nosuch">>)),
+     ?_assertEqual(<<"51 File not found\r\n">>, Cgi(<<".hidden">>)),
+     ?_assertEqual(<<"51 File not found\r\n">>, Cgi(<<"a b">>)),
+     ?_assertEqual(<<"40 Internal server error\r\n">>,
+                   client_sees(blizanci_static, #{}, #{}))].
+

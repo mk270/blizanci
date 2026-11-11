@@ -4,6 +4,9 @@
 
 - Fold the host and the scheme of a request, and site names, with an
   ASCII-only lowercase, exported as `blizanci_config:ascii_lowercase/1`
+- Answer a CGI request refused before the script runs with the refusal's own
+  status: 51 for a missing or hidden script, 60 for an unreadable client
+  certificate
 
 ## 5.24.0
 

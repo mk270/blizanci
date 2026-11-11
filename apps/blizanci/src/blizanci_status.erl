@@ -6,7 +6,8 @@
 %% the terms of the Apache Software Licence v2.0.
 
 -module(blizanci_status).
--export([gemini_status/1, valid_code/1]).
+-include_lib("eunit/include/eunit.hrl").
+-export([gemini_status/1, valid_code/1, is_error/1]).
 
 
 -spec gemini_status(Code) -> Result
@@ -67,6 +68,22 @@ gemini_status(cert_unsupported_encoding) ->
     {60, <<"Client certificate uses an unsupported name encoding">>}.
 
 
+% True if Code is an atom the status table maps to a failure status (40
+% or above). Atoms with no mapping, and mappings to success or redirect
+% codes, are not errors in this sense, so a servlet cannot make the server
+% answer with a status the table does not define or a non-failure one.
+-spec is_error(Code) -> Result
+              when Code   :: atom(),
+                   Result :: boolean().
+
+is_error(Code) when is_atom(Code) ->
+    try gemini_status(Code) of
+        {Status, _Explanation} -> Status >= 40
+    catch
+        error:function_clause -> false
+    end.
+
+
 -spec valid_code(Code) -> boolean()
               when Code :: integer().
 
@@ -80,3 +97,22 @@ valid_code(Code) ->
         50, 51, 52, 53, 59,
         60, 61, 62
     ]).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+is_error_test_() ->
+    [% failure statuses (40 and above)
+     ?_assert(is_error(file_not_found)),
+     ?_assert(is_error(gateway_busy)),
+     ?_assert(is_error(internal_server_error)),
+     ?_assert(is_error(cert_not_parsed)),
+     ?_assert(is_error(bad_filename)),
+     % mapped, but not failures
+     ?_assertNot(is_error(success)),
+     ?_assertNot(is_error(permanent_redirect)),
+     % not in the table
+     ?_assertNot(is_error(unimplemented)),
+     ?_assertNot(is_error(no_such_status))].

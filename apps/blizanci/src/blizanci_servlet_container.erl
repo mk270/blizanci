@@ -37,6 +37,7 @@
 %% @end
 
 -module(blizanci_servlet_container).
+-include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
 -behaviour(gen_server).
@@ -177,12 +178,18 @@ init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
     case Module:serve(Matches, Req, ServerConfig, RouteOpts) of
         {gateway_finished, Response} ->
             exit({shutdown, {gateway_complete, self(), Response}});
-        {gateway_error, gateway_busy} ->
-            exit({shutdown, {gateway_complete, self(), {error_code,
-                                                        gateway_busy}}});
         {gateway_error, Error} ->
+            %% A reason the status table maps to a failure status is the
+            %% client's answer (file_not_found gives 51, gateway_busy 40);
+            %% anything else is an internal failure, logged by the parent.
             %% TBD: this should be factored into a utility fn in the container
-            exit({shutdown, {gateway_init_error, self(), Error}});
+            case blizanci_status:is_error(Error) of
+                true ->
+                    exit({shutdown, {gateway_complete, self(),
+                                     {error_code, Error}}});
+                false ->
+                    exit({shutdown, {gateway_init_error, self(), Error}})
+            end;
         {gateway_started, Pid} ->
             State = #servlet_state{parent=Parent,
                            matches=Matches,
@@ -297,3 +304,85 @@ report_result(Parent, Result) ->
 
 check_result({servlet_failed, Atom}) when is_atom(Atom) -> ok;
 check_result({servlet_complete, Output}) when is_binary(Output) -> ok.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% A servlet that refuses a request before its worker starts returns
+%% {gateway_error, Reason} from serve/4. A Reason the status table maps to
+%% a failure status becomes the client's answer ({error_code, Reason});
+%% any other Reason stays an internal failure. Only serve/4 refusals that
+%% need no worker pool are used here (CGI refuses before queueing, and
+%% blizanci_static:serve/4 is a stub that returns 'unimplemented').
+%% Fixture, under a fresh temporary directory:
+%%   Base/cgi/{script, .hidden}
+init_refusal_test_() ->
+    {setup, fun refusal_setup/0, fun refusal_teardown/1,
+     fun refusal_tests/1}.
+
+refusal_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("container_refusal_test_" ++ Unique),
+    Dir = filename:join(Base, "cgi"),
+    ok = filelib:ensure_path(Dir),
+    [ ok = file:write_file(filename:join(Dir, F), <<"#!/bin/sh\n">>)
+      || F <- ["script", ".hidden"] ],
+    Base.
+
+refusal_teardown(Base) ->
+    file:del_dir_r(Base).
+
+%% Run init/1 in a process of its own, as defer_request/5 does, and return
+%% how it exited, with the exit's pid replaced by 'Pid'.
+-spec init_exit(Module, Matches, Req, RouteOpts) -> Result
+              when Module    :: module(),
+                   Matches   :: path_matches(),
+                   Req       :: request_details(),
+                   RouteOpts :: map(),
+                   Result    :: term().
+init_exit(Module, Matches, Req, RouteOpts) ->
+    process_flag(trap_exit, true),
+    Cfg = #server_config{hostname = <<"h">>, port = 1965, routing = []},
+    {ok, Pid} = proc_lib:start_link(?MODULE, init,
+                                    [[self(), Module, Matches, Req, Cfg,
+                                      RouteOpts]]),
+    receive
+        {'EXIT', Pid, {shutdown, {Tag, Pid, Detail}}} -> {Tag, Detail}
+    after 5000 ->
+        error(servlet_did_not_exit)
+    end.
+
+refusal_request(Extra) ->
+    maps:merge(#{ client_cert => {error, no_peercert},
+                  query => <<>>,
+                  rest_of_input => <<>>,
+                  scheme => <<"gemini">>,
+                  host => <<"h">>,
+                  port => 1965,
+                  path => <<>> }, Extra).
+
+refusal_tests(Base) ->
+    Dir = filename:join(Base, "cgi"),
+    Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
+    Cgi = fun(Path, Extra) ->
+              init_exit(blizanci_cgi, #{ <<"PATH">> => Path },
+                        refusal_request(Extra), Opts)
+          end,
+    [% a missing script, a hidden one and one outside the CGI alphabet
+     % are file_not_found, the client's answer
+     ?_assertEqual({gateway_complete, {error_code, file_not_found}},
+                   Cgi(<<"nosuch">>, #{})),
+     ?_assertEqual({gateway_complete, {error_code, file_not_found}},
+                   Cgi(<<".hidden">>, #{})),
+     ?_assertEqual({gateway_complete, {error_code, file_not_found}},
+                   Cgi(<<"a b">>, #{})),
+     % a client certificate that cannot be understood
+     ?_assertEqual({gateway_complete, {error_code, cert_not_parsed}},
+                   Cgi(<<"script">>,
+                       #{ client_cert => {ok, <<"not a certificate">>} })),
+     % a reason with no status mapping is still an internal failure
+     ?_assertEqual({gateway_init_error, unimplemented},
+                   init_exit(blizanci_static, #{}, refusal_request(#{}),
+                             #{}))].
