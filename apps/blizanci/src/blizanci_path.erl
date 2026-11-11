@@ -272,6 +272,10 @@ path_under_root_test_() ->
 %%   Base/docs/escape -> ../outside        (symlink out of the root)
 %%   Base/docs-secret/secret.txt           (sibling sharing a name prefix)
 %%   Base/outside/secret.txt
+%%   Base/outside_<0xE9>/secret.txt        (a directory name that is not
+%%                                          valid UTF-8)
+%%   Base/docs/badlink -> Base/outside_<0xE9>/secret.txt  (an undecodable
+%%   Base/docs/badrel -> ../outside_<0xE9>/secret.txt      target, twice)
 confine_test_() ->
     {setup,
      fun confine_setup/0,
@@ -291,6 +295,15 @@ confine_setup() ->
     ok = file:write_file(filename:join([Base, "outside", "secret.txt"]),
                          <<"x">>),
     ok = file:make_symlink("../outside", filename:join(Docs, "escape")),
+    % names that are not valid UTF-8 can only be written as binaries
+    BaseBin = list_to_binary(Base),
+    Bad = <<BaseBin/binary, "/outside_", 233>>,
+    ok = file:make_dir(Bad),
+    ok = file:write_file(<<Bad/binary, "/secret.txt">>, <<"x">>),
+    ok = file:make_symlink(<<Bad/binary, "/secret.txt">>,
+                           <<BaseBin/binary, "/docs/badlink">>),
+    ok = file:make_symlink(<<"../outside_", 233, "/secret.txt">>,
+                           <<BaseBin/binary, "/docs/badrel">>),
     ok = filelib:ensure_path(filename:join(Base, [$d, 243, $c, $s])),
     Mk = fun (Rel) ->
              Path = filename:join(Docs, Rel),
@@ -311,12 +324,23 @@ confine_teardown(Base) ->
     file:del_dir_r(Base).
 
 confine_tests(Base) ->
+    BaseBin = list_to_binary(Base),
     Docs = filename:join(Base, "docs"),
     {ok, CanonDocs} = fix_path(Docs),
     Odd = filename:join(Base, [$d, 243, $c, $s]),
     {ok, CanonOdd} = fix_path(Odd),
     [?_assertEqual({ok, filename:join(CanonDocs, "inside.txt")},
                    confine("inside.txt", Docs)),
+     % a symbolic link whose target is not valid UTF-8 is not skipped
+     % over: the operating system follows it, out of the root, so it is
+     % refused, whatever the VM's file-name encoding (this needs realpath
+     % 1.4.0 or later, which resolves such links instead of ignoring them)
+     ?_assertEqual({ok, <<"x">>},
+                   file:read_file(<<BaseBin/binary, "/docs/badlink">>)),
+     ?_assertEqual({ok, <<"x">>},
+                   file:read_file(<<BaseBin/binary, "/docs/badrel">>)),
+     ?_assertEqual({error, file_not_found}, confine("badlink", Docs)),
+     ?_assertEqual({error, file_not_found}, confine("badrel", Docs)),
      ?_assertEqual({error, file_not_found},
                    confine("../outside/secret.txt", Docs)),
      % regression: sibling directory sharing the root's name as a prefix
