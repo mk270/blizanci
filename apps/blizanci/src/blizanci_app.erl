@@ -14,8 +14,6 @@
 -export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
-    ok = application:ensure_started(mime_lookup),
-    ok = application:ensure_started(ranch),
     case blizanci_config:from_app_env() of
         {ok, Config} ->
             {ok, Pid} = blizanci_sup:start_link(Config),
