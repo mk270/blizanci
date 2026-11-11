@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 5.22.0
+
+- Handle file names as bytes in blizanci_path:confine/2,3: the request path is a binary and the result is a binary, and the root may be a binary or a string; control characters (below 0x20, and DEL) are refused, and other bytes are allowed, whether or not they are valid UTF-8. This replaces the printable-ASCII restriction, and is a breaking change for any third-party servlet that calls confine/2,3 with strings
+- Static and Titan pass binary paths straight through; CGI script names remain ASCII-only
+- Update realpath to 1.5.0, which accepts and returns binaries
+
 ## 5.21.1
 
 - Update realpath to 1.4.1, which resolves a symlink whose target is not valid UTF-8 instead of ignoring it; in a UTF-8 VM the old version let a symlink in the served tree lead out of the root unnoticed, and such a link is now refused
