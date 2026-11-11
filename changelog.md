@@ -1,26 +1,32 @@
 # Blizanci Changelog
 
-## Unreleased
+## 5.25.0
 
+- Fold the host and the scheme of a request, and site names, with an
+  ASCII-only lowercase, exported as `blizanci_config:ascii_lowercase/1`
+- Answer a CGI request refused before the script runs with the refusal's
+  own status: 51 for a missing or hidden script, 60 for an unreadable
+  client certificate
+- Keep the existing resource, and remove the temporary file, when a Titan
+  upload cannot be put in place (the work directory on another filesystem,
+  or a directory as the target), answering 40
 - Answer a Titan upload normally when its temporary file cannot be
   removed (for example in a read-only work directory), logging the failure
   instead of crashing; `delete/1` now returns `ok | {error, atom()}`
 - Log a path refused for a hidden segment, a control character or a failed
   resolution at debug level instead of warning; only a path resolving
   outside the root, and root misconfiguration, still log a warning
-- Fold the host and the scheme of a request, and site names, with an
-  ASCII-only lowercase, exported as `blizanci_config:ascii_lowercase/1`
-- Answer a CGI request refused before the script runs with the refusal's own
-  status: 51 for a missing or hidden script, 60 for an unreadable client
-  certificate
-- Keep the existing resource, and remove the temporary file, when a Titan
-  upload cannot be put in place (the work directory on another filesystem,
-  or a directory as the target), answering 40
 - Log a CGI script's stderr at debug level (long chunks truncated); the
   response to the client is unchanged
 - Stop a CGI script, and its worker, when the servlet container that
   started it dies without cancelling it (the worker now monitors its
   parent); previously the script ran on to completion
+- Have the connection process trap exits for its whole life and answer 40
+  only for an exit from its own servlet; an exit from any other linked
+  process is logged and ignored
+- Add `blizanci_path:resolve_request/3`, the shared step that confines a
+  request's PATH under a route root, used by the static, CGI and Titan
+  servlets
 
 ## 5.24.0
 
