@@ -157,23 +157,25 @@ protocol_supported(_)           -> {false, none}.
                    Config :: server_config(),
                    Result :: gemini_response().
 
-handle_gemini_url(Proto,
-                  Req=#{ host := Host,
-                         port := Port,
-                         path := Path },
-                  Config=#server_config{hostname=Host, port=Port}) ->
-    case uri_string:normalize(Path) of
-        {error, _, _} -> {error_code, request_not_parsed};
-        Normalised    -> handle_path(Proto, Normalised, Req, Config)
-    end;
-
 handle_gemini_url(_Proto, #{ host := <<>>, port := Port },
                   #server_config{port=Port}) ->
     {error_code, bad_hostname};
 
-handle_gemini_url(_Proto, #{ port := Port },
-                  #server_config{port=Port}) ->
-    {error_code, host_unrecognised};
+handle_gemini_url(Proto,
+                  Req=#{ host := Host,
+                         port := Port,
+                         path := Path },
+                  Config=#server_config{hostname=ConfHost, port=Port}) ->
+
+    HostLC     = string:lowercase(Host),
+    ConfHostLC = string:lowercase(ConfHost),
+
+    if HostLC =/= ConfHostLC -> host_unrecognised;
+       true -> case uri_string:normalize(Path) of
+                   {error, _, _} -> {error_code, request_not_parsed};
+                   Normalised    -> handle_path(Proto, Normalised, Req, Config)
+               end
+    end;
 
 handle_gemini_url(_Proto, #{ port := ReqPort },
                   #server_config{port=Port})
