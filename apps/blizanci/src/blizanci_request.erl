@@ -171,6 +171,7 @@ handle_gemini_url(Proto,
                          path := Path },
                   Config=#server_config{hostname=ConfHost, port=Port}) ->
 
+    % defence in depth - redundant check
     HostLC     = string:lowercase(Host),
     ConfHostLC = string:lowercase(ConfHost),
 
