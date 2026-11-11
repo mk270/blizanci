@@ -22,10 +22,18 @@
     {'immediate', gemini_response()} |
     'defer'.
 
-% TBD: gateway_error | gateway_started
-% TBD: gateway_exit
-
-%% Serve the request asynchronously.
+%% Serve the request asynchronously, in the process started for it. The
+%% result is one of
+%%   {gateway_finished, Response}: the servlet is done; Response goes to
+%%       the client as it stands;
+%%   {gateway_error, Reason}: the request failed; a Reason that
+%%       blizanci_status knows (e.g., file_not_found, gateway_busy) is
+%%       sent to the client as that status, any other is an internal
+%%       error;
+%%   {gateway_started, Pid}: the work continues in Pid, which will
+%%       report its outcome later with
+%%       blizanci_servlet_container:gateway_exit/2, passing
+%%       {gateway_output, Binary} or {gateway_error, Reason}.
 -callback serve(path_matches(), request_details(), server_config(), map()) ->
     gateway_result().
 
@@ -44,11 +52,15 @@
 %% at startup, rather than have it surface as a per-request failure.
 -callback validate_options(map()) -> 'ok' | {'error', term()}.
 
-%% TBD
+%% Called with further data sent by the client after its request line
+%% (e.g., a Titan upload body), for a servlet that started a process
+%% via serve/4. Returns the response to send to the client, or 'none'
+%% if more data is awaited.
 -callback handle_client_data(Pid::pid(), Payload::binary()) ->
     gemini_response().
 
-%% TBD
+%% Called at application start, to set up any pool/resource the servlet
+%% needs; see stop/0.
 -callback start() -> 'ok'.
 
 %% Called at application shutdown; the counterpart to start/0. Allows
