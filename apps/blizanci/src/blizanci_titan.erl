@@ -67,7 +67,10 @@
                       stream}).
 -type titan_state() :: #titan_state{}.
 
--type titan_request() :: {titan_request, binary(), integer(), binary()}.
+-record(titan_request, {path :: binary(),
+                        size :: integer(),
+                        mime :: binary()}).
+-type titan_request() :: #titan_request{}.
 
 -record(titan_job, {request     :: titan_request(),
                     rest        :: binary(),
@@ -205,7 +208,7 @@ serve_titan_request(Fragment, Rest, WorkDir, RootDir)
 
 parse_and_confine(Fragment, RootDir) ->
     case parse_titan_request(Fragment) of
-        {ok, {titan_request, Path, _Size, _MimeType} = TitanReq} ->
+        {ok, #titan_request{path=Path} = TitanReq} ->
             case blizanci_path:resolve_request(#{ <<"PATH">> => Path },
                                                RootDir, ?CONFINE_OPTS) of
                 {ok, TargetPath} -> {ok, TitanReq, TargetPath};
@@ -225,16 +228,16 @@ parse_and_confine(Fragment, RootDir) ->
                    RootDir    :: filepath(),
                    Result     :: gateway_result().
 
-dispatch_titan_request({titan_request, _Path, Size, _Mime}, _TargetPath,
+dispatch_titan_request(#titan_request{size=Size}, _TargetPath,
                        Rest, _WorkDir, _RootDir)
   when byte_size(Rest) > Size ->
     % more data than the request declared: refused before anything is
     % written
     {gateway_finished, {error_code, request_too_long}};
-dispatch_titan_request({titan_request, _Path, 0, _Mime}, TargetPath,
+dispatch_titan_request(#titan_request{size=0}, TargetPath,
                        _Rest, _WorkDir, _RootDir) ->
     {gateway_finished, delete_resource(TargetPath)};
-dispatch_titan_request({titan_request, Path, Size, _Mime} = TitanReq,
+dispatch_titan_request(#titan_request{path=Path, size=Size} = TitanReq,
                        _TargetPath, Rest, WorkDir, RootDir) ->
     case byte_size(Rest) >= Size of
         true ->
@@ -374,7 +377,7 @@ parse_titan_qs(Path, Query)
     case parse_size(maps:get(<<"size">>, KVPs, undefined)) of
         {ok, Size} ->
             MimeType = maps:get(<<"mime">>, KVPs, ?DEFAULT_MIME),
-            {ok, {titan_request, Path, Size, MimeType}};
+            {ok, #titan_request{path=Path, size=Size, mime=MimeType}};
         {error, _} = Error ->
             Error
     end.
@@ -405,7 +408,7 @@ init({Parent, Job}) ->
                rest=Rest,
                work_dir=WorkDir,
                root_dir=RootDir} = Job,
-    {titan_request, Path, Size, MimeType} = TitanReq,
+    #titan_request{path=Path, size=Size, mime=MimeType} = TitanReq,
     BytesRecv = byte_size(Rest),
     {ok, Stream, TmpPath} = create_tmp_file(WorkDir, Rest),
     State = #titan_state{
@@ -700,22 +703,22 @@ parse_titan_request_test_() ->
     P = fun(Params) ->
             parse_titan_request(<<"dir/page;", Params/binary>>)
         end,
-    [?_assertEqual({ok, {titan_request, <<"dir/page">>, 123,
-                         <<"text/plain">>}},
+    [?_assertEqual({ok, #titan_request{path= <<"dir/page">>, size=123,
+                            mime= <<"text/plain">>}},
                    P(<<"size=123;mime=text/plain">>)),
-     ?_assertEqual({ok, {titan_request, <<"dir/page">>, 0,
-                         <<"text/plain">>}},
+     ?_assertEqual({ok, #titan_request{path= <<"dir/page">>, size=0,
+                            mime= <<"text/plain">>}},
                    P(<<"size=0;mime=text/plain">>)),
      % mime is optional and defaults to text/gemini
-     ?_assertEqual({ok, {titan_request, <<"dir/page">>, 5,
-                         <<"text/gemini">>}},
+     ?_assertEqual({ok, #titan_request{path= <<"dir/page">>, size=5,
+                            mime= <<"text/gemini">>}},
                    P(<<"size=5">>)),
      ?_assertEqual({error, bad_query_string},
                    P(<<"size=-1;mime=text/plain">>)),
      ?_assertEqual({error, bad_query_string},
                    P(<<"size=-0123456789;mime=text/plain">>)),
      % the limit itself is allowed; one byte more is not
-     ?_assertMatch({ok, {titan_request, _, ?MAX_UPLOAD_BYTES, _}},
+     ?_assertMatch({ok, #titan_request{size=?MAX_UPLOAD_BYTES}},
                    P(list_to_binary(
                        "size=" ++ integer_to_list(?MAX_UPLOAD_BYTES)))),
      ?_assertEqual({error, request_too_long},
