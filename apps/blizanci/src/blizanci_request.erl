@@ -105,8 +105,8 @@ handle_parsed_url(URI, Config, Cert, Rest) ->
                       P -> P
                   end,
 
-        SchemeLC  = strings:lowercase(Scheme),
-        ReqHostLC = strings:lowercase(ReqHost),
+        SchemeLC  = string:lowercase(Scheme),
+        ReqHostLC = string:lowercase(ReqHost),
 
         Query = maps:get(query, URI, <<>>),
         #{ scheme        => SchemeLC,
