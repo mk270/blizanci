@@ -58,7 +58,7 @@
          terminate/2, code_change/3]).
 
 -record(cgi_proc, {pid, os_pid, buffer, script}).
--record(worker_state, {parent, cgi_status}).
+-record(worker_state, {parent, parent_ref, cgi_status}).
 -type worker_state() :: #worker_state{}.
 -type options() :: #{
                      cgiroot := string(),
@@ -329,6 +329,10 @@ enqueue_cgi(Args, Env) ->
 %% @end
 init({Parent, {CmdLine, Options}}) ->
     process_flag(trap_exit, true),
+    % The parent (the servlet container) is not linked to us, so watch it:
+    % if it dies without sending cgi_quit, the script is stopped (see
+    % handle_info/2).
+    ParentRef = erlang:monitor(process, Parent),
     Result = exec:run(CmdLine, Options),
     {ok, Pid, OsPid} = Result,
     CGI_Status = #cgi_proc{pid=Pid,
@@ -336,6 +340,7 @@ init({Parent, {CmdLine, Options}}) ->
                            buffer= <<>>,
                            script=CmdLine},
     State = #worker_state{parent=Parent,
+                          parent_ref=ParentRef,
                           cgi_status=CGI_Status},
     {ok, State}.
 
@@ -351,12 +356,21 @@ handle_call(_Request, _From, State) ->
 %% @doc
 %% @hidden
 %% @end
-handle_cast(cgi_quit, State=#worker_state{cgi_status=CGI}) ->
-    exec:kill(CGI#cgi_proc.os_pid, 9),
+handle_cast(cgi_quit, State) ->
+    stop_script(State),
     {stop, normal, State};
 
 handle_cast(_Request, State) ->
     {noreply, State}.
+
+% The parent has died: nobody is left to receive the result, so stop the
+% script and ourselves, as for cgi_quit. This clause must come before the
+% next, which matches erlexec's 'DOWN' messages (whose second element is
+% the OS pid, not a monitor reference).
+handle_info({'DOWN', Ref, process, _Pid, _Reason},
+            State=#worker_state{parent_ref=Ref}) ->
+    stop_script(State),
+    {stop, normal, State};
 
 handle_info({'DOWN', OsPid, process, Pid, Reason}, State) ->
     handle_down(OsPid, Pid, Reason, State);
@@ -390,6 +404,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+% Kill the script, if one is still running.
+-spec stop_script(State) -> Result
+              when State  :: worker_state(),
+                   Result :: ok.
+stop_script(#worker_state{cgi_status=#cgi_proc{os_pid=OsPid}}) ->
+    _ = exec:kill(OsPid, 9),
+    ok;
+stop_script(_State) ->
+    ok.
+
 
 % Deal with the asynchronous stdout from the CGI process.
 -spec handle_stdout(OsPid, Msg, State) -> Result
@@ -451,7 +476,7 @@ handle_stdout2(Msg, State) ->
     NewBuffer = <<Buffer/binary, Msg/binary>>,
     case byte_size(NewBuffer) > ?MAX_CGI_OUTPUT_BYTES of
         true ->
-            exec:kill(CGI#cgi_proc.os_pid, 9),
+            stop_script(State),
             cgi_finished({gateway_error, cgi_output_too_large}, State);
         false ->
             NewCGI = CGI#cgi_proc{buffer=NewBuffer},
@@ -628,6 +653,111 @@ stderr_test_() ->
      ?_assertEqual(<<"abc">>, truncate_log(<<"abc">>)),
      ?_assertEqual({binary:copy(<<"e">>, ?MAX_STDERR_LOG_BYTES),
                     {truncated, 5}}, truncate_log(Big))].
+
+
+%% The parent's monitor message stops the worker; erlexec's own 'DOWN'
+%% message (second element an OS pid) is not mistaken for it.
+parent_down_test_() ->
+    Ref = make_ref(),
+    CGI = #cgi_proc{pid=self(), os_pid=0, buffer= <<>>, script=["/s"]},
+    S = #worker_state{parent=self(), parent_ref=Ref, cgi_status=CGI},
+    % (with a live script, stop_script/1 calls erlexec: see orphan_test_)
+    Gone = S#worker_state{cgi_status=no_proc},
+    [?_assertMatch({stop, normal, Gone},
+                   handle_info({'DOWN', Ref, process, self(), killed},
+                               Gone)),
+     ?_assertMatch({noreply, S},
+                   handle_info({'DOWN', 99, process, self(), normal}, S))].
+
+
+%% End to end: killing the container brutally while the script runs must
+%% not leave the script running. Skipped if erlexec cannot run here.
+%% Fixture: Base/cgi/sleeper writes its pid to Base/pid, then sleeps.
+orphan_test_() ->
+    {setup, fun orphan_setup/0, fun orphan_teardown/1, fun orphan_tests/1}.
+
+orphan_setup() ->
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Base = filename:absname("cgi_orphan_test_" ++ Unique),
+    Dir = filename:join(Base, "cgi"),
+    ok = filelib:ensure_path(Dir),
+    Script = filename:join(Dir, "sleeper"),
+    ok = file:write_file(Script,
+                         ["#!/bin/sh\necho $$ > ",
+                          filename:join(Base, "pid"),
+                          "\nexec sleep 30\n"]),
+    ok = file:change_mode(Script, 8#755),
+    Up = case application:ensure_all_started([erlexec, ppool]) of
+             {ok, _} ->
+                 case catch blizanci_cgi:start() of
+                     ok -> true;
+                     _ -> false
+                 end;
+             _ -> false
+         end,
+    {Base, Up}.
+
+orphan_teardown({Base, Up}) ->
+    case Up of
+        true -> blizanci_cgi:stop();
+        false -> ok
+    end,
+    file:del_dir_r(Base).
+
+orphan_tests({Base, Up}) ->
+    {timeout, 30,
+     fun() ->
+         case Up of
+             false -> ok;
+             true -> orphan_run(Base)
+         end
+     end}.
+
+orphan_run(Base) ->
+    Dir = filename:join(Base, "cgi"),
+    Cfg = #server_config{hostname = <<"h">>, port = 1965,
+                         routing = [], docroot = Dir},
+    Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
+    Me = self(),
+    Container = spawn(fun() ->
+        Me ! {started, serve(#{ <<"PATH">> => <<"sleeper">> },
+                             test_request(#{}), Cfg, Opts)},
+        receive stop -> ok end
+    end),
+    case receive {started, R} -> R after 5000 -> timeout end of
+        {gateway_started, Worker} ->
+            OsPid = wait_for_pid(filename:join(Base, "pid"), 50),
+            true = os_alive(OsPid),
+            exit(Container, kill),
+            ?assert(wait_until(fun() -> not os_alive(OsPid) end, 50)),
+            ?assert(wait_until(fun() -> not is_process_alive(Worker) end,
+                               50));
+        _ ->
+            % erlexec cannot run here (or the pool is busy): skip
+            exit(Container, kill)
+    end.
+
+wait_for_pid(_File, 0) -> error(no_pid_file);
+wait_for_pid(File, N) ->
+    case file:read_file(File) of
+        {ok, Bin} ->
+            case string:to_integer(string:trim(binary_to_list(Bin))) of
+                {Int, _} when is_integer(Int) -> Int;
+                _ -> timer:sleep(100), wait_for_pid(File, N - 1)
+            end;
+        _ -> timer:sleep(100), wait_for_pid(File, N - 1)
+    end.
+
+os_alive(OsPid) ->
+    os:cmd("kill -0 " ++ integer_to_list(OsPid) ++ " 2>/dev/null; echo $?")
+        =:= "0\n".
+
+wait_until(_Fun, 0) -> false;
+wait_until(Fun, N) ->
+    case Fun() of
+        true -> true;
+        false -> timer:sleep(100), wait_until(Fun, N - 1)
+    end.
 
 
 %% A complete request, for tests that care about only some of its parts.
