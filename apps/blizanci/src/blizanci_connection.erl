@@ -101,7 +101,8 @@ init({Ref, Transport, Opts}) ->
                requested=false,
                servlet_proc=no_proc,
                client_cert=PeerCert},
-    erlang:send_after(?TIMEOUT_MS, self(), timeout),
+    erlang:send_after(?TIMEOUT_MS, self(),
+                       connection_timeout),
     gen_server:enter_loop(?MODULE, [], State).
 
 %% @doc
@@ -115,13 +116,14 @@ handle_info({tcp_closed, _Socket}, State) ->
 handle_info({tcp_error, _, _Reason}, State) ->
     {stop, normal, State};
 
-handle_info(timeout, State=#state{servlet_proc={proc, ServletProc}}) ->
+handle_info(connection_timeout,
+            State=#state{servlet_proc={proc, ServletProc}}) ->
     logger:debug("Proc Timeout ~p", [ServletProc]),
     respond({error_code, request_timeout}, State),
     self() ! finished,
     {stop, normal, State};
 
-handle_info(timeout, State) ->
+handle_info(connection_timeout, State) ->
     logger:debug("NoProc Timeout: ~p", [State]),
     respond({error_code, response_timeout}, State),
     self() ! finished,
@@ -961,12 +963,14 @@ handle_info_simple_test_() ->
 %% The 30 second timer: the client is told which of the two it was, and
 %% a finished message is queued for the process.
 handle_info_timeout_test_() ->
-    [?_assertEqual({{stop, normal}, <<"40 Timeout\r\n">>}, info(timeout)),
+    [?_assertEqual({{stop, normal}, <<"40 Timeout\r\n">>},
+                   info(connection_timeout)),
      ?_assertEqual({{stop, normal}, <<"59 Request timeout\r\n">>},
-                   info(timeout, {proc, self()})),
+                   info(connection_timeout, {proc, self()})),
      ?_assertEqual({true, <<"40 Timeout\r\n">>},
                    with_client(fun(S) ->
-         {stop, normal, _} = handle_info(timeout, conn_state(S)),
+         {stop, normal, _} = handle_info(connection_timeout,
+                                  conn_state(S)),
          receive finished -> true after 1000 -> false end
      end))].
 
