@@ -22,6 +22,13 @@
   a client with a certificate. `blizanci_auth:valid_authz_policy/1` does
   the check and `{private, X}` with a non-list X is now
   `{error, invalid_authz_policy}`; new `blizanci_x509:validate_ca_file/1`
+- Require a servlet module to export `request/4` and `serve/4` as well
+  as `default_options/0` and `validate_options/1`; a module lacking any
+  is refused, when a route is built or the servlet list is validated,
+  with `{servlet_missing_callbacks, Module, [{Name, Arity}]}` (it used
+  to be accepted and fail with `undef` on the first request). A
+  non-module is still `{not_a_servlet, Term}`; a module `lists` now gives
+  the new term rather than `{not_a_servlet, lists}`
 - `blizanci_router`: the regex of a `route_info()` may now be given as
   a string as well as a binary, as `build_route/5` already allowed
 

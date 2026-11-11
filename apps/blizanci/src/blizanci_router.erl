@@ -191,8 +191,8 @@ compile_regex(Regex) ->
 
 
 %% @doc
-%% Check that Module is loadable and implements the servlet callbacks
-%% used for route validation.
+%% Check that Module is loadable and exports the callbacks a servlet
+%% needs: default_options/0, validate_options/1, request/4 and serve/4.
 %% @end
 -spec check_servlet(Module) -> Result
               when Module :: term(),
@@ -205,17 +205,24 @@ check_servlet(Module) ->
     end.
 
 
+% What a route's servlet must export to be of any use: the options
+% callbacks, used when the route is built, and the two that handle a
+% request (see blizanci_servlet). cancel/1, handle_client_data/2,
+% start/0 and stop/0 are also callbacks but are not checked here.
+-define(SERVLET_CALLBACKS, [{default_options, 0}, {validate_options, 1},
+                            {request, 4}, {serve, 4}]).
+
 -spec valid_servlet(Module) -> Result
               when Module :: term(),
                    Result :: 'ok'.
 valid_servlet(Module) when is_atom(Module) ->
     case code:ensure_loaded(Module) of
         {module, Module} ->
-            case erlang:function_exported(Module, default_options, 0)
-                 andalso erlang:function_exported(Module,
-                                                  validate_options, 1) of
-                true -> ok;
-                false -> throw({not_a_servlet, Module})
+            case [ FA || {F, A} = FA <- ?SERVLET_CALLBACKS,
+                         not erlang:function_exported(Module, F, A) ] of
+                [] -> ok;
+                Missing -> throw({servlet_missing_callbacks, Module,
+                                  Missing})
             end;
         {error, _} -> throw({unknown_servlet, Module})
     end;
