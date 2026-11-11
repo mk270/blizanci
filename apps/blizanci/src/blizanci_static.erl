@@ -70,8 +70,7 @@ cancel(Pid) when is_pid(Pid) ->
                    Result       :: {'immediate', gemini_response()} | 'defer'.
 
 request(Matches, _Req, _ServerConfig, RouteOpts) ->
-    #{ <<"PATH">> := Path } = Matches,
-    Response = serve_file(Path, RouteOpts),
+    Response = serve_file(Matches, RouteOpts),
     {immediate, Response}.
 
 
@@ -93,16 +92,18 @@ serve(_, _, _, _) ->
 % and-confine mechanism CGI and Titan use) rather than a bare
 % filename:join/2, so a symlink inside Docroot can't be used to read
 % or redirect to a file outside it.
--spec serve_file(Path, Opts) -> Result
-              when Path   :: binary(),
-                   Opts   :: options(),
-                   Result :: gemini_response().
+-spec serve_file(Matches, Opts) -> Result
+              when Matches :: path_matches(),
+                   Opts    :: options(),
+                   Result  :: gemini_response().
 
-serve_file(Path, Opts) ->
+serve_file(Matches, Opts) ->
+    #{ <<"PATH">> := Path } = Matches,
     Docroot = ensure_list(maps:get(docroot, Opts, ?DEFAULT_DOCROOT)),
     % hidden files are never served, except under a ".well-known"
     % directory at the top of the docroot
-    case blizanci_path:confine(Path, Docroot, #{ well_known => true }) of
+    case blizanci_path:resolve_request(Matches, Docroot,
+                                       #{ well_known => true }) of
         {error, file_not_found} -> {error_code, file_not_found};
         {ok, Cmd} -> serve_confined_file(Cmd, Path, Opts)
     end.

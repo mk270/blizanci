@@ -177,41 +177,72 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
 
 serve_titan_request(Fragment, Rest, WorkDir, RootDir)
   when is_binary(Rest), is_binary(WorkDir), is_binary(RootDir)->
-    case parse_titan_request(Fragment) of
-        {ok, TitanReq} ->
-            {titan_request, Path, Size, _MimeType} = TitanReq,
-
-            % Canonicalise-and-confine the upload target under RootDir
-            % up front, before any worker (sync or queued) is started,
-            % the same mechanism CGI and static-file serving use. This
-            % also catches a symlink inside RootDir that would
-            % otherwise let an upload land outside it. It is only an
-            % early refusal: the target is resolved again, just before
-            % it is written (see finish_file/5), because a long upload
-            % leaves time for the directory tree to change.
-            case blizanci_path:confine(Path, RootDir, ?CONFINE_OPTS) of
-                {ok, _TargetPath} when byte_size(Rest) > Size ->
-                    % more data than the request declared: refused
-                    % before anything is written
-                    {gateway_finished, {error_code, request_too_long}};
-                {ok, TargetPath} when Size =:= 0 ->
-                    {gateway_finished, delete_resource(TargetPath)};
-                {ok, _TargetPath} ->
-                    Job = #titan_job{request=TitanReq,
-                                     rest=Rest,
-                                     work_dir=WorkDir,
-                                     root_dir=RootDir},
-                    RestSize = byte_size(Rest),
-                    case RestSize >= Size of
-                        true -> handle_all_in_one_request(WorkDir, RootDir,
-                                                          Path, Rest, Size);
-                        false -> enqueue_titan_job(Job)
-                    end;
-                {error, file_not_found} ->
-                    {gateway_finished, {error_code, file_not_found}}
-            end;
+    case parse_and_confine(Fragment, RootDir) of
+        {ok, TitanReq, TargetPath} ->
+            dispatch_titan_request(TitanReq, TargetPath, Rest,
+                                   WorkDir, RootDir);
         {error, Err} ->
             {gateway_finished, {error_code, Err}}
+    end.
+
+
+% Parse the request (the parameters are split off the raw path before it
+% is decoded: see parse_titan_request/1), then canonicalise-and-confine
+% the upload target under RootDir up front, before any worker (sync or
+% queued) is started, the same mechanism CGI and static-file serving
+% use. This also catches a symlink inside RootDir that would otherwise
+% let an upload land outside it. It is only an early refusal: the target
+% is resolved again, just before it is written (see finish_file/5),
+% because a long upload leaves time for the directory tree to change.
+-spec parse_and_confine(Fragment, RootDir) -> Result
+              when Fragment :: binary(),
+                   RootDir  :: filepath(),
+                   Result   :: {ok, TitanReq, TargetPath}
+                             | {error, atom()},
+                   TitanReq   :: titan_request(),
+                   TargetPath :: binary().
+
+parse_and_confine(Fragment, RootDir) ->
+    case parse_titan_request(Fragment) of
+        {ok, {titan_request, Path, _Size, _MimeType} = TitanReq} ->
+            case blizanci_path:resolve_request(#{ <<"PATH">> => Path },
+                                               RootDir, ?CONFINE_OPTS) of
+                {ok, TargetPath} -> {ok, TitanReq, TargetPath};
+                {error, Err} -> {error, Err}
+            end;
+        {error, Err} ->
+            {error, Err}
+    end.
+
+
+-spec dispatch_titan_request(TitanReq, TargetPath, Rest, WorkDir,
+                             RootDir) -> Result
+              when TitanReq   :: titan_request(),
+                   TargetPath :: binary(),
+                   Rest       :: binary(),
+                   WorkDir    :: filepath(),
+                   RootDir    :: filepath(),
+                   Result     :: gateway_result().
+
+dispatch_titan_request({titan_request, _Path, Size, _Mime}, _TargetPath,
+                       Rest, _WorkDir, _RootDir)
+  when byte_size(Rest) > Size ->
+    % more data than the request declared: refused before anything is
+    % written
+    {gateway_finished, {error_code, request_too_long}};
+dispatch_titan_request({titan_request, _Path, 0, _Mime}, TargetPath,
+                       _Rest, _WorkDir, _RootDir) ->
+    {gateway_finished, delete_resource(TargetPath)};
+dispatch_titan_request({titan_request, Path, Size, _Mime} = TitanReq,
+                       _TargetPath, Rest, WorkDir, RootDir) ->
+    case byte_size(Rest) >= Size of
+        true ->
+            handle_all_in_one_request(WorkDir, RootDir, Path, Rest, Size);
+        false ->
+            enqueue_titan_job(#titan_job{request=TitanReq,
+                                         rest=Rest,
+                                         work_dir=WorkDir,
+                                         root_dir=RootDir})
     end.
 
 
