@@ -448,7 +448,7 @@ truncate_log(Msg) ->
 handle_stdout2(Msg, State) ->
     CGI = State#worker_state.cgi_status,
     Buffer = CGI#cgi_proc.buffer,
-    NewBuffer = erlang:iolist_to_binary([Buffer, Msg]),
+    NewBuffer = <<Buffer/binary, Msg/binary>>,
     case byte_size(NewBuffer) > ?MAX_CGI_OUTPUT_BYTES of
         true ->
             exec:kill(CGI#cgi_proc.os_pid, 9),
