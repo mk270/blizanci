@@ -16,6 +16,8 @@
 - Keep the existing resource, and remove the temporary file, when a Titan
   upload cannot be put in place (the work directory on another filesystem,
   or a directory as the target), answering 40
+- Log a CGI script's stderr at debug level (long chunks truncated); the
+  response to the client is unchanged
 
 ## 5.24.0
 

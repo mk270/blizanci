@@ -57,7 +57,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(cgi_proc, {pid, os_pid, buffer}).
+-record(cgi_proc, {pid, os_pid, buffer, script}).
 -record(worker_state, {parent, cgi_status}).
 -type worker_state() :: #worker_state{}.
 -type options() :: #{
@@ -68,6 +68,7 @@
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
 -define(MAX_CGI_OUTPUT_BYTES, (10 * 1024 * 1024)). % 10 MiB
+-define(MAX_STDERR_LOG_BYTES, 512).
 
 % A note re environment variables.
 %
@@ -332,7 +333,8 @@ init({Parent, {CmdLine, Options}}) ->
     {ok, Pid, OsPid} = Result,
     CGI_Status = #cgi_proc{pid=Pid,
                            os_pid=OsPid,
-                           buffer= <<>>},
+                           buffer= <<>>,
+                           script=CmdLine},
     State = #worker_state{parent=Parent,
                           cgi_status=CGI_Status},
     {ok, State}.
@@ -361,6 +363,9 @@ handle_info({'DOWN', OsPid, process, Pid, Reason}, State) ->
 
 handle_info({stdout, OsPid, Msg}, State) ->
     handle_stdout(OsPid, Msg, State);
+
+handle_info({stderr, OsPid, Msg}, State) ->
+    handle_stderr(OsPid, Msg, State);
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -406,6 +411,34 @@ handle_stdout(OsPid, Msg, State) ->
             {noreply, State}
     end.
 
+% The script's stderr is only logged (at debug level); it never reaches
+% the client. Long chunks are truncated, and ~p escapes control bytes.
+-spec handle_stderr(OsPid, Msg, State) -> Result
+              when OsPid  :: integer(),
+                   Msg    :: binary(),
+                   State  :: worker_state(),
+                   Result :: {noreply, worker_state()}.
+
+handle_stderr(OsPid, Msg, State=#worker_state{cgi_status=#cgi_proc{
+                                                  os_pid=OsPid,
+                                                  script=Script}}) ->
+    logger:debug("cgi ~p (os pid ~p) stderr: ~p",
+                 [Script, OsPid, truncate_log(Msg)]),
+    {noreply, State};
+handle_stderr(_OsPid, _Msg, State) ->
+    {noreply, State}.
+
+
+-spec truncate_log(Msg) -> Result
+              when Msg    :: binary(),
+                   Result :: binary() | {binary(), {truncated, integer()}}.
+truncate_log(Msg) when byte_size(Msg) > ?MAX_STDERR_LOG_BYTES ->
+    <<Head:?MAX_STDERR_LOG_BYTES/binary, Rest/binary>> = Msg,
+    {Head, {truncated, byte_size(Rest)}};
+truncate_log(Msg) ->
+    Msg.
+
+
 -spec handle_stdout2(Msg, State) -> Result
               when Msg    :: binary(),
                    State  :: worker_state(),
@@ -421,7 +454,8 @@ handle_stdout2(Msg, State) ->
             exec:kill(CGI#cgi_proc.os_pid, 9),
             cgi_finished({gateway_error, cgi_output_too_large}, State);
         false ->
-            NewState = State#worker_state{cgi_status=CGI#cgi_proc{buffer=NewBuffer}},
+            NewCGI = CGI#cgi_proc{buffer=NewBuffer},
+            NewState = State#worker_state{cgi_status=NewCGI},
             {noreply, NewState}
     end.
 
@@ -581,6 +615,19 @@ make_environment(CGIPrefix, Path, Bin, HostPort, QueryString, Cert, PathInfo) ->
                    Binary :: binary(),
                    Result :: gemini_response().
 handle_client_data(_, _) -> none.
+
+
+stderr_test_() ->
+    CGI = #cgi_proc{pid=self(), os_pid=42, buffer= <<"x">>,
+                    script=["/s"]},
+    S = #worker_state{parent=self(), cgi_status=CGI},
+    Big = binary:copy(<<"e">>, ?MAX_STDERR_LOG_BYTES + 5),
+    [?_assertEqual({noreply, S}, handle_info({stderr, 42, <<"oops\n">>}, S)),
+     ?_assertEqual({noreply, S}, handle_info({stderr, 7, <<"stale">>}, S)),
+     ?_assertEqual({noreply, S}, handle_info({stderr, 42, Big}, S)),
+     ?_assertEqual(<<"abc">>, truncate_log(<<"abc">>)),
+     ?_assertEqual({binary:copy(<<"e">>, ?MAX_STDERR_LOG_BYTES),
+                    {truncated, 5}}, truncate_log(Big))].
 
 
 %% A complete request, for tests that care about only some of its parts.
