@@ -74,12 +74,10 @@ start_link(Ref, Transport, Opts) ->
                    ServletResult :: servlet_result(),
                    Result        :: 'ok'.
 servlet_result(Pid, Result) when is_pid(Pid) ->
-    case is_process_alive(Pid) of
-        true ->
-            ok = gen_server:call(Pid, {servlet_result, Result});
-        _ ->
-            ok
-    end.
+    % A cast: the caller (the servlet container) is never blocked on the
+    % connection, which may itself be inside a call to the container. A
+    % connection that has gone away simply drops the message.
+    gen_server:cast(Pid, {servlet_result, Result}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -188,22 +186,22 @@ handle_info(Msg, State) ->
 %% @doc
 %% @hidden
 %% @end
-handle_call({servlet_result, {servlet_failed, Result}}, _From, State) ->
-    respond({error_code, Result}, State),
-    self() ! finished,
-    {reply, ok, State};
-
-handle_call({servlet_result, {servlet_complete, Output}}, _From, State) ->
-    respond({servlet_output, Output}, State),
-    self() ! finished,
-    {reply, ok, State};
-
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 %% @doc
 %% @hidden
 %% @end
+handle_cast({servlet_result, {servlet_failed, Result}}, State) ->
+    respond({error_code, Result}, State),
+    self() ! finished,
+    {noreply, State};
+
+handle_cast({servlet_result, {servlet_complete, Output}}, State) ->
+    respond({servlet_output, Output}, State),
+    self() ! finished,
+    {noreply, State};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -930,9 +928,8 @@ handle_request_servlet_test_() ->
                      <<"a">>, <<"b">>)),
      ?_assertEqual({<<>>, none},
                    with_servlet_data(fun(_) -> none end, <<>>, <<"b">>)),
-     % PINS CURRENT BEHAVIOUR (smell F5), not desired: a servlet that has
-     % already finished makes the "response" the bare atom 'ok'
-     ?_assertEqual({<<>>, ok},
+     % a servlet that has already finished is an internal error
+     ?_assertEqual({<<>>, {error_code, internal_server_error}},
                    isolated(fun() ->
                        {R, _} = with_client(fun(S) ->
                            St = conn_state(S),
@@ -1149,16 +1146,73 @@ handle_info_servlet_data_test_() ->
                        {stop, Why}
                    end))].
 
+%% Client data for a servlet whose container has already gone is answered
+%% with a 40 (not a crash for want of a response clause).
+dead_container_test() ->
+    {R, Data} = with_client(fun(S) ->
+        State = conn_state(S, {proc, dead_pid()},
+                           fun(request) -> {immediate, none} end),
+        case handle_info({ssl, S, <<"x">>}, State) of
+            {stop, Why, _} -> {stop, Why};
+            Other -> Other
+        end
+    end),
+    ?assertEqual({stop, normal}, R),
+    ?assertEqual(<<"40 Internal server error\r\n">>, Data).
+
+%% The container reports to the connection while the connection is inside
+%% a call to the container (client data sent as the script finishes).
+%% The result must be delivered at once, not after a call timeout. The
+%% container is held busy by a first client_data call from a helper, so
+%% that the gateway_exit and then the connection's own client_data call
+%% queue up behind it, in that order.
+client_data_as_script_finishes_test() ->
+    {Done, Data} = with_client(fun(S) ->
+        Me = self(),
+        Hold = fun(<<"hold">>) -> receive go -> none end;
+                  (_) -> none
+               end,
+        P = proc_lib:spawn(fun() ->
+            process_flag(trap_exit, true),
+            {Cont, Worker, State} = start_servlet(S, Hold),
+            Me ! {started, Cont, Worker},
+            gen_server:enter_loop(?MODULE, [], State)
+        end),
+        PRef = erlang:monitor(process, P),
+        {Cont, Worker} = receive {started, C, W} -> {C, W}
+                         after 2000 -> error(no_start)
+                         end,
+        T0 = erlang:monotonic_time(millisecond),
+        spawn(fun() ->
+            blizanci_servlet_container:handle_client_data(Cont, <<"hold">>)
+        end),
+        timer:sleep(100),
+        spawn(fun() ->
+            blizanci_servlet_container:gateway_exit(
+              Cont, {gateway_output, <<"20 text/gemini\r\nhi">>})
+        end),
+        timer:sleep(100),
+        P ! {ssl, S, <<"more">>},
+        timer:sleep(100),
+        Worker ! go,
+        Down = receive {'DOWN', PRef, process, P, Why} -> Why
+               after 3000 -> still_waiting
+               end,
+        {Down, erlang:monotonic_time(millisecond) - T0}
+    end),
+    ?assertMatch({normal, Ms} when Ms < 2000, Done),
+    ?assertEqual(<<"20 text/gemini\r\nhi">>, Data).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% handle_call/3 (the servlet's report), terminate/2, servlet_result/2
+%% handle_cast/2 (the servlet's report), terminate/2, servlet_result/2
 
 %% Report a servlet result as the container does; the trap_exit flag is
 %% left alone, a finished message is queued, and the client is sent
 %% the response.
 report(Result) ->
     with_client(fun(S) ->
-        {reply, ok, _} = handle_call({servlet_result, Result}, from,
-                                     conn_state(S)),
+        {noreply, _} = handle_cast({servlet_result, Result},
+                                   conn_state(S)),
         {trap_exit, TE} = process_info(self(), trap_exit),
         Finished = receive finished -> true after 1000 -> false end,
         {TE, Finished}
@@ -1180,9 +1234,9 @@ handle_call_test_() ->
      ?_assertEqual({error, function_clause},
                    begin
                        {R, _} = with_client(fun(S) ->
-                           try handle_call({servlet_result,
-                                            {servlet_failed, unimplemented}},
-                                           from, conn_state(S))
+                           try handle_cast({servlet_result,
+                                           {servlet_failed, unimplemented}},
+                                           conn_state(S))
                            catch error:Reason -> {error, Reason}
                            end
                        end),

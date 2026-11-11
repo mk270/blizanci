@@ -16,8 +16,10 @@
 %
 % On completion of the request, which may well not be synchronous, results
 % are communicated back to the Gemini parent (the original caller) by
-% a gen_server:call of {servlet_result, Result} on the connection
-% process, where Result has one of the following forms:
+% a gen_server:cast of {servlet_result, Result} to the connection
+% process (so that the container never blocks on a connection which may
+% itself be waiting on the container), where Result has one of the
+% following forms:
 %
 %    {servlet_failed, ErrorCode :: atom()}
 %  | {servlet_complete, Output :: binary()}
@@ -96,26 +98,19 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
 
 
 % TODO: document what on earth is going on here
+% Passes further client data to the servlet via its container. A
+% container that has already gone gives an internal-server-error
+% response (status 40), not 'ok'.
 -spec handle_client_data(Pid, Payload) -> Result
-              when Pid     :: pid(),
-                   Payload :: binary(),
-                   Result  :: 'ok' | gemini_response().
-
-handle_client_data(Pid, Payload) when is_binary(Payload) ->
-    case is_process_alive(Pid) of
-        true -> actually_handle_client_data(Pid, Payload);
-        _ -> ok % this seems unprincipled
-    end.
-
-
--spec actually_handle_client_data(Pid, Payload) -> Result
               when Pid     :: pid(),
                    Payload :: binary(),
                    Result  :: gemini_response().
 
-actually_handle_client_data(Pid, Payload) ->
-    Result = gen_server:call(Pid, {client_data, Payload}),
-    Result.
+handle_client_data(Pid, Payload) when is_binary(Payload) ->
+    try gen_server:call(Pid, {client_data, Payload})
+    catch
+        exit:{noproc, _} -> {error_code, internal_server_error}
+    end.
 
 
 %% @doc Called by the router to dispatch a request to a specific handler.
@@ -517,17 +512,15 @@ serve_started_test_() ->
                              end))].
 
 %% Results reported by the gateway after it started, via gateway_exit/2;
-%% the test process plays the connection, answering the container's
-%% gen_server call.
+%% the test process plays the connection, receiving the container's
+%% cast.
 gateway_exit_result(Result) ->
     with_container(fun(_) -> none end,
         fun(Pid, _Worker) ->
             Me = self(),
             spawn(fun() -> Me ! {gw_reply, gateway_exit(Pid, Result)} end),
             Got = receive
-                      {'$gen_call', From, {servlet_result, SR}} ->
-                          gen_server:reply(From, ok),
-                          SR
+                      {'$gen_cast', {servlet_result, SR}} -> SR
                   after 5000 -> no_servlet_result
                   end,
             Reply = receive {gw_reply, R} -> R after 5000 -> no_reply end,
@@ -580,9 +573,9 @@ handle_client_data_test_() ->
                                  end
                          end
                      end)),
-     % PINS CURRENT BEHAVIOUR (smell F5), not desired: a container that has
-     % already gone yields 'ok', which the connection cannot respond to
-     ?_assertEqual(ok, handle_client_data(dead_pid(), <<"x">>))].
+     % a container that has already gone gives an error response
+     ?_assertEqual({error_code, internal_server_error},
+                   handle_client_data(dead_pid(), <<"x">>))].
 
 cancel_test_() ->
     [?_assertEqual(ok, cancel(no_proc)),
