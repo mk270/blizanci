@@ -16,7 +16,7 @@
 
 
 -type route_info() :: {Proto      :: atom(),
-                       Regex      :: binary(),
+                       Regex      :: string() | binary(),
                        Module     :: module(),
                        AuthPolicy :: authorisation(),
                        Opts       :: map()
@@ -137,16 +137,45 @@ make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
     % are not responsible for remembering to merge before calling in.
     FullOpts = maps:merge(Module:default_options(), Opts),
     ok = valid_module_opts(Module, FullOpts),
-    case blizanci_auth:valid_authz_policy(AuthPolicy) of
-        {ok, _} -> #route{proto=Proto,
-                          pattern=RE,
-                          module=Module,
-                          auth_policy=AuthPolicy,
-                          options=FullOpts};
-        {error, Reason} -> throw({Reason, AuthPolicy})
-    end;
+    ok = valid_authz(AuthPolicy),
+    ok = valid_path_group(Regex, RE, Module),
+    #route{proto=Proto,
+           pattern=RE,
+           module=Module,
+           auth_policy=AuthPolicy,
+           options=FullOpts};
 make_route(_) ->
     throw(invalid_route).
+
+
+-spec valid_authz(AuthPolicy) -> Result
+              when AuthPolicy :: term(),
+                   Result     :: 'ok'.
+valid_authz(AuthPolicy) ->
+    case blizanci_auth:valid_authz_policy(AuthPolicy) of
+        {ok, _} -> ok;
+        {error, invalid_authz_policy} ->
+            throw({invalid_authz_policy, AuthPolicy});
+        {error, Reason} -> throw(Reason)
+    end.
+
+
+% Every servlet takes the path to serve from the named group PATH of
+% the route's regex (see blizanci_path:resolve_request/3), so a regex
+% without one is a configuration bug: refuse it here, at start-up,
+% rather than let the first matching request crash. (A regex with no
+% named groups at all never even matches, see route_match/2.)
+-spec valid_path_group(Regex, RE, Module) -> Result
+              when Regex  :: string() | binary(),
+                   RE     :: mp(),
+                   Module :: term(),
+                   Result :: 'ok'.
+valid_path_group(Regex, RE, Module) ->
+    {namelist, Names} = re:inspect(RE, namelist),
+    case lists:member(<<"PATH">>, Names) of
+        true  -> ok;
+        false -> throw({route_without_path_group, Regex, Module})
+    end.
 
 
 -spec compile_regex(Regex) -> Result
@@ -162,8 +191,8 @@ compile_regex(Regex) ->
 
 
 %% @doc
-%% Check that Module is loadable and implements the servlet callbacks
-%% used for route validation.
+%% Check that Module is loadable and exports the callbacks a servlet
+%% needs: default_options/0, validate_options/1, request/4 and serve/4.
 %% @end
 -spec check_servlet(Module) -> Result
               when Module :: term(),
@@ -176,17 +205,24 @@ check_servlet(Module) ->
     end.
 
 
+% What a route's servlet must export to be of any use: the options
+% callbacks, used when the route is built, and the two that handle a
+% request (see blizanci_servlet). cancel/1, handle_client_data/2,
+% start/0 and stop/0 are also callbacks but are not checked here.
+-define(SERVLET_CALLBACKS, [{default_options, 0}, {validate_options, 1},
+                            {request, 4}, {serve, 4}]).
+
 -spec valid_servlet(Module) -> Result
               when Module :: term(),
                    Result :: 'ok'.
 valid_servlet(Module) when is_atom(Module) ->
     case code:ensure_loaded(Module) of
         {module, Module} ->
-            case erlang:function_exported(Module, default_options, 0)
-                 andalso erlang:function_exported(Module,
-                                                  validate_options, 1) of
-                true -> ok;
-                false -> throw({not_a_servlet, Module})
+            case [ FA || {F, A} = FA <- ?SERVLET_CALLBACKS,
+                         not erlang:function_exported(Module, F, A) ] of
+                [] -> ok;
+                Missing -> throw({servlet_missing_callbacks, Module,
+                                  Missing})
             end;
         {error, _} -> throw({unknown_servlet, Module})
     end;
@@ -343,15 +379,43 @@ upload_setup() ->
 upload_teardown(Base) ->
     file:del_dir_r(Base).
 
+-define(RX, "(?<PATH>x)").
+
+path_group_test_() ->
+    Opts = #{ docroot => "test-docroot" },
+    Build = fun(Regex) ->
+                build_route(gemini, Regex, blizanci_static, public, Opts)
+            end,
+    [?_assertMatch({ok, _}, Build(?RX)),
+     % other groups are allowed, as long as PATH is there too
+     ?_assertMatch({ok, _}, Build("(?<A>a)(?<PATH>.*)")),
+     ?_assertEqual({error, {route_without_path_group, "x",
+                            blizanci_static}},
+                   Build("x")),
+     ?_assertEqual({error, {route_without_path_group, "(?<FOO>.*)",
+                            blizanci_static}},
+                   Build("(?<FOO>.*)")),
+     ?_assertEqual({error, {route_without_path_group, <<"(.*)">>,
+                            blizanci_static}},
+                   Build(<<"(.*)">>)),
+     % an unnamed group is not enough; names are case-sensitive
+     ?_assertMatch({error, {route_without_path_group, "(?<path>.*)", _}},
+                   Build("(?<path>.*)")),
+     % the whole table is refused if any one route is bad
+     ?_assertMatch({error, {route_without_path_group, "bad", _}},
+                   prepare([{gemini, ?RX, blizanci_static, public, Opts},
+                            {gemini, "bad", blizanci_static, public,
+                             Opts}]))].
+
 upload_tests(Base) ->
     D = fun(Name) -> filename:join(Base, Name) end,
     Cgi = fun(Dir) ->
-              {ok, R} = build_route(gemini, "x", blizanci_cgi, public,
+              {ok, R} = build_route(gemini, ?RX, blizanci_cgi, public,
                                     #{ cgiroot => Dir }),
               R
           end,
     Titan = fun(Docroot, Work) ->
-                {ok, R} = build_route(titan, "x", blizanci_titan, public,
+                {ok, R} = build_route(titan, ?RX, blizanci_titan, public,
                                       #{ docroot => Docroot,
                                          work_dir => Work }),
                 R
@@ -392,8 +456,8 @@ upload_tests(Base) ->
                        Titan(D("up"), list_to_binary(D("cgi")))]))),
      % and the check is part of preparing a routing table
      ?_assertMatch({error, {upload_dir_overlaps_cgiroot, docroot, _, _}},
-                   prepare([{gemini, <<"c">>, blizanci_cgi, public,
+                   prepare([{gemini, <<"(?<PATH>c)">>, blizanci_cgi, public,
                              #{ cgiroot => D("cgi") }},
-                            {titan, <<"t">>, blizanci_titan, public,
+                            {titan, <<"(?<PATH>t)">>, blizanci_titan, public,
                              #{ docroot => D("cgi"),
                                 work_dir => D("work") }}]))].

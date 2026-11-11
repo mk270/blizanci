@@ -18,7 +18,8 @@
 
 -export([peercert_cn/1]).
 -export([verify_cert/3]).
--export([validate_pem_file/1, certificate_from_file/1]).
+-export([validate_pem_file/1, certificate_from_file/1,
+         validate_ca_file/1]).
 -export([check_cert/1]).
 -export([verify_signed_by/2]).
 
@@ -268,6 +269,52 @@ certificate_from_file(Path) ->
     PEM_Entries = public_key:pem_decode(Data),
     {value, {_, DerCert, _}} = lists:keysearch('Certificate', 1, PEM_Entries),
     public_key:pkix_decode_cert(DerCert, otp).
+
+
+%% @doc
+%% Check, without raising, that Path is the name of a readable file
+%% holding at least one PEM-encoded certificate which decodes, i.e.
+%% that certificate_from_file/1 will work on it later. This is for
+%% checking a route's issuer files (ca_certs) at start-up.
+%% @end
+-spec validate_ca_file(Path) -> Result
+              when Path   :: term(),
+                   Result :: 'ok' | {'error', term()}.
+
+validate_ca_file(Path) when is_list(Path), Path =/= [] ->
+    try file:read_file(Path) of
+        {ok, Data} ->
+            case first_certificate(Data) of
+                {ok, Der} -> try_decode(Der);
+                none -> {error, no_certificate_in_file}
+            end;
+        {error, Posix} -> {error, Posix}
+    catch
+        _:_ -> {error, not_a_path}
+    end;
+validate_ca_file(_) ->
+    {error, not_a_path}.
+
+-spec first_certificate(Data) -> Result
+              when Data   :: binary(),
+                   Result :: {'ok', binary()} | 'none'.
+first_certificate(Data) ->
+    try lists:keyfind('Certificate', 1, public_key:pem_decode(Data)) of
+        {_, Der, _} -> {ok, Der};
+        false -> none
+    catch
+        _:_ -> none
+    end.
+
+-spec try_decode(Der) -> Result
+              when Der    :: binary(),
+                   Result :: 'ok' | {'error', 'certificate_not_decodable'}.
+try_decode(Der) ->
+    try public_key:pkix_decode_cert(Der, otp) of
+        _ -> ok
+    catch
+        _:_ -> {error, certificate_not_decodable}
+    end.
 
 
 %% @doc

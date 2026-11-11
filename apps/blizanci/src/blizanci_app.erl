@@ -16,9 +16,15 @@
 start(_StartType, _StartArgs) ->
     ok = application:ensure_started(mime_lookup),
     ok = application:ensure_started(ranch),
-    Config = blizanci_config:from_app_env(),
-    {ok, Pid} = blizanci_sup:start_link(Config),
-    {ok, Pid}.
+    case blizanci_config:from_app_env() of
+        {ok, Config} ->
+            {ok, Pid} = blizanci_sup:start_link(Config),
+            {ok, Pid};
+        {error, Reason} ->
+            logger:error("blizanci: ~s",
+                         [blizanci_config:describe_error(Reason)]),
+            {error, Reason}
+    end.
 
 % The declared servlets' resources are set up and torn down by
 % blizanci_conf_serv, which tracks the declared list as it changes

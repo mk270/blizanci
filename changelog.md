@@ -1,5 +1,49 @@
 # Blizanci Changelog
 
+## Unreleased
+
+- Refuse at start-up a route whose regex has no named group PATH, with
+  `{route_without_path_group, Regex, Servlet}` from
+  `blizanci_router:prepare/1` and `build_route/5`; every servlet takes
+  the path to serve from that group, and such a route used to crash on
+  its first request (or never match)
+- Breaking for library callers: `blizanci_config:make_site/5` returns
+  `{error, {invalid_routing, Reason}}` for a bad route instead of
+  crashing with a badmatch, and `blizanci_config:from_app_env/0` returns
+  `{ok, Config} | {error, Reason}` instead of the bare config map; the
+  application now fails to start with a one-line message naming the
+  route and the reason
+- Check a private route's issuer files (`ca_certs`) when the route is
+  built: each must exist, be readable and hold a PEM certificate that
+  decodes, else the route is refused with
+  `{invalid_ca_file, File, Why}` (`Why` is a posix atom,
+  `no_certificate_in_file`, `certificate_not_decodable` or
+  `not_a_path`); previously a bad file raised on the first request from
+  a client with a certificate. `blizanci_auth:valid_authz_policy/1` does
+  the check and `{private, X}` with a non-list X is now
+  `{error, invalid_authz_policy}`; new `blizanci_x509:validate_ca_file/1`
+- Require a servlet module to export `request/4` and `serve/4` as well
+  as `default_options/0` and `validate_options/1`; a module lacking any
+  is refused, when a route is built or the servlet list is validated,
+  with `{servlet_missing_callbacks, Module, [{Name, Arity}]}` (it used
+  to be accepted and fail with `undef` on the first request). A
+  non-module is still `{not_a_servlet, Term}`; a module `lists` now gives
+  the new term rather than `{not_a_servlet, lists}`
+- Say what is wrong, at start-up, when the Titan route's work_dir (by
+  default the relative `titan-temp`) is not a directory: the message
+  names the directory and the route, says relative paths are taken
+  from the working directory, and says to create it or set work_dir;
+  new `blizanci_config:describe_error/1` formats errors from
+  `make_site/5` and `from_app_env/0`. The directory is not created and
+  the default is unchanged
+- Answer 40 when request handling raises an error or an exit, not only
+  a throw (the connection's catch-all was `catch _`, which is throws
+  only); the class, reason and stack are logged at warning level. Before,
+  such a crash ended the connection process and the client got no
+  response
+- `blizanci_router`: the regex of a `route_info()` may now be given as
+  a string as well as a binary, as `build_route/5` already allowed
+
 ## 5.25.0
 
 - Fold the host and the scheme of a request, and site names, with an

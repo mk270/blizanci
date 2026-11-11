@@ -228,7 +228,13 @@ handle_ssl(Socket, Payload, State) ->
         try handle_request(Payload, State) of
             Result -> Result
         catch
-            _ -> {<<"">>, {error_code, internal_server_error}}
+            % anything raised by the request pipeline (router, auth, a
+            % servlet's request/4) is a 40, whatever its class: a bare
+            % `catch _` would only have caught throws
+            Class:Reason:Stack ->
+                logger:warning("request handling failed: ~p:~p~n~p",
+                               [Class, Reason, Stack]),
+                {<<"">>, {error_code, internal_server_error}}
         end,
     NewState = State#state{buffer=Buffer},
     Transport = State#state.transport,
@@ -1103,20 +1109,15 @@ handle_info_data_test_() ->
                                                     State),
                        {stop, Why}
                    end)),
-     % PINS CURRENT BEHAVIOUR (smell F3), not desired: only throws are
-     % caught around the request pipeline, so an error raised by a
-     % servlet's request/4 escapes handle_info/2 (and kills the process)
-     ?_assertEqual({error, boom},
-                   begin
-                       {R, _} = with_client(fun(S) ->
-                           State = conn_state(S, no_proc,
-                                    fun(request) -> error(boom) end),
-                           try handle_info({ssl, S, ?REQLINE}, State)
-                           catch error:Reason -> {error, Reason}
-                           end
-                       end),
-                       R
-                   end)].
+     % so is an error or an exit, whatever the servlet's request/4 does
+     ?_assertEqual({{stop, normal}, <<"40 Internal server error\r\n">>},
+                   Data(?REQLINE, fun(request) -> error(boom) end)),
+     ?_assertEqual({{stop, normal}, <<"40 Internal server error\r\n">>},
+                   Data(?REQLINE, fun(request) -> exit(boom) end)),
+     ?_assertEqual({{stop, normal}, <<"40 Internal server error\r\n">>},
+                   Data(?REQLINE, fun(request) ->
+                                      erlang:error(function_clause)
+                                  end))].
 
 %% Client data that arrives while a servlet runs goes to the servlet.
 handle_info_servlet_data_test_() ->
