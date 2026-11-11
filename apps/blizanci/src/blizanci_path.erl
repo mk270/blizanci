@@ -351,8 +351,7 @@ confine_test_() ->
      fun confine_tests/1}.
 
 confine_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("confine_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("confine_test"),
     Docs = filename:join(Base, "docs"),
     ok = filelib:ensure_path(Docs),
     ok = filelib:ensure_path(filename:join(Base, "docs-secret")),

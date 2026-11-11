@@ -20,6 +20,7 @@
 -include("blizanci_types.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-import(blizanci_test_support, [test_request/1]).
 
 -behaviour(gen_server).
 
@@ -741,8 +742,7 @@ finish_file_test_() ->
     {setup, fun finish_setup/0, fun finish_teardown/1, fun finish_tests/1}.
 
 finish_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("titan_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("titan_test"),
     [ ok = filelib:ensure_path(filename:join(Base, D))
       || D <- ["root", "outside", "work"] ],
     ok = file:write_file(filename:join([Base, "root", "existing.txt"]),
@@ -814,14 +814,13 @@ failed_install_test_() ->
     {setup, fun failed_setup/0, fun failed_teardown/1, fun failed_tests/1}.
 
 failed_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("titan_failed_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("titan_failed_test"),
     [ ok = filelib:ensure_path(filename:join(Base, D))
       || D <- ["root/dir", "work"] ],
     ok = file:write_file(filename:join([Base, "root", "old.txt"]), <<"old">>),
     ok = file:write_file(filename:join([Base, "root", "dir", "inner.txt"]),
                          <<"inner">>),
-    Shm = filename:join("/dev/shm", "titan_failed_test_" ++ Unique),
+    Shm = filename:join("/dev/shm", filename:basename(Base)),
     {Base, other_filesystem(Base, Shm)}.
 
 % {ok, Dir} when a directory can be made on a filesystem that files in
@@ -937,20 +936,6 @@ exdev_tests({ok, Shm}, Serve, Upload, Read, Clean) ->
                    handle_upload_status(titan_failed))].
 
 
-%% A complete request, for tests that care about only some of its parts.
--spec test_request(Extra) -> Result
-              when Extra  :: map(),
-                   Result :: request_details().
-test_request(Extra) ->
-    maps:merge(#{ client_cert => {error, no_peercert},
-                  query => <<>>,
-                  rest_of_input => <<>>,
-                  scheme => <<"gemini">>,
-                  host => <<"h">>,
-                  port => 1965,
-                  path => <<>> }, Extra).
-
-
 %% size=0 deletes the resource (see delete_resource/2). Driven through
 %% serve/4, so path confinement and parsing are exercised too.
 %% Fixture, under a fresh temporary directory:
@@ -961,8 +946,7 @@ delete_test_() ->
     {setup, fun delete_setup/0, fun delete_teardown/1, fun delete_tests/1}.
 
 delete_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("titan_delete_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("titan_delete_test"),
     [ ok = filelib:ensure_path(filename:join(Base, D))
       || D <- ["root/dir", "root/.git", "root/.well-known", "outside",
                "work"] ],

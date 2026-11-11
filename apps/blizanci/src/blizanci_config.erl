@@ -660,7 +660,7 @@ sni_fun_test_() ->
     SniFun = proplists:get_value(sni_fun, SSL),
     {setup,
      fun() -> live_up(1965, [], [A, B]) end,
-     fun(_) -> live_down() end,
+     fun(_) -> blizanci_test_support:live_down() end,
      [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
                     SniFun("a.example")),
       ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
@@ -691,7 +691,7 @@ sni_fun_case_insensitive_test_() ->
     SniFun = proplists:get_value(sni_fun, ssl_opts(1965)),
     {setup,
      fun() -> live_up(1965, [], [A, B]) end,
-     fun(_) -> live_down() end,
+     fun(_) -> blizanci_test_support:live_down() end,
      [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
                     SniFun("A.EXAMPLE")),
       ?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
@@ -758,8 +758,7 @@ validate_tests(Pem) ->
                    V(global(1965, []), [Good("a")]))].
 
 write_test_pem() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Path = filename:absname("validate_test_" ++ Unique ++ ".pem"),
+    Path = blizanci_test_support:tmp_path("validate_test") ++ ".pem",
     Pem = public_key:pem_encode([{'Certificate', <<1, 2, 3>>,
                                   not_encrypted}]),
     ok = file:write_file(Path, Pem),
@@ -769,21 +768,15 @@ write_test_pem() ->
 
 %% Stand up / tear down the live configuration, as blizanci_sup would.
 live_up(Port, Servlets, Sites) ->
-    live_down(),
+    blizanci_test_support:live_down(),
     {ok, _} = blizanci_conf_serv:start_link(#{port => Port,
                                          servlets => Servlets,
                                          sites => Sites}),
     ok.
 
-live_down() ->
-    case whereis(blizanci_conf_serv) of
-        undefined -> ok;
-        Pid -> gen_server:stop(Pid)
-    end.
-
 apply_test_() ->
     {setup, fun write_test_pem/0,
-     fun(Pem) -> file:delete(Pem), live_down() end,
+     fun(Pem) -> file:delete(Pem), blizanci_test_support:live_down() end,
      fun apply_tests/1}.
 
 apply_tests(Pem) ->
@@ -793,7 +786,7 @@ apply_tests(Pem) ->
     Conf = fun(Port, Servlets, Sites) ->
                new(global(Port, Servlets), Sites)
            end,
-    Reset = fun() -> live_down() end,
+    Reset = fun() -> blizanci_test_support:live_down() end,
     [?_test(begin
                 Reset(),
                 ?assertEqual({error, not_running},
@@ -839,7 +832,7 @@ apply_servlets_test_() ->
          write_test_pem()
      end,
      fun(Pem) ->
-         live_down(),
+         blizanci_test_support:live_down(),
          file:delete(Pem)
      end,
      fun(Pem) ->
@@ -859,7 +852,7 @@ apply_servlets_test_() ->
              ?assertEqual(undefined, whereis(blizanci_cgi)),
              ?assertMatch({ok, #{servlets := [blizanci_static]}},
                           blizanci_conf_serv:current()),
-             live_down()
+             blizanci_test_support:live_down()
          end)
      end}.
 
@@ -882,7 +875,6 @@ validate_upload_in_cgi_dir_test_() ->
      end}.
 
 make_test_dir() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Dir = filename:absname("validate_dir_test_" ++ Unique),
+    Dir = blizanci_test_support:tmp_path("validate_dir_test"),
     ok = filelib:ensure_path(Dir),
     Dir.

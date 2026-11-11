@@ -575,8 +575,7 @@ refused_request_test_() ->
      fun refused_tests/1}.
 
 refused_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("connection_refused_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("connection_refused_test"),
     ok = filelib:ensure_path(filename:join(Base, "cgi")),
     Base.
 
@@ -794,9 +793,7 @@ respond_file_test_() ->
     {timeout, 30, fun respond_file/0}.
 
 respond_file() ->
-    Dir = filename:absname("connection_file_test_"
-                           ++ integer_to_list(erlang:unique_integer([
-                                                              positive]))),
+    Dir = blizanci_test_support:tmp_path("connection_file_test"),
     ok = filelib:ensure_path(Dir),
     File = list_to_binary(filename:join(Dir, "f.gmi")),
     ok = file:write_file(File, <<"# hello\n">>),

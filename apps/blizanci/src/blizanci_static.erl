@@ -12,6 +12,7 @@
 
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-import(blizanci_test_support, [test_request/1]).
 
 -export([serve/4, cancel/1, request/4, default_options/0,
          validate_options/1, handle_client_data/2, start/0, stop/0]).
@@ -185,20 +186,6 @@ stop() ->
 %% Tests.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% A complete request, for tests that care about only some of its parts.
--spec test_request(Extra) -> Result
-              when Extra  :: map(),
-                   Result :: request_details().
-test_request(Extra) ->
-    maps:merge(#{ client_cert => {error, no_peercert},
-                  query => <<>>,
-                  rest_of_input => <<>>,
-                  scheme => <<"gemini">>,
-                  host => <<"h">>,
-                  port => 1965,
-                  path => <<>> }, Extra).
-
-
 %% A server configuration, for tests that do not use it.
 -spec test_config() -> Result
               when Result :: server_config().
@@ -220,8 +207,7 @@ non_ascii_symlink_test_() ->
      fun nonascii_tests/1}.
 
 nonascii_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = list_to_binary(filename:absname("static_test_" ++ Unique)),
+    Base = list_to_binary(blizanci_test_support:tmp_path("static_test")),
     Docs = filename:join(Base, <<"docs">>),
     ok = filelib:ensure_path(Docs),
     ok = filelib:ensure_path(filename:join(Base, <<"outside">>)),
@@ -262,8 +248,7 @@ hidden_files_test_() ->
     {setup, fun hidden_setup/0, fun hidden_teardown/1, fun hidden_tests/1}.
 
 hidden_setup() ->
-    Unique = integer_to_list(erlang:unique_integer([positive])),
-    Base = filename:absname("static_hidden_test_" ++ Unique),
+    Base = blizanci_test_support:tmp_path("static_hidden_test"),
     Docs = filename:join(Base, "docs"),
     [ begin
           Path = filename:join(Docs, Rel),
