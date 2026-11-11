@@ -1,5 +1,14 @@
 # Blizanci Changelog
 
+## 5.23.0
+
+- Decode percent-escapes in the path of a request, once, a segment at a time (new module blizanci_urlpath)
+- Refuse a request path that decodes to an escaped "/", a NUL, a control character or a non-ASCII byte, with 59
+- Answer a malformed percent-escape with 59, instead of crashing the connection process
+- Split Titan parameters off the raw path before decoding it, and refuse a decoded ";" in a Titan file name
+- Percent-encode the location of a redirect
+- Limit CGI script paths to letters, digits and ". _ - /"
+
 ## 5.22.0
 
 - Handle file names as bytes in blizanci_path:confine/2,3: the request path is a binary and the result is a binary, and the root may be a binary or a string; control characters (below 0x20, and DEL) are refused, and other bytes are allowed, whether or not they are valid UTF-8. This replaces the printable-ASCII restriction, and is a breaking change for any third-party servlet that calls confine/2,3 with strings
