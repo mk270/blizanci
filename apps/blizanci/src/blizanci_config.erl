@@ -60,7 +60,7 @@
 
 -export([from_app_env/0, make/3, find_site/2, route/5,
          global/2, site/3, add_route/2, insert_route/3, routes/1,
-         new/2, validate/1, apply/1]).
+         new/2, validate/1, apply/1, ascii_lowercase/1]).
 
 -define(PORT, 1965).
 -define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
@@ -115,14 +115,24 @@ site(Hostname, CertFile, KeyFile) ->
 
 % Lower-case A-Z only. Not string:lowercase/1, which folds Unicode
 % (U+212A, the Kelvin sign, becomes "k"), and a hostname here is ASCII.
+% Takes a string or a binary, and returns the same kind. This is the one
+% fold for host names and URL schemes, here and in blizanci_request.
 -spec ascii_lowercase(String) -> Result
               when String :: string(),
-                   Result :: string().
+                   Result :: string();
+                  (Binary) -> Result
+              when Binary :: binary(),
+                   Result :: binary().
+ascii_lowercase(Binary) when is_binary(Binary) ->
+    << <<(ascii_lower_char(C))>> || <<C>> <= Binary >>;
 ascii_lowercase(String) ->
-    [ case C of
-          _ when C >= $A, C =< $Z -> C + ($a - $A);
-          _ -> C
-      end || C <- String ].
+    [ ascii_lower_char(C) || C <- String ].
+
+-spec ascii_lower_char(Char) -> Result
+              when Char   :: char(),
+                   Result :: char().
+ascii_lower_char(C) when C >= $A, C =< $Z -> C + ($a - $A);
+ascii_lower_char(C) -> C.
 
 
 % Append a route to a site's routing table. Routes are tried in order,
@@ -350,7 +360,7 @@ find_site(Hostname, Sites) ->
     % Site names are stored in lower case (see site/3), so fold the name
     % being looked up. This is the one place SNI and request lookups
     % get their case-insensitivity.
-    Folded = list_to_binary(ascii_lowercase(binary_to_list(Hostname))),
+    Folded = ascii_lowercase(Hostname),
     case lists:keyfind(Folded, #site.hostname, Sites) of
         false -> not_found;
         Site -> {ok, Site}
@@ -594,7 +604,13 @@ ascii_lowercase_test_() ->
     [?_assertEqual("example.org", ascii_lowercase("Example.ORG")),
      ?_assertEqual("a-1.b", ascii_lowercase("A-1.B")),
      % only A-Z: the Kelvin sign is left alone, not folded to "k"
-     ?_assertEqual([16#212A], ascii_lowercase([16#212A]))].
+     ?_assertEqual([16#212A], ascii_lowercase([16#212A])),
+     ?_assertEqual(<<"example.org">>, ascii_lowercase(<<"Example.ORG">>)),
+     ?_assertEqual(<<"a-1.b">>, ascii_lowercase(<<"A-1.B">>)),
+     ?_assertEqual(<<>>, ascii_lowercase(<<>>)),
+     ?_assertEqual(<<226,132,170>>, ascii_lowercase(<<226,132,170>>)),
+     ?_assertEqual(<<"a", 226,132,170, "b">>,
+                   ascii_lowercase(<<"A", 226,132,170, "B">>))].
 
 add_route_appends_test() ->
     Opts = #{ docroot => ?TEST_DOCROOT },

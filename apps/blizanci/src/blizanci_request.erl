@@ -105,8 +105,8 @@ handle_parsed_url(URI, Config, Cert, Rest) ->
                       P -> P
                   end,
 
-        SchemeLC  = string:lowercase(Scheme),
-        ReqHostLC = string:lowercase(ReqHost),
+        SchemeLC  = blizanci_config:ascii_lowercase(Scheme),
+        ReqHostLC = blizanci_config:ascii_lowercase(ReqHost),
 
         Query = maps:get(query, URI, <<>>),
         #{ scheme        => SchemeLC,
@@ -172,8 +172,8 @@ handle_gemini_url(Proto,
                   Config=#server_config{hostname=ConfHost, port=Port}) ->
 
     % defence in depth - redundant check
-    HostLC     = string:lowercase(Host),
-    ConfHostLC = string:lowercase(ConfHost),
+    HostLC     = blizanci_config:ascii_lowercase(Host),
+    ConfHostLC = blizanci_config:ascii_lowercase(ConfHost),
 
     if HostLC =/= ConfHostLC -> {error_code, host_unrecognised};
        true -> case uri_string:normalize(Path) of
@@ -420,6 +420,34 @@ case_insensitive_scheme_and_host_test_() ->
      ?_assertEqual(?NOT_FOUND, H(<<"gemini://This.Host.Dev:1965/nothere">>)),
      ?_assertEqual(?NOT_FOUND, H(<<"GEMINI://THIS.HOST.DEV/nothere">>))].
 
+%% The fold is ASCII-only: a host with the Kelvin sign (U+212A, bytes
+%% 226,132,170) where "k" would go is not the configured host. The URL
+%% parser may refuse it first; handle_gemini_url is called directly too,
+%% so the comparison itself is tested.
+kelvin_host_not_ascii_host_test_() ->
+    H = url_handler(),
+    Kelvin = <<226,132,170>>,
+    Host = <<"this.host.dev">>,
+    KHost = <<"in", Kelvin/binary, "ed.dev">>,
+    Config = #server_config{hostname = <<"inked.dev">>, port = 1965,
+                            routing = []},
+    Req = fun(Hst) -> #{ client_cert   => {error, no_peercert},
+                         query         => <<>>,
+                         rest_of_input => <<>>,
+                         scheme        => <<"gemini">>,
+                         host          => Hst,
+                         port          => 1965,
+                         path          => <<"/x">> }
+          end,
+    [?_assertNotEqual(?NOT_FOUND,
+                      H(<<"gemini://this.host.dev", Kelvin/binary, "/x">>)),
+     ?_assertEqual({error_code, host_unrecognised},
+                   handle_gemini_url(gemini, Req(KHost), Config)),
+     ?_assertEqual({error_code, host_unrecognised},
+                   handle_gemini_url(gemini, Req(Host), Config)),
+     ?_assertNotEqual({error_code, host_unrecognised},
+                      handle_gemini_url(gemini, Req(<<"INKED.dev">>),
+                                        Config))].
 
 %% Percent-escapes in the path are decoded, exactly once, after the path
 %% structure is known; the result must be printable ASCII, and must not
