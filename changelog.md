@@ -36,6 +36,11 @@
   new `blizanci_config:describe_error/1` formats errors from
   `make_site/5` and `from_app_env/0`. The directory is not created and
   the default is unchanged
+- Answer 40 when request handling raises an error or an exit, not only
+  a throw (the connection's catch-all was `catch _`, which is throws
+  only); the class, reason and stack are logged at warning level. Before,
+  such a crash ended the connection process and the client got no
+  response
 - `blizanci_router`: the regex of a `route_info()` may now be given as
   a string as well as a binary, as `build_route/5` already allowed
 
