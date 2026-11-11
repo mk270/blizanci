@@ -1,5 +1,17 @@
 # Blizanci Changelog
 
+## 5.29.0
+
+- Breaking for library callers: `blizanci_connection:servlet_result/2`
+  and `blizanci_servlet_container:gateway_exit/2` are now casts, so a
+  servlet or CGI worker never blocks on the connection or the
+  container, and never exits if the other is gone; this removes a 5
+  second deadlock that lost CGI output when the client sent data just
+  as the script finished
+- `blizanci_servlet_container:handle_client_data/2` answers
+  `{error_code, internal_server_error}` (status 40) when the container
+  has gone, instead of returning `ok`
+
 ## 5.28.0
 
 - Add a Common Test suite (`rebar3 ct`) exercising the running
