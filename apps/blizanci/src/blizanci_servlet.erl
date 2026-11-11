@@ -11,7 +11,7 @@
 % executed in the context of the caller (which is a
 % blizanci_servlet_container process). If it opts instead to defer
 % processing, the caller will start and link a new process which will call
-% Module:serve/3.
+% Module:serve/4.
 % @end
 
 -module(blizanci_servlet).

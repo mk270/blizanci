@@ -29,11 +29,11 @@
 %
 %
 %   handle_file(...):
-%     strip out requests involving ".."
+%     percent-decode the path (via blizanci_urlpath), then strip out
+%     requests involving ".."
 %
-%   serve_file(...):
-%     redirect requests for directories to index files; otherwise return
-%     file contents if file exists
+%   [what the servlet then does with the path, e.g. serve_file/2 in
+%    blizanci_static, is outside this module.]
 %
 % All calls below handle_request return a response of type gemini_response().
 

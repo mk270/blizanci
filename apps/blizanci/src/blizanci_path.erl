@@ -85,8 +85,7 @@ path_under_root(S, Root) when is_list(S), is_list(Root) ->
 %% as blizanci_titan already does for its own root), since fix_path/1
 %% requires an absolute path and most of the configured roots default
 %% to relative ones. This is a minimal, local fix to keep those
-%% defaults working; it does not address the broader FIXME in
-%% blizanci_config:proto_opts/1 about validating such config up front.
+%% defaults working; it does not validate such config up front.
 %%
 %% Root itself is canonicalised too, not just absname'd, before being
 %% used as the confinement prefix: if Root sits behind a symlink (e.g.

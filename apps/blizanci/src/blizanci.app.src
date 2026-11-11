@@ -31,9 +31,11 @@
              blizanci_servlet,
              blizanci_servlet_container,
              blizanci_static,
+             blizanci_status,
              blizanci_sup,
              blizanci_titan,
              blizanci_tmpdir,
+             blizanci_urlpath,
              blizanci_x509
             ]},
   {licenses, ["Apache 2.0"]},
