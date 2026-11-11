@@ -162,8 +162,8 @@ confine0(SubPath, Root, Opts) ->
         {false, false} ->
             confine1(SubPath, Root, Opts);
         {true, _} ->
-            logger:warning("path ~w under root ~p has a control character",
-                           [SubPath, Root]),
+            logger:debug("path ~w under root ~p has a control character",
+                         [SubPath, Root]),
             {error, file_not_found};
         {false, true} ->
             % Operating systems end a name at a NUL, so a name containing
@@ -279,8 +279,8 @@ confine2(SubPath, AbsRoot, CanonRoot, Opts) ->
                         true ->
                             {ok, Cmd};
                         false ->
-                            logger:warning("path ~p under ~p has a hidden "
-                                           "segment", [SubPath, CanonRoot]),
+                            logger:debug("path ~p under ~p has a hidden "
+                                         "segment", [SubPath, CanonRoot]),
                             {error, file_not_found}
                     end;
                 false ->
@@ -289,8 +289,8 @@ confine2(SubPath, AbsRoot, CanonRoot, Opts) ->
                     {error, file_not_found}
             end;
         {error, Reason} ->
-            logger:warning("path resolution failed for ~p under ~p: ~p",
-                           [SubPath, AbsRoot, Reason]),
+            logger:debug("path resolution failed for ~p under ~p: ~p",
+                         [SubPath, AbsRoot, Reason]),
             {error, file_not_found}
     end.
 

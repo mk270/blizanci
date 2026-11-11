@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Log a path refused for a hidden segment, a control character or a failed
+  resolution at debug level instead of warning; only a path resolving
+  outside the root, and root misconfiguration, still log a warning
 - Fold the host and the scheme of a request, and site names, with an
   ASCII-only lowercase, exported as `blizanci_config:ascii_lowercase/1`
 - Answer a CGI request refused before the script runs with the refusal's own
