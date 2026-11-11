@@ -473,7 +473,7 @@ recv_data(Data, #titan_state{stream=Stream,
             % The client sent more than it declared: nothing is
             % installed, and what was received is thrown away.
             ok = file:close(Stream),
-            ok = delete(TmpPath),
+            discard(TmpPath),
             titan_too_much;
         NewSize =:= Size ->
             ok = file:write(Stream, Data),
@@ -506,7 +506,7 @@ finish_file(Stream, Path, RootDir, TmpPath, Size) ->
         {ok, TargetPath} ->
             replace_target(TargetPath, TmpPath);
         {error, file_not_found} ->
-            ok = delete(TmpPath),
+            discard(TmpPath),
             titan_not_found
     end.
 
@@ -595,16 +595,28 @@ staging_path(TargetPath) ->
 
 -spec delete(Path) -> Result
               when Path   :: filepath(),
-                   Result :: ok
-                           | {fail, atom()}
-                           | term().
+                   Result :: ok | {error, atom()}.
 
 delete(Path) ->
     case file:delete(Path) of
         ok -> ok;
         {error, enoent} -> ok;
-        {error, enotdir} -> {fail, enotdir};
-        Error -> Error
+        {error, _} = Error -> Error
+    end.
+
+
+% Remove a temporary file that is no longer wanted. If it can't be
+% removed the upload's outcome is unchanged: this only logs it.
+-spec discard(Path) -> Result
+              when Path   :: filepath(),
+                   Result :: ok.
+
+discard(Path) ->
+    case delete(Path) of
+        ok -> ok;
+        {error, Reason} ->
+            logger:warning("titan: cannot remove ~p: ~p", [Path, Reason]),
+            ok
     end.
 
 
@@ -1153,4 +1165,61 @@ hidden_tests(Base) ->
                                          list_to_binary(Root), Tmp, 1)),
                 ?assertNot(Exists(".late")),
                 ?assertNot(filelib:is_file(Tmp))
+            end)].
+
+
+%% A temporary file that can't be removed must not crash the upload: the
+%% outcome is the same and the failure is only logged.
+delete_failure_test_() ->
+    {setup, fun delete_setup/0, fun delete_failure_teardown/1,
+     fun delete_failure_tests/1}.
+
+delete_failure_teardown(Base) ->
+    _ = file:write_file_info(filename:join(Base, "lock"),
+                             #file_info{mode = 8#755}),
+    delete_teardown(Base).
+
+delete_failure_tests(Base) ->
+    Root = filename:join(Base, "root"),
+    Lock = filename:join(Base, "lock"),
+    ok = filelib:ensure_path(Lock),
+    IsRoot = string:trim(os:cmd("id -u")) =:= "0",
+    Open = fun(Name) ->
+               Tmp = filename:join(Lock, Name),
+               {ok, Stream} = file:open(Tmp, [write, raw, binary]),
+               {Stream, Tmp}
+           end,
+    [?_assertEqual(ok, delete(filename:join(Base, "no/such/file"))),
+     ?_assertEqual({error, enotdir},
+                   delete(filename:join([Root, "a.txt", "x"]))),
+     % a directory can't be deleted as a file
+     ?_assertMatch({error, E} when E =:= eisdir; E =:= eperm,
+                   delete(filename:join(Root, "dir"))),
+     ?_assertEqual(ok, discard(filename:join(Root, "dir"))),
+     % eacces: nothing in a read-only directory can be removed
+     ?_test(case IsRoot of
+                true -> ok;
+                false ->
+                    {S1, T1} = Open("t1"),
+                    {S2, T2} = Open("t2"),
+                    ok = file:write_file_info(Lock,
+                                              #file_info{mode = 8#555}),
+                    ?assertEqual({error, eacces}, delete(T1)),
+                    ?assertEqual(ok, discard(T1)),
+                    % target not found: the upload is refused cleanly
+                    ?assertEqual(titan_not_found,
+                                 finish_file(S1, <<".nope">>,
+                                             list_to_binary(Root), T1, 0)),
+                    % more data than declared: refused cleanly
+                    ?assertEqual(titan_too_much,
+                                 recv_data(<<"abc">>,
+                                           #titan_state{stream = S2,
+                                                        size = 1,
+                                                        path = <<"x">>,
+                                                        root_dir = Root,
+                                                        tmp_file = T2,
+                                                        bytes_recv = 0})),
+                    ok = file:write_file_info(Lock,
+                                              #file_info{mode = 8#755}),
+                    ?assert(filelib:is_file(T1))
             end)].
