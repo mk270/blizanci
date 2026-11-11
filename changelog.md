@@ -1,5 +1,13 @@
 # Blizanci Changelog
 
+## Unreleased
+
+- Compare the scheme and the host of a request URL case-insensitively
+- Find a site by its SNI name case-insensitively, both in the TLS handshake and after it
+- Store site host names in lower case; the host name from sys.config, or the machine's own, is folded to lower case at start-up
+- Change `blizanci_config:site/3` to return `{ok, Site}` or `{error, hostname_not_lowercase}`, refusing a host name that contains an upper-case letter; this is a breaking change for library callers
+- Enable the tests for case-insensitive URL and SNI matching, which had been compiled out
+
 ## 5.23.0
 
 - Decode percent-escapes in the path of a request, once, a segment at a time (new module blizanci_urlpath)
