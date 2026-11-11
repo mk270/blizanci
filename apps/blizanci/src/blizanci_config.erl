@@ -277,7 +277,9 @@ validate_routes_use_servlets(#global{servlets = Servlets}, Sites) ->
 % The start/0 of each added servlet is called before the switch and the
 % stop/0 of each removed one after it, so a route never names a servlet
 % whose resources aren't set up; a connection that is mid-request on a
-% removed servlet may be cut off.
+% removed servlet may be cut off. A failed start leaves nothing behind.
+% The work is done by blizanci_servlets, which owns the servlets'
+% resources, so the declared list and the real pools change together.
 %
 % The port is bound once when the listener opens, so a change of port
 % is refused rather than applied. Nothing is applied if the instance
@@ -288,51 +290,8 @@ validate_routes_use_servlets(#global{servlets = Servlets}, Sites) ->
 apply(Config = #config{global = #global{port = Port, servlets = Servlets},
                        sites = Sites}) ->
     case validate(Config) of
-        ok -> swap(blizanci_conf_serv:current(), Port, Servlets, Sites);
+        ok -> blizanci_servlets:reconfigure(Port, Servlets, Sites);
         {error, _} = Error -> Error
-    end.
-
-
--spec swap(Running, Port, Servlets, Sites) -> Result
-              when Running  :: {'ok', blizanci_conf_serv:running()}
-                             | 'not_running',
-                   Port     :: integer(),
-                   Servlets :: [module()],
-                   Sites    :: [site()],
-                   Result   :: 'ok' | {'error', term()}.
-swap(not_running, _Port, _Servlets, _Sites) ->
-    {error, not_running};
-swap({ok, #{port := OldPort}}, Port, _Servlets, _Sites)
-  when OldPort =/= Port ->
-    {error, {port_change_requires_restart, OldPort, Port}};
-swap({ok, #{servlets := OldServlets}}, Port, Servlets, Sites) ->
-    Added   = [ S || S <- Servlets, not lists:member(S, OldServlets) ],
-    Removed = [ S || S <- OldServlets, not lists:member(S, Servlets) ],
-    case start_servlets(Added, []) of
-        ok ->
-            ok = blizanci_conf_serv:publish(Port, Servlets, Sites),
-            [ ok = S:stop() || S <- Removed ],
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
-
-
-% Call start/0 on each servlet in turn; if one fails, call stop/0 on
-% those already started so a failed apply leaves nothing behind.
--spec start_servlets(Servlets, Started) -> Result
-              when Servlets :: [module()],
-                   Started  :: [module()],
-                   Result   :: 'ok' | {'error', term()}.
-start_servlets([], _Started) ->
-    ok;
-start_servlets([Servlet | Rest], Started) ->
-    try Servlet:start() of
-        ok -> start_servlets(Rest, [Servlet | Started])
-    catch
-        Class:Reason ->
-            [ ok = S:stop() || S <- Started ],
-            {error, {servlet_start_failed, Servlet, {Class, Reason}}}
     end.
 
 
@@ -925,13 +884,9 @@ write_test_pem() ->
 
 %% apply/1.
 
-%% Stand up / tear down the live configuration, as blizanci_sup would.
+%% Stand up the live configuration, as blizanci_sup would.
 live_up(Port, Servlets, Sites) ->
-    blizanci_test_support:live_down(),
-    {ok, _} = blizanci_conf_serv:start_link(#{port => Port,
-                                         servlets => Servlets,
-                                         sites => Sites}),
-    ok.
+    blizanci_test_support:live_up(Port, Servlets, Sites).
 
 apply_test_() ->
     {setup, fun write_test_pem/0,

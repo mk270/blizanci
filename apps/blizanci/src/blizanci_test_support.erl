@@ -12,9 +12,10 @@
 %% from test/ every call would be reported as an unknown function.
 
 -module(blizanci_test_support).
+-include("blizanci_types.hrl").
 
 -export([tmp_path/1, test_request/1, isolated/1]).
--export([live_down/0]).
+-export([live_up/3, live_down/0]).
 -export([mime_up/0, mime_down/1]).
 
 %% A fresh, absolute path (a string) for a fixture, in the current
@@ -71,16 +72,38 @@ mime_down(already_running) -> ok;
 mime_down(started) -> ok = application:stop(mime_lookup).
 
 
-%% Stop the live configuration process and the servlet pools it may have
-%% started, if they are running: the process (and with it the named
-%% table), and the blizanci_cgi pool.
+%% Start the live configuration as blizanci_sup would, linked to the
+%% caller, first stopping any that is running: the table owner, then the
+%% servlets' process (which starts the declared servlets' pools).
+-spec live_up(Port, Servlets, Sites) -> Result
+              when Port     :: integer(),
+                   Servlets :: [module()],
+                   Sites    :: [site()],
+                   Result   :: 'ok'.
+live_up(Port, Servlets, Sites) ->
+    live_down(),
+    {ok, _} = blizanci_conf_serv:start_link(#{port => Port,
+                                              servlets => Servlets,
+                                              sites => Sites}),
+    {ok, _} = blizanci_servlets:start_link(),
+    ok.
+
+
+%% Stop the live configuration processes and the servlet pools they may
+%% have started, if they are running: the servlets' process (stopping
+%% the pools it knows of), the table owner (and with it the named
+%% table), and any blizanci_cgi pool left over.
 -spec live_down() -> ok.
 live_down() ->
-    case whereis(blizanci_conf_serv) of
-        undefined -> ok;
-        Pid -> gen_server:stop(Pid)
-    end,
+    [ stop_registered(Name) || Name <- [blizanci_servlets,
+                                        blizanci_conf_serv] ],
     case whereis(blizanci_cgi) of
         undefined -> ok;
         _ -> blizanci_cgi:stop()
+    end.
+
+stop_registered(Name) ->
+    case whereis(Name) of
+        undefined -> ok;
+        Pid -> gen_server:stop(Pid)
     end.
