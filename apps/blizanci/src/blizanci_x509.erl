@@ -13,6 +13,7 @@
 
 -module(blizanci_x509).
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
 -export([peercert_cn/1]).
@@ -20,6 +21,11 @@
 -export([validate_pem_file/1, certificate_from_file/1]).
 -export([check_cert/1]).
 -export([verify_signed_by/2]).
+
+% Certificate-making helpers for the tests here and in blizanci_auth.
+-ifdef(TEST).
+-export([test_pki/0, test_tmp_dir/0, test_write_pem/3]).
+-endif.
 
 %% @doc
 %% Check if the connection has a valid certificate,
@@ -284,3 +290,298 @@ validate_pem_file(Filename) ->
             logger:warning("Couldn't open ~p", [Filename]),
             {fail, couldnt_open_pem_file}
     end.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Certificates are made here, with public_key, so that the tests need no
+% fixture files and no openssl: each is a v1 certificate carrying only a
+% subject, an issuer, a validity period and an RSA key, signed with
+% SHA-256. test_pki/0 makes a small cast of them:
+%
+%   ca, ca2   two unrelated self-signed CAs ("Test CA", "Other CA")
+%   peer      "alice", signed by ca
+%   peer_ca2  "bob", signed by ca2
+%   forged    "alice" again, whose Issuer is ca's name, but which is
+%             signed by an attacker's own key (the 2026-09 forgery)
+%   expired, not_yet   signed by ca, outside their validity period
+%   general, pivot     valid now; times written as GeneralizedTime, and
+%                      as UTCTime across the 1950/2049 pivot
+%   bmp, printable, no_cn   subjects with a BMPString CN, a
+%                      PrintableString CN, and no CN at all
+%
+% Keys are 2048-bit RSA with exponent 17, as elsewhere in the tests.
+
+-define(DAY, 86400).
+
+test_key() ->
+    public_key:generate_key({rsa, 2048, 17}).
+
+test_rsa_public(#'RSAPrivateKey'{modulus = N, publicExponent = E}) ->
+    #'RSAPublicKey'{modulus = N, publicExponent = E}.
+
+test_dn(none) ->
+    {rdnSequence, []};
+test_dn(Value) ->
+    {rdnSequence,
+     [[#'AttributeTypeAndValue'{type = ?'id-at-commonName',
+                                value = Value}]]}.
+
+test_cn(String) ->
+    test_dn({utf8String, list_to_binary(String)}).
+
+% A UTCTime for a time given in gregorian seconds.
+test_utc(Seconds) ->
+    {{Y, Mo, D}, {H, Mi, S}} =
+        calendar:gregorian_seconds_to_datetime(Seconds),
+    {utcTime, lists:flatten(
+                io_lib:format("~2..0w~2..0w~2..0w~2..0w~2..0w~2..0wZ",
+                              [Y rem 100, Mo, D, H, Mi, S]))}.
+
+test_cert(Subject, Issuer, SubjectKey, SignKey, {NotBefore, NotAfter}) ->
+    Alg = #'SignatureAlgorithm'{algorithm = ?'sha256WithRSAEncryption',
+                                parameters = asn1_NOVALUE},
+    SPKI = #'OTPSubjectPublicKeyInfo'{
+              algorithm = #'PublicKeyAlgorithm'{
+                             algorithm = ?rsaEncryption,
+                             parameters = asn1_NOVALUE},
+              subjectPublicKey = test_rsa_public(SubjectKey)},
+    TBS = #'OTPTBSCertificate'{
+             version = v1,
+             serialNumber = 1,
+             signature = Alg,
+             issuer = Issuer,
+             validity = #'Validity'{notBefore = NotBefore,
+                                    notAfter = NotAfter},
+             subject = Subject,
+             subjectPublicKeyInfo = SPKI,
+             issuerUniqueID = asn1_NOVALUE,
+             subjectUniqueID = asn1_NOVALUE,
+             extensions = asn1_NOVALUE},
+    public_key:pkix_sign(TBS, SignKey).
+
+test_pki() ->
+    Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
+    Valid = {test_utc(Now - ?DAY), test_utc(Now + ?DAY)},
+    CAKey = test_key(),
+    CA2Key = test_key(),
+    PeerKey = test_key(),
+    AttackerKey = test_key(),
+    CAName = test_cn("Test CA"),
+    CA2Name = test_cn("Other CA"),
+    Signed = fun(Subject, Validity) ->
+                 test_cert(Subject, CAName, PeerKey, CAKey, Validity)
+             end,
+    CA = test_cert(CAName, CAName, CAKey, CAKey, Valid),
+    CA2 = test_cert(CA2Name, CA2Name, CA2Key, CA2Key, Valid),
+    #{ ca       => CA,
+       ca_otp   => public_key:pkix_decode_cert(CA, otp),
+       ca2      => CA2,
+       ca2_otp  => public_key:pkix_decode_cert(CA2, otp),
+       peer_key => PeerKey,
+       peer     => Signed(test_cn("alice"), Valid),
+       peer_ca2 => test_cert(test_cn("bob"), CA2Name, PeerKey, CA2Key,
+                             Valid),
+       forged   => test_cert(test_cn("alice"), CAName, AttackerKey,
+                             AttackerKey, Valid),
+       expired  => Signed(test_cn("alice"),
+                          {test_utc(Now - 2 * ?DAY), test_utc(Now - ?DAY)}),
+       not_yet  => Signed(test_cn("alice"),
+                          {test_utc(Now + ?DAY), test_utc(Now + 2 * ?DAY)}),
+       general  => Signed(test_cn("alice"),
+                          {{generalTime, "20200101000000Z"},
+                           {generalTime, "20991231235959Z"}}),
+       pivot    => Signed(test_cn("alice"),
+                          {{utcTime, "500101000000Z"},
+                           {utcTime, "491231235959Z"}}),
+       bmp      => Signed(test_dn({bmpString, [0, $a]}), Valid),
+       printable => Signed(test_dn({printableString, "carol"}), Valid),
+       no_cn    => Signed(test_dn(none), Valid)
+     }.
+
+% A fresh, empty directory for a test's files; the caller removes it.
+test_tmp_dir() ->
+    Base = case os:getenv("TMPDIR") of
+               false -> "/tmp";
+               Dir   -> Dir
+           end,
+    Unique = integer_to_list(erlang:unique_integer([positive])),
+    Path = filename:join(Base, "blizanci_x509_test_" ++ Unique),
+    ok = filelib:ensure_path(Path),
+    Path.
+
+% Write a PEM file holding the given entries; returns its path.
+test_write_pem(Dir, Name, Entries) ->
+    Path = filename:join(Dir, Name),
+    ok = file:write_file(Path, public_key:pem_encode(Entries)),
+    Path.
+
+test_pem_cert(Der) ->
+    {'Certificate', Der, not_encrypted}.
+
+pki_fixture(Tests) ->
+    {setup, fun test_pki/0, fun(_) -> ok end, Tests}.
+
+% The cryptographic check: a certificate is accepted as issued by a CA
+% only if the CA's key signed it.
+verify_signed_by_test_() ->
+    pki_fixture(
+      fun(#{ca := CA, ca_otp := CAOtp, ca2_otp := CA2Otp, peer := Peer,
+            peer_ca2 := PeerCA2, forged := Forged}) ->
+          [?_assert(verify_signed_by(Peer, CAOtp)),
+           ?_assert(verify_signed_by(PeerCA2, CA2Otp)),
+           % a self-signed CA is signed by its own key
+           ?_assert(verify_signed_by(CA, CAOtp)),
+           % signed by someone else
+           ?_assertNot(verify_signed_by(Peer, CA2Otp)),
+           ?_assertNot(verify_signed_by(PeerCA2, CAOtp)),
+           % The 2026-09 forgery: the Issuer field names the CA, but the
+           % signature is the attacker's. The old check, a comparison of
+           % names (public_key:pkix_is_issuer/2), accepts it; the
+           % signature check rejects it.
+           ?_assert(public_key:pkix_is_issuer(Forged, CAOtp)),
+           ?_assertNot(verify_signed_by(Forged, CAOtp)),
+           % and a genuine certificate passes both
+           ?_assert(public_key:pkix_is_issuer(Peer, CAOtp)),
+           % anything undecodable is "not signed by", never a crash
+           ?_assertNot(verify_signed_by(<<"not a certificate">>, CAOtp)),
+           ?_assertNot(verify_signed_by(<<>>, CAOtp)),
+           ?_assertNot(apply(?MODULE, verify_signed_by,
+                             [Peer, not_a_certificate]))]
+      end).
+
+% Whether the certificate is within its validity period.
+check_cert_test_() ->
+    pki_fixture(
+      fun(#{peer := Peer, expired := Expired, not_yet := NotYet,
+            general := General, pivot := Pivot}) ->
+          [?_assertMatch({ok, #'OTPCertificate'{}}, check_cert(Peer)),
+           ?_assertEqual({ok, public_key:pkix_decode_cert(Peer, otp)},
+                         check_cert(Peer)),
+           ?_assertEqual({error, cert_expired}, check_cert(Expired)),
+           % a certificate not yet valid is also reported as cert_expired
+           ?_assertEqual({error, cert_expired}, check_cert(NotYet)),
+           % GeneralizedTime, and UTCTime either side of the 1950/2049
+           % pivot of two-digit years (a valid 1950-2049 period)
+           ?_assertMatch({ok, _}, check_cert(General)),
+           ?_assertMatch({ok, _}, check_cert(Pivot)),
+           % undecodable input is reported, not raised
+           ?_assertEqual({error, cert_not_parsed},
+                         check_cert(<<"not a certificate">>)),
+           ?_assertEqual({error, cert_not_parsed}, check_cert(<<>>)),
+           ?_assertEqual({error, cert_not_parsed},
+                         check_cert(binary:part(Peer, 0, 100)))]
+      end).
+
+% A time that isn't UTC ("Z"), which RFC 5280 forbids, makes the
+% certificate unparseable as far as check_cert is concerned.
+check_cert_non_utc_time_test_() ->
+    pki_fixture(
+      fun(#{peer_key := Key}) ->
+          Name = test_cn("alice"),
+          Cert = fun(NotAfter) ->
+                     test_cert(Name, Name, Key, Key,
+                               {{utcTime, "200101000000Z"}, NotAfter})
+                 end,
+          [?_assertMatch({ok, _},
+                         check_cert(Cert({utcTime, "491231235959Z"}))),
+           ?_assertEqual({error, cert_not_parsed},
+                         check_cert(Cert({utcTime, "491231235959+0100"})))]
+      end).
+
+% The common names the certificate carries, for the CGI environment.
+peercert_cn_test_() ->
+    pki_fixture(
+      fun(#{peer := Peer, bmp := Bmp, printable := Printable,
+            no_cn := NoCN, expired := Expired}) ->
+          [?_assertEqual({ok, #{ common_name => <<"alice">>,
+                                issuer_common_name => <<"Test CA">> }},
+                         peercert_cn({ok, Peer})),
+           ?_assertEqual({ok, #{ common_name => <<"carol">>,
+                                issuer_common_name => <<"Test CA">> }},
+                         peercert_cn({ok, Printable})),
+           % No Common Name at all: the name comes back as the atom
+           % 'undefined', though the spec (cert_details()) says binary();
+           % through apply/3, since the spec otherwise rules this out.
+           % (blizanci_cgi then makes it REMOTE_USER=undefined.)
+           ?_assertEqual({ok, #{ common_name => undefined,
+                                issuer_common_name => <<"Test CA">> }},
+                         apply(?MODULE, peercert_cn, [{ok, NoCN}])),
+           % an RDN string encoding it doesn't render
+           ?_assertEqual({error, cert_unsupported_encoding},
+                         peercert_cn({ok, Bmp})),
+           % this does not look at the validity period
+           ?_assertMatch({ok, #{ common_name := <<"alice">> }},
+                         peercert_cn({ok, Expired})),
+           ?_assertEqual({error, cert_not_parsed},
+                         peercert_cn({ok, <<"not a certificate">>})),
+           ?_assertEqual({error, cert_not_parsed}, peercert_cn({ok, <<>>})),
+           % no certificate presented: the bare atom, not a tuple
+           ?_assertEqual(error, peercert_cn({error, no_peercert})),
+           ?_assertEqual(error, peercert_cn(anything_else))]
+      end).
+
+% The TLS-level verify_fun accepts every certificate and every event,
+% bad ones included: whether a client certificate is acceptable is
+% decided later, per route, by blizanci_auth. (A self-signed client
+% certificate must get as far as that decision.)
+verify_cert_test_() ->
+    pki_fixture(
+      fun(#{ca_otp := CAOtp}) ->
+          Events = [valid,
+                    valid_peer,
+                    {bad_cert, unknown_ca},
+                    {bad_cert, cert_expired},
+                    {bad_cert, selfsigned_peer},
+                    {bad_cert, {revoked, unspecified}},
+                    {extension, #'Extension'{extnID = {2,5,29,19},
+                                             critical = true,
+                                             extnValue = <<>>}}],
+          [ ?_assertEqual({valid, unknown_user},
+                          verify_cert(CAOtp, Event, [])) || Event <- Events ]
+      end).
+
+% PEM files: the server's own, and the CA files of a `private` route.
+pem_files_test_() ->
+    {setup,
+     fun() ->
+         Pki = test_pki(),
+         Dir = test_tmp_dir(),
+         #{ca := CA, ca2 := CA2, peer_key := Key} = Pki,
+         Files = #{
+           ca      => test_write_pem(Dir, "ca.pem", [test_pem_cert(CA)]),
+           both    => test_write_pem(Dir, "both.pem",
+                                     [test_pem_cert(CA), test_pem_cert(CA2)]),
+           key     => test_write_pem(Dir, "key.pem",
+                                     [public_key:pem_entry_encode(
+                                        'RSAPrivateKey', Key)]),
+           empty   => test_write_pem(Dir, "empty.pem", []),
+           text    => filename:join(Dir, "text.pem"),
+           missing => filename:join(Dir, "missing.pem")},
+         ok = file:write_file(maps:get(text, Files), <<"hello\n">>),
+         {Dir, Pki, Files}
+     end,
+     fun({Dir, _, _}) -> file:del_dir_r(Dir) end,
+     fun({_, #{ca_otp := CAOtp}, Files}) ->
+         #{ca := CAFile, both := Both, key := KeyFile, empty := Empty,
+           text := Text, missing := Missing} = Files,
+         [?_assertEqual({ok, CAFile}, validate_pem_file(CAFile)),
+          ?_assertEqual({ok, Both}, validate_pem_file(Both)),
+          % any PEM entry will do: it need not be a certificate
+          ?_assertEqual({ok, KeyFile}, validate_pem_file(KeyFile)),
+          ?_assertEqual({fail, not_a_cert}, validate_pem_file(Empty)),
+          ?_assertEqual({fail, not_a_cert}, validate_pem_file(Text)),
+          ?_assertEqual({fail, couldnt_open_pem_file},
+                        validate_pem_file(Missing)),
+          ?_assertEqual(CAOtp, certificate_from_file(CAFile)),
+          % only the first certificate is returned
+          ?_assertEqual(CAOtp, certificate_from_file(Both)),
+          % a file with no certificate in it, or no file, raises
+          ?_assertError({badmatch, false}, certificate_from_file(KeyFile)),
+          ?_assertError({badmatch, false}, certificate_from_file(Empty)),
+          ?_assertError({badmatch, false}, certificate_from_file(Text)),
+          ?_assertError({badmatch, {error, enoent}},
+                        certificate_from_file(Missing))]
+     end}.
