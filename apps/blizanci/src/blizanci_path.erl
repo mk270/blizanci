@@ -7,7 +7,10 @@
 
 -module(blizanci_path).
 
--export([fix_path/1, path_under_root/2, confine/2, confine/3]).
+-export([fix_path/1, path_under_root/2, confine/2, confine/3,
+         resolve_request/3]).
+
+-include("blizanci_types.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -155,6 +158,23 @@ confine(SubPath, Root, Opts) when is_binary(SubPath) ->
 confine(SubPath, Root, _Opts) ->
     logger:warning("path ~w under root ~p is not a binary", [SubPath, Root]),
     {error, file_not_found}.
+
+
+%% @doc
+%% The step every servlet starts with: take the request path from the
+%% route's Matches (key <<"PATH">>, which must be present) and confine
+%% it under Root with confine/3. Each servlet chooses the Root and
+%% options it needs, and wraps the error atom in its own result shape.
+%% @end
+-spec resolve_request(Matches, Root, Opts) -> Result
+              when Matches :: path_matches(),
+                   Root    :: binary() | string(),
+                   Opts    :: #{ well_known => boolean() },
+                   Result  :: {ok, binary()}
+                            | {error, file_not_found}.
+
+resolve_request(#{ <<"PATH">> := Path }, Root, Opts) ->
+    confine(Path, Root, Opts).
 
 
 confine0(SubPath, Root, Opts) ->
@@ -467,7 +487,28 @@ confine_tests(Base) ->
                    confine(<<"f.txt">>, Odd)),
      ?_assertEqual({ok, filename:join(CanonOdd, "f.txt")},
                    confine(<<"f.txt">>, OddBytes))]
+    ++ resolve_request_tests(Docs, CanonDocs)
     ++ hidden_tests(Base, Docs, CanonDocs).
+
+%% resolve_request/3: PATH out of Matches, then confine/3.
+resolve_request_tests(Docs, CanonDocs) ->
+    R = fun(M, O) -> resolve_request(M, Docs, O) end,
+    P = fun(Path) -> #{ <<"PATH">> => Path } end,
+    Refused = {error, file_not_found},
+    Inside = {ok, filename:join(CanonDocs, <<"inside.txt">>)},
+    WKFile = {ok, filename:join([CanonDocs, <<".well-known">>,
+                                 <<"security">>])},
+    [?_assertEqual(Inside, R(P(<<"inside.txt">>), #{})),
+     ?_assertEqual(Refused, R(P(<<"../outside/secret.txt">>), #{})),
+     ?_assertEqual(Refused, R(P(<<"escape/secret.txt">>), #{})),
+     ?_assertEqual(Refused, R(P(<<".git/config">>), #{})),
+     ?_assertEqual(Refused, R(P(<<".well-known/security">>), #{})),
+     ?_assertEqual(WKFile, R(P(<<".well-known/security">>),
+                             #{ well_known => true })),
+     % other matches are ignored; a missing PATH is a crash, as before
+     ?_assertEqual(Inside, R(#{ <<"PATH">> => <<"inside.txt">>,
+                                <<"PATH_INFO">> => <<"x">> }, #{})),
+     ?_assertError(function_clause, R(#{}, #{}))].
 
 %% Hidden files: a path segment beginning with a dot is refused, except
 %% ".well-known" as the first segment where the caller allows it.

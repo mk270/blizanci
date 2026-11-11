@@ -240,7 +240,8 @@ serve(Matches, Req, #server_config{hostname=Hostname, port=Port}, RouteOpts) ->
     % been audited, so until then the script's path may contain only
     % letters, digits and ". _ - /" (see issues.md), and it is handed over
     % as a string, as before.
-    case {cgi_alphabet(Path), blizanci_path:confine(Path, CGIRoot)} of
+    Confined = blizanci_path:resolve_request(Matches, CGIRoot, #{}),
+    case {cgi_alphabet(Path), Confined} of
         {true, {ok, Cmd}} -> serve_cgi_bytes(Cmd, Path, Matches, Req,
                                               {Hostname, Port}, CGIPrefix);
         _ -> {gateway_error, file_not_found}
