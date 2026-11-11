@@ -393,8 +393,8 @@ upload_tests(Base) ->
                        Titan(D("up"), list_to_binary(D("cgi")))]))),
      % and the check is part of preparing a routing table
      ?_assertMatch({error, {upload_dir_overlaps_cgiroot, docroot, _, _}},
-                   prepare([{gemini, "c", blizanci_cgi, public,
+                   prepare([{gemini, <<"c">>, blizanci_cgi, public,
                              #{ cgiroot => D("cgi") }},
-                            {titan, "t", blizanci_titan, public,
+                            {titan, <<"t">>, blizanci_titan, public,
                              #{ docroot => D("cgi"),
                                 work_dir => D("work") }}]))].

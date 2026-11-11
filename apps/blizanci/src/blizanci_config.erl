@@ -507,22 +507,28 @@ route_merges_default_options_test() ->
 
 route_errors_test_() ->
     Opts = #{ docroot => ?TEST_DOCROOT },
+    % some of these arguments deliberately break the spec, so route/5 is
+    % called through apply/3 to keep dialyzer from objecting
+    BadRoute = fun(Proto, Regex, Module, Authz, RouteOpts) ->
+                   apply(?MODULE, route,
+                         [Proto, Regex, Module, Authz, RouteOpts])
+               end,
     [?_assertMatch({error, {invalid_proto, gopher}},
                    route(gopher, "x", blizanci_static, public, Opts)),
      ?_assertMatch({error, {invalid_regex, "(", _}},
                    route(gemini, "(", blizanci_static, public, Opts)),
      ?_assertMatch({error, {invalid_regex, 42, not_a_string}},
-                   route(gemini, 42, blizanci_static, public, Opts)),
+                   BadRoute(gemini, 42, blizanci_static, public, Opts)),
      ?_assertEqual({error, {unknown_servlet, no_such_servlet}},
                    route(gemini, "x", no_such_servlet, public, Opts)),
      ?_assertEqual({error, {not_a_servlet, lists}},
                    route(gemini, "x", lists, public, Opts)),
      ?_assertEqual({error, {not_a_servlet, "blizanci_static"}},
-                   route(gemini, "x", "blizanci_static", public, Opts)),
+                   BadRoute(gemini, "x", "blizanci_static", public, Opts)),
      ?_assertEqual({error, {invalid_authz_policy, bogus}},
-                   route(gemini, "x", blizanci_static, bogus, Opts)),
+                   BadRoute(gemini, "x", blizanci_static, bogus, Opts)),
      ?_assertEqual({error, {invalid_route_opts, not_a_map}},
-                   route(gemini, "x", blizanci_static, public, not_a_map)),
+                   BadRoute(gemini, "x", blizanci_static, public, not_a_map)),
      ?_assertEqual({error, {invalid_route_options, blizanci_static,
                             {docroot_not_a_directory, "/no/such/dir"}}},
                    route(gemini, "x", blizanci_static, public,
@@ -553,7 +559,9 @@ add_route_appends_test() ->
 
 add_route_rejects_non_route_test() ->
     Site = site("example.org", "c.pem", "k.pem"),
-    ?assertError(function_clause, add_route(Site, {not_a_route})).
+    % (through apply/3, as the argument deliberately breaks the spec)
+    ?assertError(function_clause,
+                 apply(?MODULE, add_route, [Site, {not_a_route}])).
 
 find_site_test_() ->
     A = site("a.example", "a.pem", "a.key"),
@@ -651,7 +659,7 @@ insert_route_test_() ->
      ?_assertEqual({error, {index_out_of_range, 3, 2}},
                    insert_route(Site, 3, R3)),
      ?_assertEqual({error, {index_out_of_range, 0, 2}},
-                   insert_route(Site, 0, R3)),
+                   apply(?MODULE, insert_route, [Site, 0, R3])),
      ?_assertEqual({error, {index_out_of_range, 1, 0}},
                    insert_route(site("h", "c.pem", "k.pem"), 1, R3)),
      ?_assertEqual([R1, R2], routes(Site))].
