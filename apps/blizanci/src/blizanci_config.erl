@@ -347,7 +347,11 @@ make_site(Hostname, Cert, Key, Docroot, Routes) ->
                    Sites    :: [site()],
                    Result   :: {'ok', site()} | 'not_found'.
 find_site(Hostname, Sites) ->
-    case lists:keyfind(Hostname, #site.hostname, Sites) of
+    % Site names are stored in lower case (see site/3), so fold the name
+    % being looked up. This is the one place SNI and request lookups
+    % get their case-insensitivity.
+    Folded = list_to_binary(ascii_lowercase(binary_to_list(Hostname))),
+    case lists:keyfind(Folded, #site.hostname, Sites) of
         false -> not_found;
         Site -> {ok, Site}
     end.
@@ -615,6 +619,9 @@ find_site_test_() ->
     [?_assertEqual({ok, A}, find_site(<<"a.example">>, [A, B])),
      ?_assertEqual({ok, B}, find_site(<<"b.example">>, [A, B])),
      ?_assertEqual(not_found, find_site(<<"c.example">>, [A, B])),
+     ?_assertEqual({ok, A}, find_site(<<"A.EXAMPLE">>, [A, B])),
+     ?_assertEqual({ok, B}, find_site(<<"B.Example">>, [A, B])),
+     ?_assertEqual(not_found, find_site(<<"a.example.">>, [A, B])),
      ?_assertEqual(not_found, find_site(<<"a.example">>, []))].
 
 make_test() ->
@@ -660,20 +667,8 @@ sni_fun_test_() ->
                               SniFun("b.example"))
              end)]}.
 
-%% PENDING, so compiled out: a host name is case-insensitive, so the same
-%% site must be found whatever the case of the name the client sent in
-%% its SNI. Blizanci doesn't do this yet: today these tests fail (the
-%% lookup gets "unrecognized").
-%%
-%% To enable them, either delete the -ifdef and -endif lines around them,
-%% or build with the macro defined, e.g. put
-%%     {eunit_compile_opts, [{d, 'PENDING_CASE_INSENSITIVE'}]}.
-%% on a line of its own in rebar.config (the file may lack a final
-%% newline) and touch this file, since rebar3 won't notice the change.
-%% Once the code is fixed, delete the -ifdef/-endif lines for good. The
-%% matching request-URL tests are in blizanci_request.erl, under the
-%% same macro.
--ifdef(PENDING_CASE_INSENSITIVE).
+%% A host name is case-insensitive, so the same site is found whatever
+%% the case of the name the client sent in its SNI.
 sni_fun_case_insensitive_test_() ->
     A = test_site("a.example", "a.pem", "a.key"),
     B = test_site("b.example", "b.pem", "b.key"),
@@ -687,7 +682,6 @@ sni_fun_case_insensitive_test_() ->
                     SniFun("A.Example")),
       ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
                     SniFun("B.example"))]}.
--endif.
 
 %% Builder: routes and configuration.
 

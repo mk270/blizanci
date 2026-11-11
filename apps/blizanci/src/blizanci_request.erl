@@ -409,19 +409,8 @@ trailing_dot_host_refused_test_() ->
      ?_assertEqual({error_code, host_unrecognised},
                    H(<<"gemini://THIS.HOST.DEV./nothere">>))].
 
-%% PENDING, so compiled out: the scheme and the host of a URL are
-%% case-insensitive (RFC 3986), so a request that spells them in another
-%% case is the same request. Blizanci doesn't do this yet: today these
-%% tests fail ("GEMINI://" gets 59, "THIS.HOST.DEV" gets 53).
-%%
-%% To enable them, either delete the -ifdef and -endif lines around them,
-%% or build with the macro defined, e.g. put
-%%     {eunit_compile_opts, [{d, 'PENDING_CASE_INSENSITIVE'}]}.
-%% on a line of its own in rebar.config (the file may lack a final
-%% newline) and touch this file, since rebar3 won't notice the change.
-%% Once the code is fixed, delete the -ifdef/-endif lines for good. The
-%% matching SNI tests are in blizanci_config.erl, under the same macro.
--ifdef(PENDING_CASE_INSENSITIVE).
+%% The scheme and the host of a URL are case-insensitive (RFC 3986), so
+%% a request that spells them in another case is the same request.
 case_insensitive_scheme_and_host_test_() ->
     H = url_handler(),
     [?_assertEqual(?NOT_FOUND, H(<<"GEMINI://this.host.dev/nothere">>)),
@@ -429,7 +418,6 @@ case_insensitive_scheme_and_host_test_() ->
      ?_assertEqual(?NOT_FOUND, H(<<"gemini://THIS.HOST.DEV/nothere">>)),
      ?_assertEqual(?NOT_FOUND, H(<<"gemini://This.Host.Dev:1965/nothere">>)),
      ?_assertEqual(?NOT_FOUND, H(<<"GEMINI://THIS.HOST.DEV/nothere">>))].
--endif.
 
 
 %% Percent-escapes in the path are decoded, exactly once, after the path
