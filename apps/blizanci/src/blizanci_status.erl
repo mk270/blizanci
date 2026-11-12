@@ -10,62 +10,82 @@
 -export([gemini_status/1, valid_code/1, is_error/1]).
 
 
+% The status and explanation for an error atom. The function is total: an
+% atom the table does not know (a typo, or a third-party servlet's own
+% atom) is logged and answered as 40, as internal_server_error is.
 -spec gemini_status(Code) -> Result
               when Code   :: atom(),
                    Result :: {integer(), binary()}.
 
-gemini_status(request_too_long) ->
+gemini_status(Code) ->
+    case status_entry(Code) of
+        undefined ->
+            logger:warning("no Gemini status for ~p; using 40", [Code]),
+            status_entry(internal_server_error);
+        Entry ->
+            Entry
+    end.
+
+
+% The table proper; 'undefined' for an atom it does not contain.
+-spec status_entry(Code) -> Result
+              when Code   :: atom(),
+                   Result :: {integer(), binary()} | 'undefined'.
+
+status_entry(request_too_long) ->
     {59, <<"Request too long">>};
-gemini_status(request_not_parsed) ->
+status_entry(request_not_parsed) ->
     {59, <<"Request not parsed">>};
-gemini_status(bad_query_string) ->
+status_entry(bad_query_string) ->
     {59, <<"Bad query string">>};
-gemini_status(success) ->
+status_entry(success) ->
     {20, <<"Success">>};
-gemini_status(request_timeout) ->
+status_entry(request_timeout) ->
     {59, <<"Request timeout">>};
-gemini_status(proxy_refused) ->
+status_entry(proxy_refused) ->
     {53, <<"Proxy request refused">>};
-gemini_status(host_unrecognised) ->
+status_entry(host_unrecognised) ->
     {53, <<"Host unrecognised">>};
-gemini_status(port_unrecognised) ->
+status_entry(port_unrecognised) ->
     {53, <<"Port unrecognised">>};
-gemini_status(unrecognised_protocol) ->
+status_entry(unrecognised_protocol) ->
     {59, <<"Protocol not recognised">>};
-gemini_status(bad_unicode) ->
+status_entry(bad_unicode) ->
     {59, <<"Bad unicode in request">>};
-gemini_status(bad_filename) ->
+status_entry(bad_filename) ->
     {59, <<"Illegal filename">>};
-gemini_status(bad_hostname) ->
+status_entry(bad_hostname) ->
     {59, <<"Illegal hostname">>};
-gemini_status(userinfo_supplied) ->
+status_entry(userinfo_supplied) ->
     {59, <<"Illegal username">>};
-gemini_status(internal_server_error) ->
+status_entry(internal_server_error) ->
     {40, <<"Internal server error">>};
-gemini_status(gateway_busy) ->
+status_entry(gateway_busy) ->
     {40, <<"Gateway too busy">>};
-gemini_status(cgi_exec_error) ->
+status_entry(cgi_exec_error) ->
     {40, <<"Gateway error">>};
-gemini_status(cgi_output_too_large) ->
+status_entry(cgi_output_too_large) ->
     {40, <<"Gateway error">>};
-gemini_status(response_timeout) ->
+status_entry(response_timeout) ->
     {40, <<"Timeout">>};
-gemini_status(cannot_overwrite) ->
+status_entry(cannot_overwrite) ->
     {40, <<"Cannot overwrite file">>};
-gemini_status(file_not_found) ->
+status_entry(file_not_found) ->
     {51, <<"File not found">>};
-gemini_status(cert_required) ->
+status_entry(cert_required) ->
     {60, <<"Client certificate required">>};
-gemini_status(permanent_redirect) ->
+status_entry(permanent_redirect) ->
     {31, <<"Moved permanently">>};
-gemini_status(cert_not_authorised) ->
+status_entry(cert_not_authorised) ->
     {60, <<"Client certificate unauthorised">>};
-gemini_status(cert_expired) ->
+status_entry(cert_expired) ->
     {60, <<"Client certificate expired">>};
-gemini_status(cert_not_parsed) ->
+status_entry(cert_not_parsed) ->
     {60, <<"Client certificate not understood">>};
-gemini_status(cert_unsupported_encoding) ->
-    {60, <<"Client certificate uses an unsupported name encoding">>}.
+status_entry(cert_unsupported_encoding) ->
+    {60, <<"Client certificate uses an unsupported name encoding">>};
+status_entry(_) ->
+    undefined.
 
 
 % True if Code is an atom the status table maps to a failure status (40
@@ -77,10 +97,9 @@ gemini_status(cert_unsupported_encoding) ->
                    Result :: boolean().
 
 is_error(Code) when is_atom(Code) ->
-    try gemini_status(Code) of
-        {Status, _Explanation} -> Status >= 40
-    catch
-        error:function_clause -> false
+    case status_entry(Code) of
+        {Status, _Explanation} -> Status >= 40;
+        undefined -> false
     end.
 
 
@@ -102,6 +121,18 @@ valid_code(Code) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Tests.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% gemini_status/1 is total: unknown atoms, including 'unimplemented'
+%% (static's serve/4 and the cgi_error() type), give the 40 of
+%% internal_server_error.
+gemini_status_test_() ->
+    ISE = {40, <<"Internal server error">>},
+    [?_assertEqual(Want, gemini_status(Code)) ||
+        {Code, Want} <- [{file_not_found, {51, <<"File not found">>}},
+                         {success, {20, <<"Success">>}},
+                         {internal_server_error, ISE},
+                         {unimplemented, ISE},
+                         {no_such_status, ISE}]].
 
 is_error_test_() ->
     [% failure statuses (40 and above)
