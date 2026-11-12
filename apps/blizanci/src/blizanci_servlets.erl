@@ -69,8 +69,10 @@ init([]) ->
     process_flag(trap_exit, true),
     case blizanci_conf_serv:current() of
         {ok, #{servlets := Servlets}} ->
-            [ ok = Servlet:start() || Servlet <- Servlets ],
-            {ok, Servlets};
+            case start_servlets(Servlets, []) of
+                ok -> {ok, Servlets};
+                {error, Reason} -> {stop, Reason}
+            end;
         not_running ->
             {stop, no_configuration}
     end.
@@ -120,8 +122,9 @@ switch(Port, Servlets, Sites, Old) ->
     end.
 
 
-% Call start/0 on each servlet in turn; if one fails, call stop/0 on
-% those already started so a failed apply leaves nothing behind.
+% Call start/0 on each servlet in turn; if one fails (returns
+% {error, Reason}, or raises, or returns anything but ok), call stop/0
+% on those already started so a failed start leaves nothing behind.
 -spec start_servlets(Servlets, Started) -> Result
               when Servlets :: [module()],
                    Started  :: [module()],
@@ -130,12 +133,22 @@ start_servlets([], _Started) ->
     ok;
 start_servlets([Servlet | Rest], Started) ->
     try Servlet:start() of
-        ok -> start_servlets(Rest, [Servlet | Started])
+        ok -> start_servlets(Rest, [Servlet | Started]);
+        {error, Reason} -> start_failed(Servlet, Reason, Started);
+        Other -> start_failed(Servlet, {unexpected, Other}, Started)
     catch
-        Class:Reason ->
-            [ ok = S:stop() || S <- Started ],
-            {error, {servlet_start_failed, Servlet, {Class, Reason}}}
+        Class:Reason -> start_failed(Servlet, {Class, Reason}, Started)
     end.
+
+-spec start_failed(Servlet, Reason, Started) -> Result
+              when Servlet :: module(),
+                   Reason  :: term(),
+                   Started :: [module()],
+                   Result  :: {'error', {'servlet_start_failed', module(),
+                                         term()}}.
+start_failed(Servlet, Reason, Started) ->
+    [ ok = S:stop() || S <- Started ],
+    {error, {servlet_start_failed, Servlet, Reason}}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -181,6 +194,23 @@ restart_reconciles() ->
     ok = blizanci_cgi:stop(),
     {ok, _} = start_link(),
     ?assertNotEqual(undefined, whereis(blizanci_cgi)).
+
+%% A servlet whose start/0 fails keeps the process from starting, with
+%% the reason; those started before it in the list are stopped again.
+init_start_error_test() ->
+    in_clean_state(
+      fun() ->
+          process_flag(trap_exit, true),
+          {ok, _} = blizanci_conf_serv:start_link(
+                      #{port => 1965,
+                        servlets => [blizanci_cgi, blizanci_test_failing],
+                        sites => []}),
+          ?assertEqual({error, {servlet_start_failed,
+                                blizanci_test_failing, boom}},
+                       start_link()),
+          ?assertEqual(undefined, whereis(blizanci_servlets)),
+          ?assertEqual(undefined, whereis(blizanci_cgi))
+      end).
 
 %% Without a configuration table there is nothing to start from.
 no_table_test() ->

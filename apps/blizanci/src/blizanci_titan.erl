@@ -117,7 +117,7 @@ validate_options(Opts) ->
     {error, {invalid_options, Opts}}.
 
 -spec start() -> Result
-              when Result :: ok.
+              when Result :: 'ok' | {'error', term()}.
 start() ->
     blizanci_pool:start(?QUEUE, ?MAX_TITAN, ?MODULE).
 

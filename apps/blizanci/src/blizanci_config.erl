@@ -321,7 +321,8 @@ make_site(Hostname, Cert, Key, Docroot, Routes) ->
 
 
 % A one-line, human-readable account of an error from make_site/5 or
-% from_app_env/0, for the log at start-up.
+% from_app_env/0, or from starting the supervision tree (a servlet that
+% will not start), for the log at start-up.
 -spec describe_error(Error) -> Result
               when Error  :: term(),
                    Result :: string().
@@ -329,6 +330,11 @@ describe_error({invalid_routing, Reason}) ->
     "invalid routing table: " ++ describe_route_error(Reason);
 describe_error(hostname_not_lowercase) ->
     "hostname is not lower case";
+describe_error({shutdown, {failed_to_start_child, blizanci_servlets,
+                           Reason}}) ->
+    describe_error(Reason);
+describe_error({servlet_start_failed, Servlet, Reason}) ->
+    flat("servlet ~0p could not start: ~0p", [Servlet, Reason]);
 describe_error(Other) ->
     flat("configuration error: ~0p", [Other]).
 
@@ -699,7 +705,14 @@ describe_error_test_() ->
                    describe_error(
                      {invalid_routing,
                       {invalid_route_options, blizanci_static,
-                       {docroot_not_a_directory, "/nope"}}}))].
+                       {docroot_not_a_directory, "/nope"}}})),
+     ?_assertEqual("servlet blizanci_cgi could not start: "
+                   "{invalid_limit,0}",
+                   describe_error(
+                     {shutdown,
+                      {failed_to_start_child, blizanci_servlets,
+                       {servlet_start_failed, blizanci_cgi,
+                        {invalid_limit, 0}}}}))].
 
 global_test() ->
     ?assertEqual(#global{port = 1965, servlets = [blizanci_static]},
@@ -1022,6 +1035,51 @@ apply_servlets_test_() ->
              ?assertEqual(ok, apply(Conf([blizanci_static]))),
              ?assertEqual(undefined, whereis(blizanci_cgi)),
              ?assertMatch({ok, #{servlets := [blizanci_static]}},
+                          blizanci_conf_serv:current()),
+             blizanci_test_support:live_down()
+         end)
+     end}.
+
+%% A servlet whose start/0 returns {error, boom}: apply/1 refuses, with
+%% the servlets it had already started in that call stopped again,
+%% nothing published, and the running configuration and pools as before.
+apply_servlet_start_error_test_() ->
+    {setup,
+     fun() ->
+         {ok, _} = application:ensure_all_started(ppool),
+         write_test_pem()
+     end,
+     fun(Pem) ->
+         blizanci_test_support:live_down(),
+         file:delete(Pem)
+     end,
+     fun(Pem) ->
+         ?_test(begin
+             {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static,
+                             public, #{ docroot => ?TEST_DOCROOT }),
+             Site = add_route(test_site("a", Pem, Pem), R),
+             Conf = fun(Servlets) ->
+                        new(global(1965, Servlets), [Site])
+                    end,
+             live_up(1965, [blizanci_static], [Site]),
+             Before = blizanci_conf_serv:current(),
+             ?assertEqual({error, {servlet_start_failed,
+                                   blizanci_test_failing, boom}},
+                          apply(Conf([blizanci_static, blizanci_cgi,
+                                      blizanci_test_failing]))),
+             ?assertEqual(undefined, whereis(blizanci_cgi)),
+             ?assertEqual(Before, blizanci_conf_serv:current()),
+             % the process is still there, and can still reconfigure
+             ?assertEqual(ok, apply(Conf([blizanci_static,
+                                          blizanci_cgi]))),
+             ?assertNotEqual(undefined, whereis(blizanci_cgi)),
+             ?assertEqual({error, {servlet_start_failed,
+                                   blizanci_test_failing, boom}},
+                          apply(Conf([blizanci_static,
+                                      blizanci_test_failing]))),
+             ?assertNotEqual(undefined, whereis(blizanci_cgi)),
+             ?assertMatch({ok, #{servlets := [blizanci_static,
+                                              blizanci_cgi]}},
                           blizanci_conf_serv:current()),
              blizanci_test_support:live_down()
          end)

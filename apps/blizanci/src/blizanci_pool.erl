@@ -29,7 +29,8 @@
                    Module :: module(),
                    Result :: 'ok' | {'error', term()}.
 start(Queue, Max, Module) ->
-    case ppool:start_pool(Queue, Max, {Module, start_link, []}) of
+    % through apply/3: ppool's spec is narrower than what we tolerate
+    case apply(ppool, start_pool, [Queue, Max, {Module, start_link, []}]) of
         {error, {already_started, _Pid}} -> ok;
         {ok, _Pid} -> ok;
         {error, _} = Error -> Error;
