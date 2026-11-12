@@ -688,7 +688,7 @@ refused_tests(Base) ->
     [?_assertEqual(<<"51 File not found\r\n">>, Cgi(<<"nosuch">>)),
      ?_assertEqual(<<"51 File not found\r\n">>, Cgi(<<".hidden">>)),
      ?_assertEqual(<<"51 File not found\r\n">>, Cgi(<<"a b">>)),
-     ?_assertEqual(<<"40 Internal server error\r\n">>,
+     ?_assertEqual(<<"40 Not implemented\r\n">>,
                    client_sees(blizanci_static, #{}, #{}))].
 
 
@@ -1293,6 +1293,8 @@ handle_call_test_() ->
      % a gateway error with no status (the container passes any atom
      % on) is a 40
      ?_assertEqual({{false, true}, <<"40 Internal server error\r\n">>},
+                   report({servlet_failed, no_such_status})),
+     ?_assertEqual({{false, true}, <<"40 Not implemented\r\n">>},
                    report({servlet_failed, unimplemented})),
      ?_assertEqual({reply, ok, St}, handle_call(anything, from, St)),
      ?_assertEqual({noreply, St}, handle_cast(anything, St)),

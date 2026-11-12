@@ -60,6 +60,8 @@ status_entry(userinfo_supplied) ->
     {59, <<"Illegal username">>};
 status_entry(internal_server_error) ->
     {40, <<"Internal server error">>};
+status_entry(unimplemented) ->
+    {40, <<"Not implemented">>};
 status_entry(gateway_busy) ->
     {40, <<"Gateway too busy">>};
 status_entry(cgi_exec_error) ->
@@ -122,16 +124,16 @@ valid_code(Code) ->
 %% Tests.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% gemini_status/1 is total: unknown atoms, including 'unimplemented'
-%% (static's serve/4 and the cgi_error() type), give the 40 of
-%% internal_server_error.
+%% gemini_status/1 is total: unknown atoms give the 40 of
+%% internal_server_error (with a warning); 'unimplemented' (static's
+%% serve/4 and the cgi_error() type) has its own entry, so no warning.
 gemini_status_test_() ->
     ISE = {40, <<"Internal server error">>},
     [?_assertEqual(Want, gemini_status(Code)) ||
         {Code, Want} <- [{file_not_found, {51, <<"File not found">>}},
                          {success, {20, <<"Success">>}},
                          {internal_server_error, ISE},
-                         {unimplemented, ISE},
+                         {unimplemented, {40, <<"Not implemented">>}},
                          {no_such_status, ISE}]].
 
 is_error_test_() ->
@@ -144,6 +146,6 @@ is_error_test_() ->
      % mapped, but not failures
      ?_assertNot(is_error(success)),
      ?_assertNot(is_error(permanent_redirect)),
+     ?_assert(is_error(unimplemented)),
      % not in the table
-     ?_assertNot(is_error(unimplemented)),
      ?_assertNot(is_error(no_such_status))].
