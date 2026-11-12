@@ -55,7 +55,7 @@
 -spec handle_line(Cmd, Config, Cert, Rest) -> Result
               when Cmd    :: binary(),
                    Config :: server_config(),
-                   Cert   :: peer_cert(),
+                   Cert   :: raw_peer_cert(),
                    Rest   :: binary(),
                    Result :: gemini_response().
 
@@ -79,7 +79,7 @@ handle_line(Cmd, Config, Cert, Rest) when is_binary(Cmd) ->
 -spec handle_parsed_url(URI, Config, Cert, Rest) -> Result
               when URI    :: map(),
                    Config :: server_config(),
-                   Cert   :: peer_cert(),
+                   Cert   :: raw_peer_cert(),
                    Rest   :: binary(),
                    Result :: gemini_response().
 

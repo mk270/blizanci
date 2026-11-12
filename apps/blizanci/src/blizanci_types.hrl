@@ -58,8 +58,9 @@
          docroot    :: string() | 'undefined'}).
 -type server_config() :: #server_config{}.
 
--type peer_cert() :: {'ok', public_key:der_encoded() } |
-                     {'error', term() }.
+%% Raw result of asking TLS for the peer certificate (DER or error).
+-type raw_peer_cert() :: {'ok', public_key:der_encoded() } |
+                         {'error', term() }.
 
 -record(state,
         {transport    :: atom(),
@@ -68,7 +69,7 @@
          config       :: server_config(),
          requested    :: boolean(),
          servlet_proc :: servlet_proc(),
-         client_cert  :: peer_cert()}).
+         client_cert  :: raw_peer_cert()}).
 -type state() :: #state{}.
 
 -type gemini_response() :: {'file', binary(), binary()}
@@ -107,9 +108,11 @@
 -type cert_details() :: #{ common_name := binary() | 'undefined',
                            issuer_common_name := binary() | 'undefined' }.
 
--type client_cert() :: 'error' | {'ok', cert_details()} | {'error', atom()}.
+%% Decoded result of blizanci_x509:peercert_cn/1 (names, not DER).
+-type client_cert_details() :: 'error' | {'ok', cert_details()}
+                             | {'error', atom()}.
 
--type request_details() :: #{ client_cert   := peer_cert(),
+-type request_details() :: #{ client_cert   := raw_peer_cert(),
                               query         := binary(),
                               rest_of_input := binary(),
                               scheme        := binary(),
