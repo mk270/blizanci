@@ -131,7 +131,7 @@ handle_client_data(Pid, Payload) when is_binary(Payload) ->
                    Matches      :: path_matches(),
                    Request      :: request_details(),
                    ServerConfig :: server_config(),
-                   RouteOpts    :: any(),
+                   RouteOpts    :: map(),
                    Result       :: gemini_response().
 
 request(Module, Matches, Request, ServerConfig, RouteOpts) ->
@@ -147,7 +147,7 @@ request(Module, Matches, Request, ServerConfig, RouteOpts) ->
                    Matches      :: path_matches(),
                    Req          :: request_details(),
                    ServerConfig :: server_config(),
-                   RouteOpts    :: any(),
+                   RouteOpts    :: map(),
                    Result       :: gemini_response().
 
 defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->

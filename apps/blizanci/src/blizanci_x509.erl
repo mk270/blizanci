@@ -45,7 +45,7 @@
 %% @end
 -spec peercert_cn(C) -> ClientCert
               when C          :: term(),
-                   ClientCert :: client_cert().
+                   ClientCert :: client_cert_details().
 
 peercert_cn({ok, Cert}) ->
     try

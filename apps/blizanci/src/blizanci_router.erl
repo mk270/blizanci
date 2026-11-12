@@ -308,7 +308,8 @@ try_route(Path, Request, Config, [Route|Tail]) ->
     end.
 
 
--type match() :: {'match', map(), module(), authorisation(), any()}.
+-type match() :: {'match', map(), module(), authorisation(),
+                map()}.
 
 % Does the Path match the candidate route? If so return details of how it
 % matches. Otherwise return 'nomatch'.
@@ -343,7 +344,7 @@ route_match(Path, #route{pattern=Regex,
                    Request      :: request_details(),
                    AuthPolicy   :: authorisation(),
                    ServerConfig :: server_config(),
-                   RouteOpts    :: any(),
+                   RouteOpts    :: map(),
                    Result       :: gemini_response().
 
 dispatch(Matches, Module, Request, AuthPolicy, ServerConfig, RouteOpts) ->
