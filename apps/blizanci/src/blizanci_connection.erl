@@ -349,12 +349,26 @@ respond({servlet_output, Msg},
 respond(hangup, _State) ->
     finished;
 
-respond({file, MimeType, Filename},
-        #state{transport=Transport, socket=Socket}) ->
-    Header = format_headers(success_status(), MimeType),
-    Transport:send(Socket, Header),
-    Transport:sendfile(Socket, Filename),
-    finished;
+% The file is opened once, before the header: a file that cannot be
+% opened is answered with an error status instead of an empty `20', and
+% what is sent is the handle that was checked.  The transport's sendfile
+% takes the open file (and leaves it open), so it is closed here.
+respond({file, MimeType, Filename}, State) ->
+    case file:open(Filename, [read, raw, binary]) of
+        {ok, Fd} ->
+            try
+                send_open_file(MimeType, Fd, State)
+            after
+                _ = file:close(Fd)
+            end,
+            finished;
+        {error, Reason} when Reason =:= enoent; Reason =:= enotdir;
+                             Reason =:= eisdir ->
+            respond({error_code, file_not_found}, State);
+        {error, Reason} ->
+            logger:warning("cannot open file to send: ~p", [Reason]),
+            respond({error_code, internal_server_error}, State)
+    end;
 
 respond({error_code, Code}, #state{transport=Transport, socket=Socket}) ->
     {ok, Msg} = format_error(Code),
@@ -513,6 +527,36 @@ parse_gemini_header(Line) ->
 format_headers(Code, Meta) when is_integer(Code), is_binary(Meta) ->
     Status = list_to_binary(integer_to_list(Code)),
     [Status, <<" ">>, Meta, ?CRLF].
+
+
+% Once the header has gone the status cannot change: a failed send is
+% only logged, and the connection finished by the caller.
+-spec send_open_file(MimeType, Fd, State) -> ok
+              when MimeType :: binary(),
+                   Fd       :: file:fd(),
+                   State    :: #state{}.
+
+send_open_file(MimeType, Fd, #state{transport=Transport, socket=Socket}) ->
+    Header = format_headers(success_status(), MimeType),
+    case Transport:send(Socket, Header) of
+        ok ->
+            case Transport:sendfile(Socket, Fd) of
+                {ok, _Sent} ->
+                    ok;
+                {error, Reason} ->
+                    log_send_failure(Reason)
+            end;
+        {error, Reason} ->
+            log_send_failure(Reason)
+    end.
+
+-spec log_send_failure(Reason) -> ok when Reason :: term().
+
+log_send_failure(Reason) when Reason =:= closed; Reason =:= timeout;
+                              Reason =:= econnreset; Reason =:= epipe ->
+    logger:debug("file send stopped: ~p", [Reason]);
+log_send_failure(Reason) ->
+    logger:warning("file send failed: ~p", [Reason]).
 
 
 -spec format_error(Code) -> Result
@@ -884,17 +928,58 @@ respond_file() ->
                          respond({file, <<"text/gemini">>, File},
                                  conn_state(S))
                      end)),
-        % PINS CURRENT BEHAVIOUR, not desired: a file that cannot be read
-        % is answered with a bare success header and an empty body, as the
-        % result of the transport's sendfile/2 is ignored
         Missing = <<File/binary, ".missing">>,
-        ?assertEqual({finished, <<"20 text/gemini\r\n">>},
+        ?assertEqual({finished, <<"51 File not found\r\n">>},
                      with_client(fun(S) ->
                          respond({file, <<"text/gemini">>, Missing},
+                                 conn_state(S))
+                     end)),
+        % a directory is not a file
+        ?assertEqual({finished, <<"51 File not found\r\n">>},
+                     with_client(fun(S) ->
+                         respond({file, <<"text/gemini">>,
+                                  list_to_binary(Dir)},
+                                 conn_state(S))
+                     end)),
+        % no read permission (skipped where it stays readable, as root)
+        case respond_file_unreadable(File) of
+            skipped -> ok;
+            Got -> ?assertEqual({finished, <<"40 Internal server error"
+                                             "\r\n">>}, Got)
+        end,
+        % empty file: still a success
+        Empty = list_to_binary(filename:join(Dir, "empty.gmi")),
+        ok = file:write_file(Empty, <<>>),
+        ?assertEqual({finished, <<"20 text/gemini\r\n">>},
+                     with_client(fun(S) ->
+                         respond({file, <<"text/gemini">>, Empty},
+                                 conn_state(S))
+                     end)),
+        % several transport chunks
+        Big = binary:copy(<<"0123456789abcdef">>, 300 * 1024 div 16),
+        BigF = list_to_binary(filename:join(Dir, "big.bin")),
+        ok = file:write_file(BigF, Big),
+        ?assertEqual({finished, <<"20 text/plain\r\n", Big/binary>>},
+                     with_client(fun(S) ->
+                         respond({file, <<"text/plain">>, BigF},
                                  conn_state(S))
                      end))
     after
         file:del_dir_r(Dir)
+    end.
+
+respond_file_unreadable(File) ->
+    ok = file:change_mode(File, 8#000),
+    try file:open(File, [read, raw, binary]) of
+        {ok, Fd} ->
+            ok = file:close(Fd),
+            skipped;
+        {error, _} ->
+            with_client(fun(S) ->
+                respond({file, <<"text/gemini">>, File}, conn_state(S))
+            end)
+    after
+        file:change_mode(File, 8#644)
     end.
 
 %% A servlet's output is a complete response, parsed before being sent.
