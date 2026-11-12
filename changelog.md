@@ -1,5 +1,22 @@
 # Blizanci Changelog
 
+## 5.30.0
+
+- Answer 40 and log, rather than crash the connection, when a servlet
+  returns a reply `respond/2` has no clause for, or an error atom with
+  no status; `blizanci_status:gemini_status/1` is now total, giving
+  `{40, <<"Internal server error">>}` and a warning for an unknown atom
+- Give the atom `unimplemented` its own status, 40 "Not implemented";
+  as it now counts as an error, the servlet container reports it as an
+  ordinary gateway error, not an init error
+- Take the success status from the status table instead of a literal 20
+- Fold the host of a request to lower case once, on entry, and compare
+  it directly with the site's (already lower-case) name
+- `blizanci_static` no longer falls back to built-in values for a
+  missing `docroot`, `index`, `bare_mimetype` or `unknown_mimetype`,
+  and has no default docroot; `validate_options/1` already required
+  all four
+
 ## 5.29.0
 
 - Breaking for library callers: `blizanci_connection:servlet_result/2`
