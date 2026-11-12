@@ -323,7 +323,8 @@ close_session(State) ->
 % if it is finished. If the client hasn't managed to send a whole request,
 % do nothing.
 -spec respond(Response, State) -> Session
-              when Response :: gemini_response(),
+              % term(): the final clause answers 40 to anything else
+              when Response :: gemini_response() | term(),
                    State    :: state(),
                    Session  :: gemini_session().
 
@@ -350,7 +351,7 @@ respond(hangup, _State) ->
 
 respond({file, MimeType, Filename},
         #state{transport=Transport, socket=Socket}) ->
-    Header = format_headers(20, MimeType),
+    Header = format_headers(success_status(), MimeType),
     Transport:send(Socket, Header),
     Transport:sendfile(Socket, Filename),
     finished;
@@ -370,10 +371,44 @@ respond({redirect, Path}, State=#state{transport=Transport, socket=Socket}) ->
 
 respond({success, MimeType, Data}, #state{transport=Transport,
                                           socket=Socket}) ->
-    Header = format_headers(20, MimeType),
+    Header = format_headers(success_status(), MimeType),
     Transport:send(Socket, Header),
     Transport:send(Socket, Data),
-    finished.
+    finished;
+
+% Anything else is a bug in whoever produced it (the spec says it cannot
+% happen), but must not crash the connection outside the request's try:
+% log its shape only, as it may hold client data, and answer 40.
+respond(Other, State) ->
+    logger:error("unexpected response ~p; answering 40", [shape(Other)]),
+    respond({error_code, internal_server_error}, State).
+
+
+% The numeric status the table gives for success.
+-spec success_status() -> Status
+              when Status :: integer().
+
+success_status() ->
+    {Status, _Meta} = blizanci_status:gemini_status(success),
+    Status.
+
+
+% What kind of term this is, without its contents.
+-spec shape(Term) -> Shape
+              when Term  :: term(),
+                   Shape :: atom() | {'tuple', non_neg_integer(), atom()}.
+
+shape(Term) when is_atom(Term)  -> Term;
+shape(Term) when is_tuple(Term) ->
+    Tag = case tuple_size(Term) > 0 andalso element(1, Term) of
+              A when is_atom(A), A =/= false -> A;
+              _ -> none
+          end,
+    {tuple, tuple_size(Term), Tag};
+shape(Term) when is_binary(Term)  -> binary;
+shape(Term) when is_list(Term)    -> list;
+shape(Term) when is_number(Term)  -> number;
+shape(_)                          -> other.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -806,12 +841,34 @@ respond_test_() ->
                        respond({redirect, <<"dir1/index.gemini">>},
                                conn_state(S))
                    end)),
-     % PINS CURRENT BEHAVIOUR (smell F5), not desired: the reply of a
-     % container that has gone, or an atom with no status, is a crash
-     ?_assertError(function_clause, respond(any(ok), conn_state(none))),
-     ?_assertError(function_clause,
-                   respond({error_code, no_such_status},
-                           conn_state(none)))].
+     % an error atom with no status is a 40
+     ?_assertEqual({finished, <<"40 Internal server error\r\n">>},
+                   with_client(fun(S) ->
+                       respond({error_code, no_such_status},
+                               conn_state(S))
+                   end))].
+
+%% Any reply respond/2 has no clause for is a 40 and finishes the
+%% connection, rather than crashing it.
+respond_unexpected_test_() ->
+    [?_assertEqual({finished, <<"40 Internal server error\r\n">>},
+                   with_client(fun(S) ->
+                       respond(any(Reply), conn_state(S))
+                   end)) ||
+        Reply <- [ok, {no, such, reply}, {servlet_output}, "text",
+                  <<"bytes">>, 42, undefined]].
+
+%% The shape of a term, without its contents.
+shape_test_() ->
+    [?_assertEqual(Want, shape(Term)) ||
+        {Term, Want} <- [{ok, ok},
+                         {{a, <<"secret">>}, {tuple, 2, a}},
+                         {{<<"x">>, y}, {tuple, 2, none}},
+                         {{}, {tuple, 0, none}},
+                         {<<"secret">>, binary},
+                         {"secret", list},
+                         {7, number},
+                         {fun() -> ok end, other}]].
 
 respond_file_test_() ->
     {timeout, 30, fun respond_file/0}.
@@ -1101,6 +1158,11 @@ handle_info_data_test_() ->
                    Data(?REQLINE, fun(request) -> defer;
                                   (serve) -> {gateway_finished, none}
                                end)),
+     % so is a reply nobody has a clause for, such as 'ok'
+     ?_assertEqual({{stop, normal}, <<"40 Internal server error\r\n">>},
+                   Data(?REQLINE, Imm(any(ok)))),
+     ?_assertEqual({{stop, normal}, <<"40 Internal server error\r\n">>},
+                   Data(?REQLINE, Imm(any({no, such, reply})))),
      % an error thrown by a servlet is a 40, and finishes the connection
      ?_assertEqual({{stop, normal}, <<"40 Internal server error\r\n">>},
                    Data(?REQLINE, fun(request) -> throw(oops) end)),
@@ -1228,20 +1290,10 @@ handle_call_test_() ->
                    report({servlet_complete, <<"20 text/gemini\r\nhi">>})),
      ?_assertEqual({{false, true}, <<"40 Gateway error\r\n">>},
                    report({servlet_complete, <<"garbage">>})),
-     % PINS CURRENT BEHAVIOUR (smell F5), not desired: a gateway error
-     % with no status (the container passes any atom on) makes the
-     % connection process crash rather than answer
-     ?_assertEqual({error, function_clause},
-                   begin
-                       {R, _} = with_client(fun(S) ->
-                           try handle_cast({servlet_result,
-                                           {servlet_failed, unimplemented}},
-                                           conn_state(S))
-                           catch error:Reason -> {error, Reason}
-                           end
-                       end),
-                       R
-                   end),
+     % a gateway error with no status (the container passes any atom
+     % on) is a 40
+     ?_assertEqual({{false, true}, <<"40 Internal server error\r\n">>},
+                   report({servlet_failed, unimplemented})),
      ?_assertEqual({reply, ok, St}, handle_call(anything, from, St)),
      ?_assertEqual({noreply, St}, handle_cast(anything, St)),
      ?_assertEqual({ok, St}, code_change(old, St, extra))].
