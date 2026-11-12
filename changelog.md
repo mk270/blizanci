@@ -1,5 +1,33 @@
 # Blizanci Changelog
 
+## 5.30.2
+
+- Report a client certificate that is not yet valid as
+  `cert_not_yet_valid` ("Client certificate not yet valid"), not as
+  expired; `blizanci_x509:check_cert/1` and `blizanci_auth:authorised/2`
+  can now return it
+- Use the Gemini status codes for client certificate errors: 61 for
+  `cert_not_authorised`, and 62 for `cert_expired`, `cert_not_yet_valid`,
+  `cert_not_parsed` and `cert_unsupported_encoding` (they were all 60;
+  only `cert_required` stays 60)
+- A client certificate with no Common Name no longer gives an empty
+  `REMOTE_USER` in CGI; the variable is left unset. In
+  `cert_details()` the `common_name` and `issuer_common_name` may be
+  `undefined`
+- Answer 51 (a missing file or a directory) or 40 (any other open
+  error) when a static file cannot be opened, instead of a `20` header
+  with an empty body; the file is opened before the header is sent, and
+  sent from the open handle
+- Breaking for library callers: read and decode a private route's CA
+  files once, when the route is built, instead of on every request. All
+  the certificates in a file are trusted (a bundle works), where only the
+  first was; a file with an undecodable certificate is refused at build
+  with `{invalid_ca_file, File, certificate_not_decodable}`; a changed
+  CA file takes effect only when the route is rebuilt and applied, or on
+  a restart. The built route's `auth_policy` is now
+  `{private, Files, Certs}`, and `blizanci_x509:certificate_from_file/1`
+  is replaced by `certificates_from_file/1`
+
 ## 5.30.1
 
 - Add unit tests for `blizanci_osenv` and the CGI environment it
