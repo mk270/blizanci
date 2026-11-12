@@ -12,13 +12,12 @@
 %% @end
 
 -module(blizanci_x509).
--include_lib("public_key/include/public_key.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
 -export([peercert_cn/1]).
 -export([verify_cert/3]).
--export([validate_pem_file/1, certificate_from_file/1,
+-export([validate_pem_file/1, certificates_from_file/1,
          validate_ca_file/1]).
 -export([check_cert/1]).
 -export([verify_signed_by/2]).
@@ -270,66 +269,72 @@ issuer_public_key(#'OTPCertificate'{tbsCertificate = TBS}) ->
 
 
 %% @doc
-%% Return the decoded certificate from a PEM-encoded file.
-%% This returns only the first certificate available in the file, and likely
-%% crashes when run on a file not containing any PEM-encoded certificates.
+%% Return every certificate in a PEM-encoded file, decoded, in file order
+%% (a CA bundle gives all of its CAs). Other PEM entries (keys, say) are
+%% ignored. Does not raise. The error is a posix atom if the file cannot
+%% be read, 'not_a_path' if Path is not a non-empty string,
+%% 'no_certificate_in_file' if there is no certificate entry, and
+%% 'certificate_not_decodable' if ANY certificate entry fails to decode
+%% (the file is refused whole, not partly used).
 %% @end
--spec certificate_from_file(Path) -> Cert
-              when Path :: string(),
-                   Cert :: #'Certificate'{} | #'OTPCertificate'{}.
+-spec certificates_from_file(Path) -> Result
+              when Path   :: term(),
+                   Result :: {'ok', [#'OTPCertificate'{}, ...]}
+                           | {'error', term()}.
 
-certificate_from_file(Path) ->
-    {ok, Data} = file:read_file(Path),
-    PEM_Entries = public_key:pem_decode(Data),
-    {value, {_, DerCert, _}} = lists:keysearch('Certificate', 1, PEM_Entries),
-    public_key:pkix_decode_cert(DerCert, otp).
+certificates_from_file(Path) when is_list(Path), Path =/= [] ->
+    try file:read_file(Path) of
+        {ok, Data} -> certificates_from_pem(Data);
+        {error, Posix} -> {error, Posix}
+    catch
+        _:_ -> {error, not_a_path}
+    end;
+certificates_from_file(_) ->
+    {error, not_a_path}.
+
+-spec certificates_from_pem(Data) -> Result
+              when Data   :: binary(),
+                   Result :: {'ok', [#'OTPCertificate'{}, ...]}
+                           | {'error', term()}.
+certificates_from_pem(Data) ->
+    try [Der || {'Certificate', Der, _} <- public_key:pem_decode(Data)] of
+        [] -> {error, no_certificate_in_file};
+        Ders -> decode_all(Ders, [])
+    catch
+        _:_ -> {error, no_certificate_in_file}
+    end.
+
+-spec decode_all(Ders, Acc) -> Result
+              when Ders   :: [binary()],
+                   Acc    :: [#'OTPCertificate'{}],
+                   Result :: {'ok', [#'OTPCertificate'{}, ...]}
+                           | {'error', 'certificate_not_decodable'}.
+decode_all([], Acc) ->
+    {ok, lists:reverse(Acc)};
+decode_all([Der | Rest], Acc) ->
+    try public_key:pkix_decode_cert(Der, otp) of
+        #'OTPCertificate'{} = Cert -> decode_all(Rest, [Cert | Acc]);
+        _ -> {error, certificate_not_decodable}
+    catch
+        _:_ -> {error, certificate_not_decodable}
+    end.
 
 
 %% @doc
 %% Check, without raising, that Path is the name of a readable file
-%% holding at least one PEM-encoded certificate which decodes, i.e.
-%% that certificate_from_file/1 will work on it later. This is for
-%% checking a route's issuer files (ca_certs) at start-up.
+%% holding at least one PEM-encoded certificate, and that every
+%% certificate in it decodes. See certificates_from_file/1 for the
+%% errors.
 %% @end
 -spec validate_ca_file(Path) -> Result
               when Path   :: term(),
                    Result :: 'ok' | {'error', term()}.
 
-validate_ca_file(Path) when is_list(Path), Path =/= [] ->
-    try file:read_file(Path) of
-        {ok, Data} ->
-            case first_certificate(Data) of
-                {ok, Der} -> try_decode(Der);
-                none -> {error, no_certificate_in_file}
-            end;
-        {error, Posix} -> {error, Posix}
-    catch
-        _:_ -> {error, not_a_path}
-    end;
-validate_ca_file(_) ->
-    {error, not_a_path}.
-
--spec first_certificate(Data) -> Result
-              when Data   :: binary(),
-                   Result :: {'ok', binary()} | 'none'.
-first_certificate(Data) ->
-    try lists:keyfind('Certificate', 1, public_key:pem_decode(Data)) of
-        {_, Der, _} -> {ok, Der};
-        false -> none
-    catch
-        _:_ -> none
+validate_ca_file(Path) ->
+    case certificates_from_file(Path) of
+        {ok, _} -> ok;
+        {error, _} = Error -> Error
     end.
-
--spec try_decode(Der) -> Result
-              when Der    :: binary(),
-                   Result :: 'ok' | {'error', 'certificate_not_decodable'}.
-try_decode(Der) ->
-    try public_key:pkix_decode_cert(Der, otp) of
-        _ -> ok
-    catch
-        _:_ -> {error, certificate_not_decodable}
-    end.
-
 
 %% @doc
 %% Check that a file containts (at least) one PEM-encoded certificate.
@@ -638,6 +643,9 @@ verify_cert_test_() ->
                           verify_cert(CAOtp, Event, [])) || Event <- Events ]
       end).
 
+junk_cert() ->
+    {'Certificate', <<1, 2, 3>>, not_encrypted}.
+
 % PEM files: the server's own, and the CA files of a `private` route.
 pem_files_test_() ->
     {setup,
@@ -653,15 +661,20 @@ pem_files_test_() ->
                                      [public_key:pem_entry_encode(
                                         'RSAPrivateKey', Key)]),
            empty   => test_write_pem(Dir, "empty.pem", []),
+           junk    => test_write_pem(Dir, "junk.pem", [junk_cert()]),
+           mixed   => test_write_pem(Dir, "mixed.pem",
+                                     [test_pem_cert(CA), junk_cert()]),
            text    => filename:join(Dir, "text.pem"),
            missing => filename:join(Dir, "missing.pem")},
          ok = file:write_file(maps:get(text, Files), <<"hello\n">>),
          {Dir, Pki, Files}
      end,
      fun({Dir, _, _}) -> file:del_dir_r(Dir) end,
-     fun({_, #{ca_otp := CAOtp}, Files}) ->
+     fun({_, #{ca_otp := CAOtp} = Pki, Files}) ->
          #{ca := CAFile, both := Both, key := KeyFile, empty := Empty,
-           text := Text, missing := Missing} = Files,
+           text := Text, missing := Missing, junk := Junk,
+           mixed := Mixed} = Files,
+         #{ca2_otp := CA2Otp} = Pki,
          [?_assertEqual({ok, CAFile}, validate_pem_file(CAFile)),
           ?_assertEqual({ok, Both}, validate_pem_file(Both)),
           % any PEM entry will do: it need not be a certificate
@@ -670,13 +683,27 @@ pem_files_test_() ->
           ?_assertEqual({fail, not_a_cert}, validate_pem_file(Text)),
           ?_assertEqual({fail, couldnt_open_pem_file},
                         validate_pem_file(Missing)),
-          ?_assertEqual(CAOtp, certificate_from_file(CAFile)),
-          % only the first certificate is returned
-          ?_assertEqual(CAOtp, certificate_from_file(Both)),
-          % a file with no certificate in it, or no file, raises
-          ?_assertError({badmatch, false}, certificate_from_file(KeyFile)),
-          ?_assertError({badmatch, false}, certificate_from_file(Empty)),
-          ?_assertError({badmatch, false}, certificate_from_file(Text)),
-          ?_assertError({badmatch, {error, enoent}},
-                        certificate_from_file(Missing))]
+          ?_assertEqual({ok, [CAOtp]}, certificates_from_file(CAFile)),
+          % every certificate is returned, in file order
+          ?_assertEqual({ok, [CAOtp, CA2Otp]},
+                        certificates_from_file(Both)),
+          % non-certificate entries are skipped
+          ?_assertEqual({error, no_certificate_in_file},
+                        certificates_from_file(KeyFile)),
+          ?_assertEqual({error, no_certificate_in_file},
+                        certificates_from_file(Empty)),
+          ?_assertEqual({error, no_certificate_in_file},
+                        certificates_from_file(Text)),
+          ?_assertEqual({error, enoent}, certificates_from_file(Missing)),
+          ?_assertEqual({error, certificate_not_decodable},
+                        certificates_from_file(Junk)),
+          % one bad entry refuses the whole file
+          ?_assertEqual({error, certificate_not_decodable},
+                        certificates_from_file(Mixed)),
+          ?_assertEqual({error, not_a_path}, certificates_from_file("")),
+          ?_assertEqual({error, not_a_path},
+                        certificates_from_file(<<"/x">>)),
+          ?_assertEqual(ok, validate_ca_file(Both)),
+          ?_assertEqual({error, certificate_not_decodable},
+                        validate_ca_file(Mixed))]
      end}.

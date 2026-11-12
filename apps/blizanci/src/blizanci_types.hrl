@@ -10,7 +10,16 @@
 
 -type mp() :: {re_pattern, _, _, _, _}.
 
--type authorisation() :: public | restricted | {private, [string()]}.
+-include_lib("public_key/include/public_key.hrl").
+
+% What a route is configured with: for private, the CA files.
+-type authorisation_config() :: public | restricted | {private, [string()]}.
+
+% What a built route holds (see blizanci_auth:valid_authz_policy/1): for
+% private, the CA files and every certificate decoded from them, once,
+% when the route was built.
+-type authorisation() :: public | restricted
+                       | {private, [string()], [#'OTPCertificate'{}]}.
 
 -type route_option() :: {atom(), any()}.
 
