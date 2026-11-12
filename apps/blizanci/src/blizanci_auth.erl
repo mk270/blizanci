@@ -89,6 +89,8 @@ cert_authorised(AuthPolicy, {ok, DerCert}) ->
             cert_authorised_policy(AuthPolicy, DerCert);
         {error, cert_expired} ->
             {error_code, cert_expired};
+        {error, cert_not_yet_valid} ->
+            {error_code, cert_not_yet_valid};
         {error, cert_not_parsed} ->
             {error_code, cert_not_parsed}
     end.
@@ -286,7 +288,8 @@ authorised_restricted_test_() ->
            % even a forged certificate will do: the issuer is not asked
            ?_assertEqual(authorised, Auth({ok, Forged})),
            ?_assertEqual({error_code, cert_expired}, Auth({ok, Expired})),
-           ?_assertEqual({error_code, cert_expired}, Auth({ok, NotYet})),
+           ?_assertEqual({error_code, cert_not_yet_valid},
+                         Auth({ok, NotYet})),
            ?_assertEqual({error_code, cert_not_parsed},
                          Auth({ok, <<"garbage">>})),
            ?_assertEqual({error_code, cert_not_parsed}, Auth({ok, <<>>}))]
@@ -328,7 +331,7 @@ authorised_private_test_() ->
                          Auth([CAFile], NoCert)),
            ?_assertEqual({error_code, cert_expired},
                          Auth([CAFile], {ok, Expired})),
-           ?_assertEqual({error_code, cert_expired},
+           ?_assertEqual({error_code, cert_not_yet_valid},
                          Auth([CAFile], {ok, NotYet})),
            ?_assertEqual({error_code, cert_not_parsed},
                          Auth([CAFile], {ok, <<"garbage">>}))]

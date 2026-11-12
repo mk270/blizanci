@@ -39,6 +39,7 @@
 %% which decoded fine but uses a directory-string encoding for an RDN
 %% attribute value that we don't know how to render
 %% (`cert_unsupported_encoding`), e.g. bmpString/universalString.
+%
 %% @end
 -spec peercert_cn(C) -> ClientCert
               when C          :: term(),
@@ -145,39 +146,49 @@ verify_cert(_Cert, _Event, _InitialUserState) ->
 %%
 %% As with peercert_cn/1, the input is remote-attacker-controlled, so a
 %% certificate we can't decode at all is reported distinctly
-%% (`cert_not_parsed`) from one which decodes fine but has expired
-%% (`cert_expired`).
+%% (`cert_not_parsed`) from one which decodes fine but is outside its
+%% validity period: past NotAfter (`cert_expired`) or before NotBefore
+%% (`cert_not_yet_valid`).
 %% @end
 -spec check_cert(DerCert) -> Result
               when DerCert :: public_key:der_encoded(),
                    Result  :: {ok, #'OTPCertificate'{}}
                             | {error, cert_expired}
+                            | {error, cert_not_yet_valid}
                             | {error, cert_not_parsed}.
 
 check_cert(DerCert) ->
     try
         OtpCert = public_key:pkix_decode_cert(DerCert, otp),
-        case cert_time_valid(OtpCert) of
-            true  -> {ok, OtpCert};
-            false -> {error, cert_expired}
+        case cert_time_status(OtpCert) of
+            valid         -> {ok, OtpCert};
+            expired       -> {error, cert_expired};
+            not_yet_valid -> {error, cert_not_yet_valid}
         end
     catch
         _:_ -> {error, cert_not_parsed}
     end.
 
 
--spec cert_time_valid(OtpCert) -> boolean()
-              when OtpCert :: #'OTPCertificate'{}.
+-spec cert_time_status(OtpCert) -> Status
+              when OtpCert :: #'OTPCertificate'{},
+                   Status  :: 'valid' | 'expired' | 'not_yet_valid'.
 
-cert_time_valid(Cert) ->
+cert_time_status(Cert) ->
     {'OTPCertificate', Data, _, _} = Cert,
     {'OTPTBSCertificate',
      _Version, _Serial, _Signature, _Issuer,
      Validity, _Subject, _PubKey, _X1, _X2, _X3} = Data,
     {'Validity', NotBefore, NotAfter} = Validity,
     Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-    Now >= asn1_time_to_gregorian(NotBefore) andalso
-        Now =< asn1_time_to_gregorian(NotAfter).
+    case Now < asn1_time_to_gregorian(NotBefore) of
+        true  -> not_yet_valid;
+        false ->
+            case Now > asn1_time_to_gregorian(NotAfter) of
+                true  -> expired;
+                false -> valid
+            end
+    end.
 
 
 % UTCTime and GeneralizedTime, per RFC 5280 (PKIX profile), must be
@@ -508,8 +519,7 @@ check_cert_test_() ->
            ?_assertEqual({ok, public_key:pkix_decode_cert(Peer, otp)},
                          check_cert(Peer)),
            ?_assertEqual({error, cert_expired}, check_cert(Expired)),
-           % a certificate not yet valid is also reported as cert_expired
-           ?_assertEqual({error, cert_expired}, check_cert(NotYet)),
+           ?_assertEqual({error, cert_not_yet_valid}, check_cert(NotYet)),
            % GeneralizedTime, and UTCTime either side of the 1950/2049
            % pivot of two-digit years (a valid 1950-2049 period)
            ?_assertMatch({ok, _}, check_cert(General)),
@@ -520,6 +530,27 @@ check_cert_test_() ->
            ?_assertEqual({error, cert_not_parsed}, check_cert(<<>>)),
            ?_assertEqual({error, cert_not_parsed},
                          check_cert(binary:part(Peer, 0, 100)))]
+      end).
+
+% Just inside and just outside each end of the validity period (30 s
+% either way; the check reads the real clock).
+check_cert_boundary_test_() ->
+    pki_fixture(
+      fun(#{peer_key := Key}) ->
+          Name = test_cn("alice"),
+          Now = calendar:datetime_to_gregorian_seconds(
+                  calendar:universal_time()),
+          Cert = fun(NotBefore, NotAfter) ->
+                     test_cert(Name, Name, Key, Key,
+                               {test_utc(Now + NotBefore),
+                                test_utc(Now + NotAfter)})
+                 end,
+          [?_assertMatch({ok, _}, check_cert(Cert(-30, 3600))),
+           ?_assertMatch({ok, _}, check_cert(Cert(-3600, 30))),
+           ?_assertEqual({error, cert_not_yet_valid},
+                         check_cert(Cert(30, 3600))),
+           ?_assertEqual({error, cert_expired},
+                         check_cert(Cert(-3600, -30)))]
       end).
 
 % A time that isn't UTC ("Z"), which RFC 5280 forbids, makes the
