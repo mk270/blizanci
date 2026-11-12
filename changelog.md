@@ -1,5 +1,23 @@
 # Blizanci Changelog
 
+## 5.31.0
+
+- A servlet's `start/0` callback may now return `{error, Reason}` as
+  well as `ok`; a failed start gives
+  `{error, {servlet_start_failed, Module, Reason}}` from
+  `blizanci_config:apply/1` (the servlets already started by that call
+  are stopped and nothing is published), and stops the servlets
+  process from starting at application start
+- Report a servlet that cannot start at application start as one line,
+  `blizanci: servlet <Module> could not start: <Reason>`, and return
+  `{error, Reason}` from the application's `start/2`, instead of
+  crashing on a badmatch
+- `blizanci_pool:start/3` returns `{error, Reason}` for any error from
+  ppool other than an already-started pool, instead of crashing; an
+  unexpected return becomes `{error, {unexpected, Value}}`
+- Depend on ppool 1.3.0, which validates a pool's name, limit and
+  worker spec when it is started
+
 ## 5.30.2
 
 - Report a client certificate that is not yet valid as
