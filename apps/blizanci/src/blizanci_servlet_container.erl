@@ -310,7 +310,8 @@ check_result({servlet_complete, Output}) when is_binary(Output) -> ok.
 %% a failure status becomes the client's answer ({error_code, Reason});
 %% any other Reason stays an internal failure. Only serve/4 refusals that
 %% need no worker pool are used here (CGI refuses before queueing, and
-%% blizanci_static:serve/4 is a stub that returns 'unimplemented').
+%% blizanci_static:serve/4 is a stub that returns 'unimplemented', which
+%% the status table maps to 40).
 %% Fixture, under a fresh temporary directory:
 %%   Base/cgi/{script, .hidden}
 init_refusal_test_() ->
@@ -376,8 +377,8 @@ refusal_tests(Base) ->
      ?_assertEqual({gateway_complete, {error_code, cert_not_parsed}},
                    Cgi(<<"script">>,
                        #{ client_cert => {ok, <<"not a certificate">>} })),
-     % a reason with no status mapping is still an internal failure
-     ?_assertEqual({gateway_init_error, unimplemented},
+     % the static stub's 'unimplemented' has a (40) status
+     ?_assertEqual({gateway_complete, {error_code, unimplemented}},
                    init_exit(blizanci_static, #{}, refusal_request(#{}),
                              #{}))].
 
@@ -493,7 +494,7 @@ serve_error_test_() ->
                    serve_exit({gateway_error, gateway_busy})),
      ?_assertEqual({gateway_complete, {error_code, cert_not_parsed}},
                    serve_exit({gateway_error, cert_not_parsed})),
-     ?_assertEqual({gateway_init_error, unimplemented},
+     ?_assertEqual({gateway_complete, {error_code, unimplemented}},
                    serve_exit({gateway_error, unimplemented})),
      ?_assertEqual({gateway_init_error, no_such_reason},
                    serve_exit(any({gateway_error, no_such_reason}))),
@@ -536,8 +537,8 @@ gateway_exit_test_() ->
                    gateway_exit_result({gateway_error,
                                         cgi_output_too_large})),
      % no status mapping: still reported as a failure, as it is
-     ?_assertEqual({{servlet_failed, unimplemented}, ok, true},
-                   gateway_exit_result({gateway_error, unimplemented})),
+     ?_assertEqual({{servlet_failed, no_such_status}, ok, true},
+                   gateway_exit_result({gateway_error, no_such_status})),
      % a container that is already gone is not an error
      ?_assertEqual(ok, gateway_exit(dead_pid(), {gateway_output, <<>>})),
      % containers dying concurrently with the report never crash the
