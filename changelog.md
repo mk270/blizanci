@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 5.30.1
+
+- Add unit tests for `blizanci_osenv` and the CGI environment it
+  sanitises, for the runtime log-level control in `blizanci_log`, and
+  for the worker pool helpers in `blizanci_pool`
+
 ## 5.30.0
 
 - Answer 40 and log, rather than crash the connection, when a servlet
