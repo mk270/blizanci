@@ -95,8 +95,8 @@
 -type servlet_result() :: {'servlet_failed', atom()}
                         | {'servlet_complete', binary() }.
 
--type cert_details() :: #{ common_name := binary(),
-                           issuer_common_name := binary() }.
+-type cert_details() :: #{ common_name := binary() | 'undefined',
+                           issuer_common_name := binary() | 'undefined' }.
 
 -type client_cert() :: 'error' | {'ok', cert_details()} | {'error', atom()}.
 

@@ -622,6 +622,9 @@ make_environment(#cgi_req{cmd=Bin, path=Path, matches=Matches, req=Req,
     % to populate REMOTE_USER. See blizanci_x509:peercert_cn/1 for why a
     % cert we can't understand is reported rather than silently dropped.
     case blizanci_x509:peercert_cn(Cert) of
+        {ok, #{ common_name := undefined }} ->
+            % a certificate with no Common Name: REMOTE_USER stays unset
+            {ok, KVPs};
         {ok, #{ common_name := CN }} ->
             {ok, KVPs ++ [{"REMOTE_USER", CN}]};
         error ->
@@ -824,6 +827,8 @@ test_cgi_req(ReqExtra) ->
              prefix = "/cgi-bin/"}.
 
 make_environment_test_() ->
+    #{peer := Peer, no_cn := NoCN, no_cn_both := NoCNBoth} =
+        blizanci_x509:test_pki(),
     {ok, Env} = make_environment(test_cgi_req(#{})),
     [?_assertEqual([{"PATH_TRANSLATED", <<"/srv/cgi/hello">>},
                     {"PATH_INFO", <<"/extra">>},
@@ -834,6 +839,23 @@ make_environment_test_() ->
                     {"SERVER_PROTOCOL", "GEMINI"}], Env),
      % no client certificate: no REMOTE_USER
      ?_assertEqual(false, lists:keymember("REMOTE_USER", 1, Env)),
+     % a certificate with a Common Name sets REMOTE_USER; one without
+     % leaves it unset
+     ?_assertEqual({"REMOTE_USER", <<"alice">>},
+                   lists:keyfind("REMOTE_USER", 1,
+                                 element(2, make_environment(
+                                   test_cgi_req(#{ client_cert =>
+                                                   {ok, Peer} }))))),
+     ?_assertEqual(false,
+                   lists:keymember("REMOTE_USER", 1,
+                                   element(2, make_environment(
+                                     test_cgi_req(#{ client_cert =>
+                                                     {ok, NoCN} }))))),
+     ?_assertEqual(false,
+                   lists:keymember("REMOTE_USER", 1,
+                                   element(2, make_environment(
+                                     test_cgi_req(#{ client_cert =>
+                                                     {ok, NoCNBoth} }))))),
      % an undecodable certificate is reported, not dropped
      ?_assertEqual({error, cert_not_parsed},
                    make_environment(

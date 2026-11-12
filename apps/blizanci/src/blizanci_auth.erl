@@ -279,7 +279,8 @@ authorised_public_test_() ->
 authorised_restricted_test_() ->
     authorised_fixture(
       fun(#{peer := Peer, peer_ca2 := PeerCA2, forged := Forged,
-            expired := Expired, not_yet := NotYet}, _Files) ->
+            expired := Expired, not_yet := NotYet, no_cn := NoCN,
+            no_cn_both := NoCNBoth}, _Files) ->
           Auth = fun(Cert) -> authorised(restricted, request(Cert)) end,
           [?_assertEqual({error_code, cert_required},
                          Auth({error, no_peercert})),
@@ -290,6 +291,9 @@ authorised_restricted_test_() ->
            ?_assertEqual({error_code, cert_expired}, Auth({ok, Expired})),
            ?_assertEqual({error_code, cert_not_yet_valid},
                          Auth({ok, NotYet})),
+           % a certificate with no Common Name is still accepted
+           ?_assertEqual(authorised, Auth({ok, NoCN})),
+           ?_assertEqual(authorised, Auth({ok, NoCNBoth})),
            ?_assertEqual({error_code, cert_not_parsed},
                          Auth({ok, <<"garbage">>})),
            ?_assertEqual({error_code, cert_not_parsed}, Auth({ok, <<>>}))]

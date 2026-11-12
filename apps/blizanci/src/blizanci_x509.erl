@@ -39,7 +39,10 @@
 %% which decoded fine but uses a directory-string encoding for an RDN
 %% attribute value that we don't know how to render
 %% (`cert_unsupported_encoding`), e.g. bmpString/universalString.
-%
+%%
+%% A certificate with no Common Name is not an error: the corresponding
+%% value in the result is the atom `undefined' (for the subject, the
+%% issuer, or both).
 %% @end
 -spec peercert_cn(C) -> ClientCert
               when C          :: term(),
@@ -369,6 +372,9 @@ validate_pem_file(Filename) ->
 %                      as UTCTime across the 1950/2049 pivot
 %   bmp, printable, no_cn   subjects with a BMPString CN, a
 %                      PrintableString CN, and no CN at all
+%   no_cn_issuer       "alice", signed by a CA whose name has no CN
+%   no_cn_both         no CN, signed by a CA whose name has no CN
+%   peer_key           the key of every certificate signed by ca
 %
 % Keys are 2048-bit RSA with exponent 17, as elsewhere in the tests.
 
@@ -432,6 +438,10 @@ test_pki() ->
     Signed = fun(Subject, Validity) ->
                  test_cert(Subject, CAName, PeerKey, CAKey, Validity)
              end,
+    NoCNName = test_dn(none),
+    NoCNSigned = fun(Subject, Validity) ->
+                     test_cert(Subject, NoCNName, PeerKey, CAKey, Validity)
+                 end,
     CA = test_cert(CAName, CAName, CAKey, CAKey, Valid),
     CA2 = test_cert(CA2Name, CA2Name, CA2Key, CA2Key, Valid),
     #{ ca       => CA,
@@ -456,7 +466,9 @@ test_pki() ->
                            {utcTime, "491231235959Z"}}),
        bmp      => Signed(test_dn({bmpString, [0, $a]}), Valid),
        printable => Signed(test_dn({printableString, "carol"}), Valid),
-       no_cn    => Signed(test_dn(none), Valid)
+       no_cn    => Signed(test_dn(none), Valid),
+       no_cn_issuer => NoCNSigned(test_cn("alice"), Valid),
+       no_cn_both   => NoCNSigned(test_dn(none), Valid)
      }.
 
 % A fresh, empty directory for a test's files; the caller removes it.
@@ -573,20 +585,25 @@ check_cert_non_utc_time_test_() ->
 peercert_cn_test_() ->
     pki_fixture(
       fun(#{peer := Peer, bmp := Bmp, printable := Printable,
-            no_cn := NoCN, expired := Expired}) ->
+            no_cn := NoCN, no_cn_issuer := NoCNIssuer,
+            no_cn_both := NoCNBoth, expired := Expired}) ->
           [?_assertEqual({ok, #{ common_name => <<"alice">>,
                                 issuer_common_name => <<"Test CA">> }},
                          peercert_cn({ok, Peer})),
            ?_assertEqual({ok, #{ common_name => <<"carol">>,
                                 issuer_common_name => <<"Test CA">> }},
                          peercert_cn({ok, Printable})),
-           % No Common Name at all: the name comes back as the atom
-           % 'undefined', though the spec (cert_details()) says binary();
-           % through apply/3, since the spec otherwise rules this out.
-           % (blizanci_cgi then makes it REMOTE_USER=undefined.)
+           % No Common Name: the name is 'undefined', for the subject,
+           % the issuer, or both.
            ?_assertEqual({ok, #{ common_name => undefined,
                                 issuer_common_name => <<"Test CA">> }},
-                         apply(?MODULE, peercert_cn, [{ok, NoCN}])),
+                         peercert_cn({ok, NoCN})),
+           ?_assertEqual({ok, #{ common_name => <<"alice">>,
+                                issuer_common_name => undefined }},
+                         peercert_cn({ok, NoCNIssuer})),
+           ?_assertEqual({ok, #{ common_name => undefined,
+                                issuer_common_name => undefined }},
+                         peercert_cn({ok, NoCNBoth})),
            % an RDN string encoding it doesn't render
            ?_assertEqual({error, cert_unsupported_encoding},
                          peercert_cn({ok, Bmp})),
