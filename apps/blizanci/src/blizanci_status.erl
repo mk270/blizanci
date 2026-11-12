@@ -79,13 +79,15 @@ status_entry(cert_required) ->
 status_entry(permanent_redirect) ->
     {31, <<"Moved permanently">>};
 status_entry(cert_not_authorised) ->
-    {60, <<"Client certificate unauthorised">>};
+    {61, <<"Client certificate unauthorised">>};
 status_entry(cert_expired) ->
-    {60, <<"Client certificate expired">>};
+    {62, <<"Client certificate expired">>};
+status_entry(cert_not_yet_valid) ->
+    {62, <<"Client certificate not yet valid">>};
 status_entry(cert_not_parsed) ->
-    {60, <<"Client certificate not understood">>};
+    {62, <<"Client certificate not understood">>};
 status_entry(cert_unsupported_encoding) ->
-    {60, <<"Client certificate uses an unsupported name encoding">>};
+    {62, <<"Client certificate uses an unsupported name encoding">>};
 status_entry(_) ->
     undefined.
 
@@ -136,12 +138,25 @@ gemini_status_test_() ->
                          {unimplemented, {40, <<"Not implemented">>}},
                          {no_such_status, ISE}]].
 
+% Gemini 60 (required), 61 (not authorised), 62 (not valid).
+cert_status_test_() ->
+    [?_assertMatch({Status, _}, gemini_status(Code)) ||
+        {Code, Status} <- [{cert_required, 60},
+                           {cert_not_authorised, 61},
+                           {cert_expired, 62},
+                           {cert_not_yet_valid, 62},
+                           {cert_not_parsed, 62},
+                           {cert_unsupported_encoding, 62}]]
+    ++ [?_assertEqual({62, <<"Client certificate not yet valid">>},
+                      gemini_status(cert_not_yet_valid))].
+
 is_error_test_() ->
     [% failure statuses (40 and above)
      ?_assert(is_error(file_not_found)),
      ?_assert(is_error(gateway_busy)),
      ?_assert(is_error(internal_server_error)),
      ?_assert(is_error(cert_not_parsed)),
+     ?_assert(is_error(cert_not_yet_valid)),
      ?_assert(is_error(bad_filename)),
      % mapped, but not failures
      ?_assertNot(is_error(success)),

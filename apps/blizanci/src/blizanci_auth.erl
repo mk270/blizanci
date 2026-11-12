@@ -89,6 +89,8 @@ cert_authorised(AuthPolicy, {ok, DerCert}) ->
             cert_authorised_policy(AuthPolicy, DerCert);
         {error, cert_expired} ->
             {error_code, cert_expired};
+        {error, cert_not_yet_valid} ->
+            {error_code, cert_not_yet_valid};
         {error, cert_not_parsed} ->
             {error_code, cert_not_parsed}
     end.
@@ -277,7 +279,8 @@ authorised_public_test_() ->
 authorised_restricted_test_() ->
     authorised_fixture(
       fun(#{peer := Peer, peer_ca2 := PeerCA2, forged := Forged,
-            expired := Expired, not_yet := NotYet}, _Files) ->
+            expired := Expired, not_yet := NotYet, no_cn := NoCN,
+            no_cn_both := NoCNBoth}, _Files) ->
           Auth = fun(Cert) -> authorised(restricted, request(Cert)) end,
           [?_assertEqual({error_code, cert_required},
                          Auth({error, no_peercert})),
@@ -286,7 +289,11 @@ authorised_restricted_test_() ->
            % even a forged certificate will do: the issuer is not asked
            ?_assertEqual(authorised, Auth({ok, Forged})),
            ?_assertEqual({error_code, cert_expired}, Auth({ok, Expired})),
-           ?_assertEqual({error_code, cert_expired}, Auth({ok, NotYet})),
+           ?_assertEqual({error_code, cert_not_yet_valid},
+                         Auth({ok, NotYet})),
+           % a certificate with no Common Name is still accepted
+           ?_assertEqual(authorised, Auth({ok, NoCN})),
+           ?_assertEqual(authorised, Auth({ok, NoCNBoth})),
            ?_assertEqual({error_code, cert_not_parsed},
                          Auth({ok, <<"garbage">>})),
            ?_assertEqual({error_code, cert_not_parsed}, Auth({ok, <<>>}))]
@@ -328,7 +335,7 @@ authorised_private_test_() ->
                          Auth([CAFile], NoCert)),
            ?_assertEqual({error_code, cert_expired},
                          Auth([CAFile], {ok, Expired})),
-           ?_assertEqual({error_code, cert_expired},
+           ?_assertEqual({error_code, cert_not_yet_valid},
                          Auth([CAFile], {ok, NotYet})),
            ?_assertEqual({error_code, cert_not_parsed},
                          Auth([CAFile], {ok, <<"garbage">>}))]

@@ -39,6 +39,10 @@
 %% which decoded fine but uses a directory-string encoding for an RDN
 %% attribute value that we don't know how to render
 %% (`cert_unsupported_encoding`), e.g. bmpString/universalString.
+%%
+%% A certificate with no Common Name is not an error: the corresponding
+%% value in the result is the atom `undefined' (for the subject, the
+%% issuer, or both).
 %% @end
 -spec peercert_cn(C) -> ClientCert
               when C          :: term(),
@@ -145,39 +149,49 @@ verify_cert(_Cert, _Event, _InitialUserState) ->
 %%
 %% As with peercert_cn/1, the input is remote-attacker-controlled, so a
 %% certificate we can't decode at all is reported distinctly
-%% (`cert_not_parsed`) from one which decodes fine but has expired
-%% (`cert_expired`).
+%% (`cert_not_parsed`) from one which decodes fine but is outside its
+%% validity period: past NotAfter (`cert_expired`) or before NotBefore
+%% (`cert_not_yet_valid`).
 %% @end
 -spec check_cert(DerCert) -> Result
               when DerCert :: public_key:der_encoded(),
                    Result  :: {ok, #'OTPCertificate'{}}
                             | {error, cert_expired}
+                            | {error, cert_not_yet_valid}
                             | {error, cert_not_parsed}.
 
 check_cert(DerCert) ->
     try
         OtpCert = public_key:pkix_decode_cert(DerCert, otp),
-        case cert_time_valid(OtpCert) of
-            true  -> {ok, OtpCert};
-            false -> {error, cert_expired}
+        case cert_time_status(OtpCert) of
+            valid         -> {ok, OtpCert};
+            expired       -> {error, cert_expired};
+            not_yet_valid -> {error, cert_not_yet_valid}
         end
     catch
         _:_ -> {error, cert_not_parsed}
     end.
 
 
--spec cert_time_valid(OtpCert) -> boolean()
-              when OtpCert :: #'OTPCertificate'{}.
+-spec cert_time_status(OtpCert) -> Status
+              when OtpCert :: #'OTPCertificate'{},
+                   Status  :: 'valid' | 'expired' | 'not_yet_valid'.
 
-cert_time_valid(Cert) ->
+cert_time_status(Cert) ->
     {'OTPCertificate', Data, _, _} = Cert,
     {'OTPTBSCertificate',
      _Version, _Serial, _Signature, _Issuer,
      Validity, _Subject, _PubKey, _X1, _X2, _X3} = Data,
     {'Validity', NotBefore, NotAfter} = Validity,
     Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-    Now >= asn1_time_to_gregorian(NotBefore) andalso
-        Now =< asn1_time_to_gregorian(NotAfter).
+    case Now < asn1_time_to_gregorian(NotBefore) of
+        true  -> not_yet_valid;
+        false ->
+            case Now > asn1_time_to_gregorian(NotAfter) of
+                true  -> expired;
+                false -> valid
+            end
+    end.
 
 
 % UTCTime and GeneralizedTime, per RFC 5280 (PKIX profile), must be
@@ -358,6 +372,9 @@ validate_pem_file(Filename) ->
 %                      as UTCTime across the 1950/2049 pivot
 %   bmp, printable, no_cn   subjects with a BMPString CN, a
 %                      PrintableString CN, and no CN at all
+%   no_cn_issuer       "alice", signed by a CA whose name has no CN
+%   no_cn_both         no CN, signed by a CA whose name has no CN
+%   peer_key           the key of every certificate signed by ca
 %
 % Keys are 2048-bit RSA with exponent 17, as elsewhere in the tests.
 
@@ -421,6 +438,10 @@ test_pki() ->
     Signed = fun(Subject, Validity) ->
                  test_cert(Subject, CAName, PeerKey, CAKey, Validity)
              end,
+    NoCNName = test_dn(none),
+    NoCNSigned = fun(Subject, Validity) ->
+                     test_cert(Subject, NoCNName, PeerKey, CAKey, Validity)
+                 end,
     CA = test_cert(CAName, CAName, CAKey, CAKey, Valid),
     CA2 = test_cert(CA2Name, CA2Name, CA2Key, CA2Key, Valid),
     #{ ca       => CA,
@@ -445,7 +466,9 @@ test_pki() ->
                            {utcTime, "491231235959Z"}}),
        bmp      => Signed(test_dn({bmpString, [0, $a]}), Valid),
        printable => Signed(test_dn({printableString, "carol"}), Valid),
-       no_cn    => Signed(test_dn(none), Valid)
+       no_cn    => Signed(test_dn(none), Valid),
+       no_cn_issuer => NoCNSigned(test_cn("alice"), Valid),
+       no_cn_both   => NoCNSigned(test_dn(none), Valid)
      }.
 
 % A fresh, empty directory for a test's files; the caller removes it.
@@ -508,8 +531,7 @@ check_cert_test_() ->
            ?_assertEqual({ok, public_key:pkix_decode_cert(Peer, otp)},
                          check_cert(Peer)),
            ?_assertEqual({error, cert_expired}, check_cert(Expired)),
-           % a certificate not yet valid is also reported as cert_expired
-           ?_assertEqual({error, cert_expired}, check_cert(NotYet)),
+           ?_assertEqual({error, cert_not_yet_valid}, check_cert(NotYet)),
            % GeneralizedTime, and UTCTime either side of the 1950/2049
            % pivot of two-digit years (a valid 1950-2049 period)
            ?_assertMatch({ok, _}, check_cert(General)),
@@ -520,6 +542,27 @@ check_cert_test_() ->
            ?_assertEqual({error, cert_not_parsed}, check_cert(<<>>)),
            ?_assertEqual({error, cert_not_parsed},
                          check_cert(binary:part(Peer, 0, 100)))]
+      end).
+
+% Just inside and just outside each end of the validity period (30 s
+% either way; the check reads the real clock).
+check_cert_boundary_test_() ->
+    pki_fixture(
+      fun(#{peer_key := Key}) ->
+          Name = test_cn("alice"),
+          Now = calendar:datetime_to_gregorian_seconds(
+                  calendar:universal_time()),
+          Cert = fun(NotBefore, NotAfter) ->
+                     test_cert(Name, Name, Key, Key,
+                               {test_utc(Now + NotBefore),
+                                test_utc(Now + NotAfter)})
+                 end,
+          [?_assertMatch({ok, _}, check_cert(Cert(-30, 3600))),
+           ?_assertMatch({ok, _}, check_cert(Cert(-3600, 30))),
+           ?_assertEqual({error, cert_not_yet_valid},
+                         check_cert(Cert(30, 3600))),
+           ?_assertEqual({error, cert_expired},
+                         check_cert(Cert(-3600, -30)))]
       end).
 
 % A time that isn't UTC ("Z"), which RFC 5280 forbids, makes the
@@ -542,20 +585,25 @@ check_cert_non_utc_time_test_() ->
 peercert_cn_test_() ->
     pki_fixture(
       fun(#{peer := Peer, bmp := Bmp, printable := Printable,
-            no_cn := NoCN, expired := Expired}) ->
+            no_cn := NoCN, no_cn_issuer := NoCNIssuer,
+            no_cn_both := NoCNBoth, expired := Expired}) ->
           [?_assertEqual({ok, #{ common_name => <<"alice">>,
                                 issuer_common_name => <<"Test CA">> }},
                          peercert_cn({ok, Peer})),
            ?_assertEqual({ok, #{ common_name => <<"carol">>,
                                 issuer_common_name => <<"Test CA">> }},
                          peercert_cn({ok, Printable})),
-           % No Common Name at all: the name comes back as the atom
-           % 'undefined', though the spec (cert_details()) says binary();
-           % through apply/3, since the spec otherwise rules this out.
-           % (blizanci_cgi then makes it REMOTE_USER=undefined.)
+           % No Common Name: the name is 'undefined', for the subject,
+           % the issuer, or both.
            ?_assertEqual({ok, #{ common_name => undefined,
                                 issuer_common_name => <<"Test CA">> }},
-                         apply(?MODULE, peercert_cn, [{ok, NoCN}])),
+                         peercert_cn({ok, NoCN})),
+           ?_assertEqual({ok, #{ common_name => <<"alice">>,
+                                issuer_common_name => undefined }},
+                         peercert_cn({ok, NoCNIssuer})),
+           ?_assertEqual({ok, #{ common_name => undefined,
+                                issuer_common_name => undefined }},
+                         peercert_cn({ok, NoCNBoth})),
            % an RDN string encoding it doesn't render
            ?_assertEqual({error, cert_unsupported_encoding},
                          peercert_cn({ok, Bmp})),
