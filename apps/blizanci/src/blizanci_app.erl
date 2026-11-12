@@ -16,8 +16,14 @@
 start(_StartType, _StartArgs) ->
     case blizanci_config:from_app_env() of
         {ok, Config} ->
-            {ok, Pid} = blizanci_sup:start_link(Config),
-            {ok, Pid};
+            case blizanci_sup:start_link(Config) of
+                {ok, Pid} ->
+                    {ok, Pid};
+                {error, Reason} ->
+                    logger:error("blizanci: ~s",
+                                 [blizanci_config:describe_error(Reason)]),
+                    {error, Reason}
+            end;
         {error, Reason} ->
             logger:error("blizanci: ~s",
                          [blizanci_config:describe_error(Reason)]),

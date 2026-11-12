@@ -60,8 +60,11 @@
     gemini_response().
 
 %% Called at application start, to set up any pool/resource the servlet
-%% needs; see stop/0.
--callback start() -> 'ok'.
+%% needs; see stop/0. Returns {error, Reason} if it cannot (e.g. a pool
+%% that will not start); the servlet is then not started, and neither
+%% are any of the others in the same start-up or configuration change.
+%% (An exception is treated alike, with Reason {Class, Term}.)
+-callback start() -> 'ok' | {'error', term()}.
 
 %% Called at application shutdown; the counterpart to start/0. Allows
 %% the servlet to tear down any pool/resource it set up there, so

@@ -190,7 +190,7 @@ start_link(Args) ->
 %% @hidden
 %% @end
 -spec start() -> Result
-              when Result :: ok.
+              when Result :: 'ok' | {'error', term()}.
 start() ->
     blizanci_pool:start(?QUEUE, ?MAX_CGI, ?MODULE).
 

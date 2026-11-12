@@ -16,15 +16,25 @@
 
 -export([start/3, stop/1, cancel/2, enqueue/2]).
 
+%% @doc
+%% Start the named pool, of at most Max workers of Module. A pool that is
+%% already running under the name is left alone and is `ok'. Any other
+%% refusal by ppool (an invalid name, limit or MFA, or a name held by
+%% some other registered process) is returned as `{error, Reason}',
+%% Reason being ppool's, unchanged.
+%% @end
 -spec start(Queue, Max, Module) -> Result
               when Queue  :: atom(),
                    Max    :: pos_integer(),
                    Module :: module(),
-                   Result :: 'ok'.
+                   Result :: 'ok' | {'error', term()}.
 start(Queue, Max, Module) ->
-    case ppool:start_pool(Queue, Max, {Module, start_link, []}) of
+    % through apply/3: ppool's spec is narrower than what we tolerate
+    case apply(ppool, start_pool, [Queue, Max, {Module, start_link, []}]) of
         {error, {already_started, _Pid}} -> ok;
-        {ok, _Pid} -> ok
+        {ok, _Pid} -> ok;
+        {error, _} = Error -> Error;
+        Other -> {error, {unexpected, Other}}
     end.
 
 
@@ -121,6 +131,45 @@ start_twice_test() ->
           ?assert(is_process_alive(W)),
           % still the one-worker pool: the second job is not taken
           ?assertEqual({gateway_error, gateway_busy}, enqueue(Q, job2))
+      end).
+
+%% Bad arguments are refused by ppool, and passed back as an error.
+start_invalid_limit_test() ->
+    with_pool_name(
+      fun(Q) ->
+          F = fun(Max) -> apply(?MODULE, start,
+                                [Q, Max, blizanci_test_worker]) end,
+          ?assertMatch({error, {invalid_limit, 0}}, F(0)),
+          ?assertMatch({error, {invalid_limit, -1}}, F(-1)),
+          ?assertMatch({error, {invalid_limit, many}}, F(many)),
+          ?assertEqual(false, pool_running(Q))
+      end).
+
+start_invalid_name_test() ->
+    ?assertMatch({error, {invalid_name, "pool"}},
+                 apply(?MODULE, start, ["pool", 1, blizanci_test_worker])).
+
+start_invalid_mfa_test() ->
+    with_pool_name(
+      fun(Q) ->
+          % ppool is given {Module, start_link, []}, so break Module
+          ?assertMatch({error, {invalid_mfa, _}},
+                       apply(?MODULE, start, [Q, 1, "not a module"])),
+          ?assertEqual(false, pool_running(Q))
+      end).
+
+%% A name held by some other registered process is not an existing
+%% pool: ppool's (nested) error comes back, not a crash.
+start_name_taken_test() ->
+    with_pool_name(
+      fun(Q) ->
+          Holder = spawn_link(fun() -> receive stop -> ok end end),
+          true = register(Q, Holder),
+          ?assertMatch({error, _}, start(Q, 1, blizanci_test_worker)),
+          ?assertEqual(Holder, whereis(Q)),
+          unlink(Holder),
+          Holder ! stop,
+          ok = await_down(Holder)
       end).
 
 stop_test() ->

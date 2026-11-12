@@ -175,7 +175,7 @@ handle_client_data(_, _) -> none.
 
 
 -spec start() -> Result
-              when Result :: ok.
+              when Result :: 'ok' | {'error', term()}.
 start() ->
     ok.
 

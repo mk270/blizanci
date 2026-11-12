@@ -201,3 +201,27 @@ collect_exits(Left, Acc) ->
             end
     after 5000 -> erlang:error({exits_missing, Left, Acc})
     end.
+
+%% A servlet that will not start stops the tree from starting, with a
+%% reason that blizanci_app logs as one line.
+servlet_start_error_test() ->
+    blizanci_test_support:isolated(
+      fun() ->
+          {ok, _} = application:ensure_all_started(ranch),
+          {ok, _} = application:ensure_all_started(ppool),
+          blizanci_test_support:live_down(),
+          {ok, A} = blizanci_config:site("a.example", "a.pem", "a.key"),
+          process_flag(trap_exit, true),
+          Config = blizanci_config:make(
+                     0, [blizanci_cgi, blizanci_test_failing], [A]),
+          try start_link(Config) of
+              {error, Reason} ->
+                  ?assertEqual("servlet blizanci_test_failing could not "
+                               "start: boom",
+                               blizanci_config:describe_error(Reason)),
+                  ?assertEqual(undefined, whereis(blizanci_cgi)),
+                  ?assertEqual(undefined, whereis(?SERVER))
+          after
+              blizanci_test_support:live_down()
+          end
+      end).
