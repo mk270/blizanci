@@ -810,3 +810,68 @@ hidden_tests(Base) ->
      ?_assertEqual({gateway_error, file_not_found}, Serve(<<"sub/.y">>)),
      ?_assertEqual({gateway_error, file_not_found},
                    Serve(<<".well-known/x">>))].
+
+
+%% The environment built for a request: the per-request variables, then
+%% the whole lot passed through blizanci_osenv:sanitise/1. No script is
+%% run.
+test_cgi_req(ReqExtra) ->
+    #cgi_req{cmd = <<"/srv/cgi/hello">>, path = <<"hello">>,
+             matches = #{ <<"PATH_INFO">> => <<"/extra">> },
+             req = test_request(maps:merge(#{ query => <<"a=1">> },
+                                           ReqExtra)),
+             host_port = {<<"example.org">>, 1965},
+             prefix = "/cgi-bin/"}.
+
+make_environment_test_() ->
+    {ok, Env} = make_environment(test_cgi_req(#{})),
+    [?_assertEqual([{"PATH_TRANSLATED", <<"/srv/cgi/hello">>},
+                    {"PATH_INFO", <<"/extra">>},
+                    {"QUERY_STRING", <<"a=1">>},
+                    {"SCRIPT_NAME", "/cgi-bin/hello"},
+                    {"SERVER_NAME", <<"example.org">>},
+                    {"SERVER_PORT", 1965},
+                    {"SERVER_PROTOCOL", "GEMINI"}], Env),
+     % no client certificate: no REMOTE_USER
+     ?_assertEqual(false, lists:keymember("REMOTE_USER", 1, Env)),
+     % an undecodable certificate is reported, not dropped
+     ?_assertEqual({error, cert_not_parsed},
+                   make_environment(
+                     test_cgi_req(#{ client_cert => {ok, <<"junk">>} }))),
+     % no PATH_INFO match: empty
+     ?_assertMatch({ok, [_, {"PATH_INFO", <<>>} | _]},
+                   make_environment(
+                     (test_cgi_req(#{}))#cgi_req{matches = #{}}))].
+
+cgi_environment_test_() ->
+    {ok, Env} = cgi_environment(test_cgi_req(#{})),
+    Names = [ K || {K, _} <- Env ],
+    Preserved = [ N || {N, _} <- preserved_env() ],
+    Request = ["PATH_TRANSLATED", "PATH_INFO", "QUERY_STRING",
+               "SCRIPT_NAME", "SERVER_NAME", "SERVER_PORT",
+               "SERVER_PROTOCOL"],
+    [% every name and value is a string, apart from the empty binary
+     ?_assert(lists:all(fun({K, V}) ->
+                            io_lib:printable_unicode_list(K)
+                            andalso (is_list(V) orelse V =:= <<>>)
+                        end, Env)),
+     % binary and integer values have been converted
+     ?_assertEqual({"PATH_TRANSLATED", "/srv/cgi/hello"},
+                   lists:keyfind("PATH_TRANSLATED", 1, Env)),
+     ?_assertEqual({"SERVER_PORT", "1965"},
+                   lists:keyfind("SERVER_PORT", 1, Env)),
+     ?_assertEqual({"SERVER_NAME", "example.org"},
+                   lists:keyfind("SERVER_NAME", 1, Env)),
+     % the inherited variables come first, are only allowed ones, and
+     % nothing else is added
+     ?_assertEqual(Preserved ++ Request, Names),
+     ?_assertEqual([], Preserved -- ?ALLOWED_ENV),
+     % an error from make_environment is passed on
+     ?_assertEqual({error, cert_not_parsed},
+                   cgi_environment(
+                     test_cgi_req(#{ client_cert => {ok, <<"junk">>} }))),
+     % an empty query comes through as the empty binary
+     ?_assertEqual({"QUERY_STRING", <<>>},
+                   lists:keyfind("QUERY_STRING", 1,
+                     element(2, cgi_environment(
+                                  test_cgi_req(#{ query => <<>> })))))].
