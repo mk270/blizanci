@@ -32,15 +32,14 @@
 -define(INDEX,              "index.gemini").
 -define(BARE_MIMETYPE,    <<"text/gemini">>).
 -define(UNKNOWN_MIMETYPE, <<"application/octet-stream">>).
--define(DEFAULT_DOCROOT,  <<"./public_gemini">>).
 
 
 -spec default_options() -> Result
               when Result :: map().
 default_options() ->
-    #{ index            => "index.gemini",
-       unknown_mimetype => <<"application/octet-stream">>,
-       bare_mimetype    => <<"text/gemini">>
+    #{ index            => ?INDEX,
+       unknown_mimetype => ?UNKNOWN_MIMETYPE,
+       bare_mimetype    => ?BARE_MIMETYPE
      }.
 
 
@@ -105,7 +104,7 @@ serve(_, _, _, _) ->
 
 serve_file(Matches, Opts) ->
     #{ <<"PATH">> := Path } = Matches,
-    Docroot = ensure_list(maps:get(docroot, Opts, ?DEFAULT_DOCROOT)),
+    Docroot = ensure_list(maps:get(docroot, Opts)),
     % hidden files are never served, except under a ".well-known"
     % directory at the top of the docroot
     case blizanci_path:resolve_request(Matches, Docroot,
@@ -124,12 +123,12 @@ serve_file(Matches, Opts) ->
 serve_confined_file(Full, Path, Opts) ->
     case {filelib:is_dir(Full), filelib:is_regular(Full)} of
         {true, _} ->
-            Index = maps:get(index, Opts, ?INDEX),
+            Index = maps:get(index, Opts),
             Redirect = filename:join(Path, Index),
             {redirect, Redirect};
         {false, true} ->
-            BareMimeType = maps:get(bare_mimetype, Opts, ?BARE_MIMETYPE),
-            UnkMimeType = maps:get(unknown_mimetype, Opts, ?UNKNOWN_MIMETYPE),
+            BareMimeType = maps:get(bare_mimetype, Opts),
+            UnkMimeType = maps:get(unknown_mimetype, Opts),
             MimeType = mime_type(Full, BareMimeType, UnkMimeType),
             {file, MimeType, Full};
         _ ->
@@ -285,3 +284,16 @@ hidden_tests(Base) ->
      % the one exception, at the top of the docroot
      ?_assertMatch({immediate, {file, _, _}},
                    Request(<<".well-known/security">>))].
+
+
+%% default_options/0 plus a docroot is a complete, valid map.
+default_options_valid_test() ->
+    Opts = maps:merge(default_options(), #{ docroot => "." }),
+    ?assertEqual(ok, validate_options(Opts)).
+
+%% A map lacking any one of the four required keys is refused.
+missing_option_refused_test_() ->
+    Full = maps:merge(default_options(), #{ docroot => "." }),
+    [ ?_assertMatch({error, {invalid_options, _}},
+                    validate_options(maps:remove(Key, Full)))
+      || Key <- [docroot, index, bare_mimetype, unknown_mimetype] ].
