@@ -18,7 +18,7 @@
 -type route_info() :: {Proto      :: atom(),
                        Regex      :: string() | binary(),
                        Module     :: module(),
-                       AuthPolicy :: authorisation(),
+                       AuthPolicy :: authorisation_config(),
                        Opts       :: map()
                       }.
 
@@ -110,7 +110,7 @@ make_routes(RouteInfo) ->
               when Proto      :: atom(),
                    Regex      :: string() | binary(),
                    Module     :: module(),
-                   AuthPolicy :: authorisation(),
+                   AuthPolicy :: authorisation_config(),
                    Opts       :: map(),
                    Result     :: {'ok', route()} | {'error', term()}.
 build_route(Proto, Regex, Module, AuthPolicy, Opts) ->
@@ -136,12 +136,12 @@ make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
     % are not responsible for remembering to merge before calling in.
     FullOpts = maps:merge(Module:default_options(), Opts),
     ok = valid_module_opts(Module, FullOpts),
-    ok = valid_authz(AuthPolicy),
+    {ok, Authz} = valid_authz(AuthPolicy),
     ok = valid_path_group(Regex, RE, Module),
     #route{proto=Proto,
            pattern=RE,
            module=Module,
-           auth_policy=AuthPolicy,
+           auth_policy=Authz,
            options=FullOpts};
 make_route(_) ->
     throw(invalid_route).
@@ -149,10 +149,10 @@ make_route(_) ->
 
 -spec valid_authz(AuthPolicy) -> Result
               when AuthPolicy :: term(),
-                   Result     :: 'ok'.
+                   Result     :: {'ok', authorisation()}.
 valid_authz(AuthPolicy) ->
     case blizanci_auth:valid_authz_policy(AuthPolicy) of
-        {ok, _} -> ok;
+        {ok, _} = Ok -> Ok;
         {error, invalid_authz_policy} ->
             throw({invalid_authz_policy, AuthPolicy});
         {error, Reason} -> throw(Reason)

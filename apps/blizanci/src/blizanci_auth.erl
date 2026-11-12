@@ -10,9 +10,21 @@
 % private: certificate must be signed by one of the listed CAs
 % restricted: certificate must be presented
 % public: no certificate requirement
+%
+% The CA files of a private route are read ONCE, when the route is built
+% (valid_authz_policy/1), and every certificate found in each file is
+% decoded and kept in the route's policy: {private, Files, Certs}.  A
+% request is checked against those decoded certificates and does no file
+% I/O, so a CA file that is later deleted, damaged or made unreadable
+% does not affect a running route.  The consequence is that a changed CA
+% file takes effect only when the route is rebuilt (blizanci_config:
+% apply/1) or the server is restarted.
+%
+% A CA file may be a bundle: the client certificate is accepted if it is
+% signed by ANY certificate in ANY of the route's files, so trust extends
+% to every certificate in a file, not just the first.
 
 -module(blizanci_auth).
--include_lib("public_key/include/public_key.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
@@ -35,28 +47,33 @@ authorisation_policy(Options) when is_map(Options) ->
 -spec valid_authz_policy(Policy) -> Result
               when Policy :: term(),
                    Result :: {ok, authorisation()} | {error, term()}.
+% For {private, Files} the files are read and every certificate in them
+% decoded here; the result is {private, Files, Certs}, Certs being all
+% the certificates of all the files, in order.  A file that is missing,
+% unreadable, holds no certificate or holds any undecodable certificate
+% is refused with {invalid_ca_file, File, Why}.
 
 valid_authz_policy(public) -> {ok, public};
 valid_authz_policy(restricted) -> {ok, restricted};
 valid_authz_policy({private, Files}) when is_list(Files) ->
-    % the issuer files are read at request time, so a bad one is
-    % refused here, when routes are built, rather than crash a request
-    case valid_ca_files(Files) of
-        ok -> {ok, {private, Files}};
+    case load_ca_files(Files, []) of
+        {ok, Certs} -> {ok, {private, Files, Certs}};
         {error, _} = Error -> Error
     end;
 valid_authz_policy(_) -> {error, invalid_authz_policy}.
 
 
--spec valid_ca_files(Files) -> Result
+-spec load_ca_files(Files, Acc) -> Result
               when Files  :: [term()],
-                   Result :: 'ok' | {'error', {'invalid_ca_file', term(),
-                                              term()}}.
-valid_ca_files([]) ->
-    ok;
-valid_ca_files([File | Rest]) ->
-    case blizanci_x509:validate_ca_file(File) of
-        ok -> valid_ca_files(Rest);
+                   Acc    :: [#'OTPCertificate'{}],
+                   Result :: {'ok', [#'OTPCertificate'{}]}
+                           | {'error', {'invalid_ca_file', term(),
+                                        term()}}.
+load_ca_files([], Acc) ->
+    {ok, Acc};
+load_ca_files([File | Rest], Acc) ->
+    case blizanci_x509:certificates_from_file(File) of
+        {ok, Certs} -> load_ca_files(Rest, Acc ++ Certs);
         {error, Why} -> {error, {invalid_ca_file, File, Why}}
     end.
 
@@ -110,43 +127,28 @@ cert_authorised(AuthPolicy, {ok, DerCert}) ->
 
 cert_authorised_policy(restricted, _DerCert) ->
     authorised;
-cert_authorised_policy({private, Certs}, DerCert) ->
-    case cert_issued_by_any(DerCert, Certs) of
-        {ok, _Issuer} -> authorised;
-        fail -> {error_code, cert_not_authorised}
-    end.
-
-
--spec cert_issued_by_any(DerCert, Issuers) -> Result
-              when DerCert :: public_key:der_encoded(),
-                   Issuers :: [string()],
-                   Result  :: {'ok', string()} | 'fail'.
-
-cert_issued_by_any(_DerCert, []) -> fail;
-cert_issued_by_any(DerCert, [Issuer|Tail]) when is_list(Issuer) ->
-    case cert_issued_by(DerCert, Issuer) of
-        ok -> {ok, Issuer};
-        not_issuer -> cert_issued_by_any(DerCert, Tail)
+cert_authorised_policy({private, _Files, Issuers}, DerCert) ->
+    case cert_issued_by_any(DerCert, Issuers) of
+        true  -> authorised;
+        false -> {error_code, cert_not_authorised}
     end.
 
 
 %% @doc Check that DerCert was cryptographically signed by the private
-%% key of the issuer certificate at path Issuer -- see
+%% key of one of the issuer certificates -- see
 %% blizanci_x509:verify_signed_by/2 for why this isn't just
 %% public_key:pkix_is_issuer/2 (a name comparison, not a signature
 %% check).
 %% @end
--spec cert_issued_by(DerCert, Issuer) -> Result
+-spec cert_issued_by_any(DerCert, Issuers) -> Result
               when DerCert :: public_key:der_encoded(),
-                   Issuer  :: string(),
-                   Result  :: 'ok' | 'not_issuer'.
+                   Issuers :: [#'OTPCertificate'{}],
+                   Result  :: boolean().
 
-cert_issued_by(DerCert, Issuer) ->
-    IssuerCert = blizanci_x509:certificate_from_file(Issuer),
-    case blizanci_x509:verify_signed_by(DerCert, IssuerCert) of
-        true  -> ok;
-        false -> not_issuer
-    end.
+cert_issued_by_any(DerCert, Issuers) ->
+    lists:any(fun(Issuer) ->
+                  blizanci_x509:verify_signed_by(DerCert, Issuer)
+              end, Issuers).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -162,7 +164,8 @@ cert_issued_by(DerCert, Issuer) ->
 policy_test_() ->
     [?_assertEqual({ok, public}, valid_authz_policy(public)),
      ?_assertEqual({ok, restricted}, valid_authz_policy(restricted)),
-     ?_assertEqual({ok, {private, []}}, valid_authz_policy({private, []})),
+     ?_assertMatch({ok, {private, [], []}},
+                   valid_authz_policy({private, []})),
      ?_assertEqual({error, invalid_authz_policy},
                    valid_authz_policy(private)),
      ?_assertEqual({error, invalid_authz_policy},
@@ -178,8 +181,9 @@ policy_test_() ->
 % validated (that is, when the route is built), not on the first request.
 policy_private_ca_files_test_() ->
     authorised_fixture(
-      fun(_Pki, #{ca := CA, ca2 := CA2, text := Text, missing := Missing,
-                  dir := Dir}) ->
+      fun(#{ca := CADer}, #{ca := CA, ca2 := CA2, text := Text,
+                            missing := Missing, dir := Dir,
+                            bundle := Bundle}) ->
           Valid = fun(Files) -> valid_authz_policy({private, Files}) end,
           Bad = fun(File, Why) ->
                     {error, {invalid_ca_file, File, Why}}
@@ -196,9 +200,22 @@ policy_private_ca_files_test_() ->
                                      "AQID\n"
                                      "-----END CERTIFICATE-----\n">>),
           Empty = Write("empty.pem", <<>>),
-          [?_assertEqual({ok, {private, [CA]}}, Valid([CA])),
-           ?_assertEqual({ok, {private, [CA, CA2]}}, Valid([CA, CA2])),
-           ?_assertEqual({ok, {private, []}}, Valid([])),
+          BadBundle = blizanci_x509:test_write_pem(
+                        Dir, "badbundle.pem",
+                        [{'Certificate', CADer, not_encrypted},
+                         {'Certificate', <<1, 2, 3>>, not_encrypted}]),
+          [?_assertMatch({ok, {private, [CA], [_]}}, Valid([CA])),
+           ?_assertMatch({ok, {private, [CA, CA2], [_, _]}},
+                         Valid([CA, CA2])),
+           % every certificate of a bundle is kept, in file order
+           ?_assertMatch({ok, {private, [Bundle], [_, _]}},
+                         Valid([Bundle])),
+           ?_assertMatch({ok, {private, [Bundle, CA], [_, _, _]}},
+                         Valid([Bundle, CA])),
+           ?_assertMatch({ok, {private, [], []}}, Valid([])),
+           % one undecodable entry refuses a bundle
+           ?_assertEqual(Bad(BadBundle, certificate_not_decodable),
+                         Valid([BadBundle])),
            ?_assertEqual(Bad(Missing, enoent), Valid([Missing])),
            ?_assertEqual(Bad(Dir, eisdir), Valid([Dir])),
            ?_assertEqual(Bad(Text, no_certificate_in_file), Valid([Text])),
@@ -219,7 +236,7 @@ policy_private_ca_files_test_() ->
 authorisation_policy_test_() ->
     [?_assertEqual({ok, restricted},
                    authorisation_policy(#{ authorisation => restricted })),
-     ?_assertEqual({ok, {private, []}},
+     ?_assertMatch({ok, {private, [], []}},
                    authorisation_policy(
                      #{ authorisation => {private, []},
                         other => option })),
@@ -254,6 +271,10 @@ authorised_fixture(Tests) ->
          ok = file:write_file(Text, <<"hello\n">>),
          Files = #{ca      => Pem("ca.pem", CA),
                    ca2     => Pem("ca2.pem", CA2),
+                   bundle  => blizanci_x509:test_write_pem(
+                                Dir, "bundle.pem",
+                                [{'Certificate', CA, not_encrypted},
+                                 {'Certificate', CA2, not_encrypted}]),
                    text    => Text,
                    missing => filename:join(Dir, "missing.pem"),
                    dir     => Dir},
@@ -306,7 +327,7 @@ authorised_private_test_() ->
             expired := Expired, not_yet := NotYet},
           #{ca := CAFile, ca2 := CA2File}) ->
           Auth = fun(CAs, Cert) ->
-                     authorised({private, CAs}, request(Cert))
+                     authorised(private_policy(CAs), request(Cert))
                  end,
           NoCert = {error, no_peercert},
           [% signed by the one CA
@@ -341,28 +362,49 @@ authorised_private_test_() ->
                          Auth([CAFile], {ok, <<"garbage">>}))]
       end).
 
-% What happens when a private route's CA file cannot be used by
-% authorised/2 itself, i.e. if the file goes bad after the route was
-% built (building the route refuses it, see policy_private_ca_files_test_).
-% Nothing catches the failure: it raises, on the first request that
-% carries a (valid) certificate. A CA that comes after the one that
-% matches is never read.
-authorised_private_bad_ca_file_test_() ->
+% The policy as the route builder makes it, from CA files that are good.
+private_policy(Files) ->
+    {ok, Policy} = valid_authz_policy({private, Files}),
+    Policy.
+
+% A CA bundle: a client signed by any certificate in the file is let in,
+% and one signed by neither is not.
+authorised_private_bundle_test_() ->
     authorised_fixture(
-      fun(#{peer := Peer}, #{ca := CAFile, text := Text,
-                             missing := Missing}) ->
-          Auth = fun(CAs) ->
-                     authorised({private, CAs}, request({ok, Peer}))
+      fun(#{peer := Peer, peer_ca2 := PeerCA2, forged := Forged},
+          #{bundle := Bundle, ca := CAFile}) ->
+          Auth = fun(Files, Cert) ->
+                     authorised(private_policy(Files), request({ok, Cert}))
                  end,
-          [?_assertError({badmatch, {error, enoent}}, Auth([Missing])),
-           ?_assertError({badmatch, false}, Auth([Text])),
-           % reached only if the earlier CAs did not match
-           ?_assertError({badmatch, {error, enoent}},
-                         Auth(["/nonexistent", CAFile])),
-           ?_assertEqual(authorised, Auth([CAFile, Missing])),
-           % a CA given as a binary rather than a string
-           ?_assertError(function_clause,
-                         apply(?MODULE, authorised,
-                               [{private, [list_to_binary(CAFile)]},
-                                request({ok, Peer})]))]
+          [?_assertEqual(authorised, Auth([Bundle], Peer)),
+           ?_assertEqual(authorised, Auth([Bundle], PeerCA2)),
+           ?_assertEqual({error_code, cert_not_authorised},
+                         Auth([Bundle], Forged)),
+           % the other CA is not in this single-CA file
+           ?_assertEqual({error_code, cert_not_authorised},
+                         Auth([CAFile], PeerCA2))]
+      end).
+
+% The CA files are read when the route is built and never again: once
+% the policy exists, deleting or corrupting the files changes nothing,
+% and nothing raises.
+authorised_private_no_file_reads_test_() ->
+    authorised_fixture(
+      fun(#{peer := Peer, peer_ca2 := PeerCA2, forged := Forged},
+          #{bundle := Bundle, ca := CAFile, dir := Dir}) ->
+          Copy = filename:join(Dir, "copy.pem"),
+          {ok, _} = file:copy(Bundle, Copy),
+          Policy = private_policy([Copy, CAFile]),
+          Auth = fun(Cert) -> authorised(Policy, request({ok, Cert})) end,
+          Before = Auth(Peer),
+          ok = file:write_file(Copy, <<"corrupted\n">>),
+          Corrupted = {Auth(Peer), Auth(PeerCA2), Auth(Forged)},
+          ok = file:delete(Copy),
+          ok = file:delete(CAFile),
+          Deleted = {Auth(Peer), Auth(PeerCA2), Auth(Forged)},
+          Expected = {authorised, authorised,
+                      {error_code, cert_not_authorised}},
+          [?_assertEqual(authorised, Before),
+           ?_assertEqual(Expected, Corrupted),
+           ?_assertEqual(Expected, Deleted)]
       end).

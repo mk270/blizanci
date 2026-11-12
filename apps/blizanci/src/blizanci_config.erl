@@ -28,7 +28,10 @@
 %%   <dt><code>{ca_certs, [CACertPath::string()}]</code></dt>
 %%   <dd>the path(s) to the certificate authority certificate(s)
 %%       to be used for verifying client certificates;
-%%       may be the empty list.</dd>
+%%       may be the empty list. A file may hold several certificates
+%%       (a bundle), all of which are trusted. The files are read when
+%%       the route is built; a change to one takes effect only on
+%%       apply/1 or a restart.</dd>
 %%   <dt><code>{certfile, CertPath::string()}</code></dt>
 %%   <dd>the path to the server's certificate</dd>
 %%   <dt><code>{cgiroot, CGIRootPath::string()}</code></dt>
@@ -73,7 +76,7 @@
               when Proto      :: atom(),
                    Regex      :: string() | binary(),
                    Module     :: module(),
-                   AuthPolicy :: authorisation(),
+                   AuthPolicy :: authorisation_config(),
                    Opts       :: map(),
                    Result     :: {'ok', route()} | {'error', term()}.
 route(Proto, Regex, Module, AuthPolicy, Opts) ->
@@ -550,7 +553,7 @@ route_ok_test_() ->
      ?_assertMatch({ok, #route{}}, Static(<<"(?<PATH>.*)">>, public)),
      ?_assertMatch({ok, #route{auth_policy = restricted}},
                    Static(?RX, restricted)),
-     ?_assertMatch({ok, #route{auth_policy = {private, []}}},
+     ?_assertMatch({ok, #route{auth_policy = {private, [], []}}},
                    Static(?RX, {private, []}))].
 
 % A private route's CA files are checked when it is built
@@ -570,7 +573,7 @@ route_private_ca_test_() ->
                   maps:get(ca, blizanci_x509:test_pki()),
                   not_encrypted}]),
          Missing = filename:join(Dir, "missing.pem"),
-         [?_assertMatch({ok, #route{auth_policy = {private, [CA]}}},
+         [?_assertMatch({ok, #route{auth_policy = {private, [CA], [_]}}},
                         Static([CA])),
           ?_assertEqual({error, {invalid_ca_file, Missing, enoent}},
                         Static([CA, Missing]))]
@@ -937,6 +940,60 @@ apply_tests(Pem) ->
                                     sites => [Site("a")]}},
                              blizanci_conf_serv:current())
             end)].
+
+%% A private route holds the CA certificates decoded when it was built:
+%% a CA file changed afterwards takes effect only when a rebuilt route is
+%% applied.
+apply_ca_file_test_() ->
+    {setup,
+     fun() -> {write_test_pem(), blizanci_x509:test_tmp_dir()} end,
+     fun({Pem, Dir}) ->
+         blizanci_test_support:live_down(),
+         file:delete(Pem),
+         file:del_dir_r(Dir)
+     end,
+     fun({Pem, Dir}) ->
+         ?_test(begin
+             #{ca := CA, ca2 := CA2, peer := Peer, peer_ca2 := PeerCA2} =
+                 blizanci_x509:test_pki(),
+             CAFile = blizanci_x509:test_write_pem(
+                        Dir, "ca.pem", [{'Certificate', CA, not_encrypted}]),
+             Build = fun() ->
+                 {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static,
+                                 {private, [CAFile]},
+                                 #{ docroot => ?TEST_DOCROOT }),
+                 add_route(test_site("a", Pem, Pem), R)
+             end,
+             Live = fun(Cert) ->
+                 {ok, #site{routing = [#route{auth_policy = P}]}} =
+                     blizanci_conf_serv:find_site(<<"a">>),
+                 blizanci_auth:authorised(
+                   P, blizanci_test_support:test_request(
+                        #{ client_cert => {ok, Cert} }))
+             end,
+             live_up(1965, [blizanci_static], [Build()]),
+             ?assertEqual(authorised, Live(Peer)),
+             ?assertEqual({error_code, cert_not_authorised}, Live(PeerCA2)),
+             % rewrite the file: nothing changes until it is applied
+             blizanci_x509:test_write_pem(
+               Dir, "ca.pem", [{'Certificate', CA2, not_encrypted}]),
+             ?assertEqual(authorised, Live(Peer)),
+             ?assertEqual({error_code, cert_not_authorised}, Live(PeerCA2)),
+             ?assertEqual(ok, apply(new(global(1965, [blizanci_static]),
+                                        [Build()]))),
+             ?assertEqual({error_code, cert_not_authorised}, Live(Peer)),
+             ?assertEqual(authorised, Live(PeerCA2)),
+             % a file that has gone bad refuses the new route, and the
+             % running one is left as it was
+             ok = file:write_file(CAFile, <<"garbage\n">>),
+             ?assertMatch({error, {invalid_ca_file, CAFile,
+                                   no_certificate_in_file}},
+                          route(gemini, "(?<PATH>.*)", blizanci_static,
+                                {private, [CAFile]},
+                                #{ docroot => ?TEST_DOCROOT })),
+             ?assertEqual(authorised, Live(PeerCA2))
+         end)
+     end}.
 
 %% Servlet pools start and stop as the declared list changes.
 apply_servlets_test_() ->
