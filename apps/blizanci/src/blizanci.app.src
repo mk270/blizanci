@@ -18,6 +18,6 @@
   {env,
    [{port, 1965},
     {servlets, [blizanci_static, blizanci_cgi, blizanci_titan]}]},
-  {licenses, ["Apache 2.0"]},
+  {licenses, ["Apache-2.0"]},
   {links, []}
  ]}.
