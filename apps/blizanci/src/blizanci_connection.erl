@@ -647,8 +647,10 @@ resolve_site_client_gone() ->
                                                       peer => Rsa},
                                     client_chain => #{root => Rsa,
                                                       peer => Rsa}}),
-    {ok, Listen} = ssl:listen(0, ServerConf ++ [{versions, ['tlsv1.3']},
-                                                {active, false}]),
+    {ok, Listen} = ssl:listen(
+                     0, ServerConf ++ [{versions,
+                                        blizanci_config:tls_versions()},
+                                       {active, false}]),
     {ok, {_, Port}} = ssl:sockname(Listen),
     Self = self(),
     {Pid, Ref} = spawn_monitor(
@@ -661,7 +663,8 @@ resolve_site_client_gone() ->
                    end),
     {ok, C} = ssl:connect("localhost", Port,
                           ClientConf ++ [{verify, verify_none},
-                                         {versions, ['tlsv1.3']},
+                                         {versions,
+                                          blizanci_config:tls_versions()},
                                          {server_name_indication,
                                           "localhost"}]),
     receive {handshaken, Pid} -> ok after 5000 -> error(no_handshake) end,
