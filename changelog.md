@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 5.33.1
+
+- Add tests of a successful CGI run, of the error paths of
+  blizanci_app:start/2, and a Common Test check that a run of the
+  server leaves no processes, ports, tables, names or files behind
+
 ## 5.33.0
 
 - Remove the relx release configuration from rebar.config, so that
