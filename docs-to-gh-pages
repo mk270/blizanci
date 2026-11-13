@@ -1,38 +1,49 @@
 #!/bin/bash
+#
+# Generate the edoc documentation and commit it to the local gh-pages
+# branch, creating that branch if it does not exist yet. The working
+# tree and the current branch are not touched: the branch is checked
+# out in a temporary git worktree. Nothing is pushed; do that by hand
+# (git push origin gh-pages) once the result has been looked at.
 
 set -eu
 
-cd $(dirname $0)
+cd "$(dirname "$0")"
+ROOT=$PWD
 
-current-git-branch () {
-    git branch | \
-    grep -v 'HEAD detached' | \
-    awk '$1 == "*" {print $2}'
-}
+DOCDIR=apps/blizanci/doc
 
-BRANCH=$(current-git-branch)
-if [ -z "$BRANCH" ]; then
-    echo Cannot determine current git branch
-    exit 1
-fi
+# edoc picks up the overview page from the application's doc directory
+mkdir -p "$DOCDIR"
+cp doc/overview.edoc "$DOCDIR/"
+rebar3 edoc
 
-TEMPDIR=$(tempfile)
+WORKTREE=$(mktemp -d)
 cleanup () {
-    local rv=$?
-    rm -rf -- $TEMPDIR
-    git checkout $BRANCH
-    exit $rv
+    cd "$ROOT"
+    git worktree remove --force "$WORKTREE" 2>/dev/null || true
+    rm -rf -- "$WORKTREE"
+    git worktree prune
 }
 trap cleanup EXIT
 
-DOCDIR=apps/blizanci/doc
-cp doc/overview.edoc $DOCDIR # ????
-rebar3 edoc
+if git show-ref --verify --quiet refs/heads/gh-pages; then
+    git worktree add -q "$WORKTREE" gh-pages
+else
+    git worktree add -q --orphan -b gh-pages "$WORKTREE"
+fi
 
-rm -rf $TEMPDIR
-cp -a $DOCDIR $TEMPDIR
-git checkout gh-pages
-cp -a $TEMPDIR/* .
-git add .
-git status
-git commit -m "autocommit docs"
+cd "$WORKTREE"
+# Replace the previous contents, so that pages for removed modules go.
+git rm -rq --ignore-unmatch .
+cp -a "$ROOT/$DOCDIR/." .
+rm -f overview.edoc
+git add -A
+
+if git diff --cached --quiet; then
+    echo "gh-pages: no changes"
+else
+    git status --short
+    git commit -q -m "autocommit docs"
+    echo "gh-pages: committed; not pushed"
+fi
