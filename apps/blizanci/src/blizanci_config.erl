@@ -61,7 +61,7 @@
 -export([from_app_env/0, make/3, find_site/2, route/5,
          global/2, site/3, add_route/2, insert_route/3, routes/1,
          new/2, validate/1, apply/1, ascii_lowercase/1,
-         describe_error/1]).
+         describe_error/1, tls_versions/0, site_wants_client_cert/1]).
 
 % The default port: the one assigned to Gemini.
 -define(PORT, 1965).
@@ -400,12 +400,21 @@ ssl_opts(Port) ->
     % before any Gemini request is ever parsed. ranch fixes these
     % options when the listener opens, so the sites are looked up in
     % blizanci_conf_serv at handshake time, which is what lets apply/1
-    % change them without restarting the listener.
+    % change them (and whether a site asks for a client certificate)
+    % without restarting the listener.
+    %
+    % TLS 1.3 and 1.2 are offered (tls_versions/0); cipher suites and
+    % the rest are OTP's defaults. The listener-wide verify_peer asks
+    % for a client certificate; a site with only public routes
+    % overrides it with verify_none (site_tls_opts/1), so that nothing
+    % is sent, in the clear under 1.2, where it is not needed. No CA
+    % list is sent, so that self-signed identity certificates are not
+    % filtered out by the client; trust is decided per route by
+    % blizanci_auth.
     SniFun = fun(SniHostname) ->
                  case blizanci_conf_serv:find_site(
                         erlang:list_to_binary(SniHostname)) of
-                     {ok, Site} -> [{certfile, Site#site.certfile},
-                                    {keyfile, Site#site.keyfile}];
+                     {ok, Site} -> site_tls_opts(Site);
                      not_found -> unrecognized
                  end
              end,
@@ -417,8 +426,45 @@ ssl_opts(Port) ->
      {certificate_authorities, false},
      {verify_fun, {VerifyFn, []}},
      {fail_if_no_peer_cert, false},
-     {versions, ['tlsv1.3']}
+     {versions, tls_versions()}
     ].
+
+-spec tls_versions() -> Result
+              when Result :: [ssl:protocol_version()].
+%% @doc
+%% The TLS versions blizanci offers, most preferred first: 1.3 and 1.2.
+%% This is the one place the list is set. Cipher suites and the other
+%% TLS options are OTP's defaults.
+%% @end
+tls_versions() ->
+    ['tlsv1.3', 'tlsv1.2'].
+
+-spec site_wants_client_cert(Routes) -> Result
+              when Routes :: [route()],
+                   Result :: boolean().
+%% @doc
+%% Whether a site with these routes should ask the client for a
+%% certificate during the TLS handshake: true if any route, gemini or
+%% titan, is restricted or private, false if every route is public
+%% (or there are none). The path is not known at handshake time, so one
+%% such route means every client is asked. A site that does not ask
+%% never has a certificate sent to it, which matters in TLS 1.2, where
+%% the client certificate travels unencrypted.
+%% @end
+site_wants_client_cert(Routes) ->
+    lists:any(fun(#route{auth_policy = public}) -> false;
+                 (#route{}) -> true
+              end, Routes).
+
+-spec site_tls_opts(Site) -> Result
+              when Site   :: site(),
+                   Result :: [{atom(), term()}].
+site_tls_opts(#site{certfile = Cert, keyfile = Key, routing = Routes}) ->
+    Creds = [{certfile, Cert}, {keyfile, Key}],
+    case site_wants_client_cert(Routes) of
+        true -> Creds;
+        false -> Creds ++ [{verify, verify_none}]
+    end.
 
 -spec proto_opts(Port) -> Result
               when Port   :: integer(),
@@ -822,9 +868,11 @@ sni_fun_test_() ->
     {setup,
      fun() -> live_up(1965, [], [A, B]) end,
      fun(_) -> blizanci_test_support:live_down() end,
-     [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
+     [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"},
+                     {verify, verify_none}],
                     SniFun("a.example")),
-      ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
+      ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"},
+                     {verify, verify_none}],
                     SniFun("b.example")),
       ?_assertEqual(unrecognized, SniFun("evil.example")),
       % a name that isn't ours is refused whatever its case
@@ -834,15 +882,90 @@ sni_fun_test_() ->
       ?_assertEqual(unrecognized, SniFun("A.EXAMPLE.")),
       ?_assertEqual(undefined, proplists:get_value(certfile, SSL)),
       ?_assertEqual(undefined, proplists:get_value(keyfile, SSL)),
-      ?_assertEqual(['tlsv1.3'], proplists:get_value(versions, SSL)),
+      ?_assertEqual(['tlsv1.3', 'tlsv1.2'],
+                    proplists:get_value(versions, SSL)),
+      ?_assertEqual(['tlsv1.3', 'tlsv1.2'], tls_versions()),
       % the same sni_fun sees a replaced site list: this is what lets
       % apply/1 change certificates on a running listener
       ?_test(begin
                  ok = blizanci_conf_serv:publish(1965, [], [B]),
                  ?assertEqual(unrecognized, SniFun("a.example")),
-                 ?assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
+                 ?assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"},
+                     {verify, verify_none}],
                               SniFun("b.example"))
              end)]}.
+
+%% Whether a site asks for a client certificate follows from its routes.
+site_wants_client_cert_test_() ->
+    {setup,
+     fun() -> blizanci_x509:test_tmp_dir() end,
+     fun(Dir) -> file:del_dir_r(Dir) end,
+     fun(Dir) ->
+         #{ca := CA} = blizanci_x509:test_pki(),
+         CAFile = blizanci_x509:test_write_pem(
+                    Dir, "ca.pem", [{'Certificate', CA, not_encrypted}]),
+         Opts = #{ docroot => ?TEST_DOCROOT },
+         R = fun(Proto, Mod, Auth) ->
+                 {ok, Route} = route(Proto, ?RX, Mod, Auth, Opts),
+                 Route
+             end,
+         Pub = R(gemini, blizanci_static, public),
+         Res = R(gemini, blizanci_static, restricted),
+         Priv = R(gemini, blizanci_static, {private, [CAFile]}),
+         TitanPub = R(titan, blizanci_titan, public),
+         TitanPriv = R(titan, blizanci_titan, {private, [CAFile]}),
+         TitanRes = R(titan, blizanci_titan, restricted),
+         [?_assertMatch(#route{auth_policy = {private, [_], [_]}}, Priv),
+          ?_assertNot(site_wants_client_cert([])),
+          ?_assertNot(site_wants_client_cert([Pub])),
+          ?_assertNot(site_wants_client_cert([Pub, TitanPub, Pub])),
+          ?_assert(site_wants_client_cert([Res])),
+          ?_assert(site_wants_client_cert([Priv])),
+          ?_assert(site_wants_client_cert([Pub, Res, Pub])),
+          ?_assert(site_wants_client_cert([Pub, Priv])),
+          ?_assert(site_wants_client_cert([Priv, Res])),
+          ?_assert(site_wants_client_cert([Pub, TitanPriv])),
+          ?_assert(site_wants_client_cert([TitanRes])),
+          ?_assert(site_wants_client_cert([TitanPub, Pub, TitanPriv]))]
+     end}.
+
+%% The sni_fun result follows the live site, and so follows apply/1.
+sni_fun_client_cert_test_() ->
+    {setup,
+     fun() -> {write_test_pem(), blizanci_x509:test_tmp_dir()} end,
+     fun({Pem, Dir}) ->
+         blizanci_test_support:live_down(),
+         file:delete(Pem),
+         file:del_dir_r(Dir)
+     end,
+     fun({Pem, Dir}) ->
+         ?_test(begin
+             #{ca := CA} = blizanci_x509:test_pki(),
+             CAFile = blizanci_x509:test_write_pem(
+                        Dir, "ca.pem", [{'Certificate', CA, not_encrypted}]),
+             Opts = #{ docroot => ?TEST_DOCROOT },
+             Site = fun(Auth) ->
+                 {ok, Route} = route(gemini, ?RX, blizanci_static,
+                                     Auth, Opts),
+                 add_route(test_site("a.example", Pem, Pem), Route)
+             end,
+             Conf = fun(Auth) ->
+                 new(global(1965, [blizanci_static]), [Site(Auth)])
+             end,
+             SniFun = proplists:get_value(sni_fun, ssl_opts(1965)),
+             Creds = [{certfile, Pem}, {keyfile, Pem}],
+             live_up(1965, [blizanci_static], [Site(public)]),
+             ?assertEqual(Creds ++ [{verify, verify_none}],
+                          SniFun("a.example")),
+             ?assertEqual(ok, apply(Conf({private, [CAFile]}))),
+             ?assertEqual(Creds, SniFun("a.example")),
+             ?assertEqual(ok, apply(Conf(restricted))),
+             ?assertEqual(Creds, SniFun("a.example")),
+             ?assertEqual(ok, apply(Conf(public))),
+             ?assertEqual(Creds ++ [{verify, verify_none}],
+                          SniFun("a.example"))
+         end)
+     end}.
 
 %% A host name is case-insensitive, so the same site is found whatever
 %% the case of the name the client sent in its SNI.
@@ -853,11 +976,14 @@ sni_fun_case_insensitive_test_() ->
     {setup,
      fun() -> live_up(1965, [], [A, B]) end,
      fun(_) -> blizanci_test_support:live_down() end,
-     [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
+     [?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"},
+                     {verify, verify_none}],
                     SniFun("A.EXAMPLE")),
-      ?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"}],
+      ?_assertEqual([{certfile, "a.pem"}, {keyfile, "a.key"},
+                     {verify, verify_none}],
                     SniFun("A.Example")),
-      ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"}],
+      ?_assertEqual([{certfile, "b.pem"}, {keyfile, "b.key"},
+                     {verify, verify_none}],
                     SniFun("B.example"))]}.
 
 %% Builder: routes and configuration.

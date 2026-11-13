@@ -22,7 +22,9 @@
 -export([all/0, init_per_suite/1, end_per_suite/1,
          init_per_testcase/2, end_per_testcase/2]).
 -export([static/1, cgi/1, titan/1, sni_live_apply/1, restart/1,
-         no_leaks/1]).
+         no_leaks/1, tls_versions/1, client_cert_request/1,
+         client_cert_live_apply/1]).
+-export([log/2]). % logger handler callback, see cert_requested/4
 
 -define(HOST, "first.test").
 -define(SECOND, "second.test").
@@ -30,7 +32,8 @@
 -define(LEAK_TIMEOUT, 5000).
 
 all() ->
-    [static, cgi, titan, sni_live_apply, restart, no_leaks].
+    [static, cgi, titan, sni_live_apply, restart, no_leaks,
+     tls_versions, client_cert_request, client_cert_live_apply].
 
 %%%===================================================================
 %%% Setup
@@ -59,7 +62,25 @@ init_per_suite(Config) ->
                                 [{KeyType, KeyDer, not_encrypted}])),
     ok = file:change_mode(Key, 8#600),
     {ok, _} = application:ensure_all_started(ssl),
-    [{certfile, Cert}, {keyfile, Key} | Config].
+    %% a client identity: an RSA certificate issued by a CA whose
+    %% certificate is written out for the private routes to trust. (RSA
+    %% because blizanci_x509:verify_signed_by/2 does not check EC-signed
+    %% certificates, so a private route would refuse it.)
+    Rsa = [{key, {rsa, 2048, 17}}, {digest, sha256}],
+    #{server_config := CliSC, client_config := CliCC} =
+        public_key:pkix_test_data(#{server_chain => #{root => Opts(),
+                                                      peer => Opts()},
+                                    client_chain => #{root => Rsa,
+                                                      peer => Rsa}}),
+    [CaDer | _] = proplists:get_value(cacerts, CliSC),
+    CaFile = filename:join(Dir, "client-ca.pem"),
+    ok = file:write_file(CaFile, public_key:pem_encode(
+                                   [{'Certificate', CaDer,
+                                     not_encrypted}])),
+    [{certfile, Cert}, {keyfile, Key}, {client_ca, CaFile},
+     {client_opts, [{cert, proplists:get_value(cert, CliCC)},
+                    {key, proplists:get_value(key, CliCC)}]}
+     | Config].
 
 end_per_suite(_Config) ->
     _ = application:stop(erlexec),
@@ -206,6 +227,80 @@ restart(Config) ->
     <<"20 ", _/binary>> = R2,
     ok.
 
+%% Both TLS versions are served: a client limited to 1.2 and one limited
+%% to 1.3 each complete a request, and each negotiated what it asked for.
+tls_versions(Config) ->
+    {ok, _} = application:ensure_all_started(blizanci),
+    Port = ?config(port, Config),
+    [ begin
+          {ok, S} = connect(Port, ?HOST, V, []),
+          {ok, [{protocol, V}]} = ssl:connection_information(S, [protocol]),
+          ok = ssl:send(S, request(?HOST, Port, "/hello.gmi")),
+          {ok, R} = recv_all(S, <<>>),
+          ssl:close(S),
+          <<"20 text/gemini", _/binary>> = R,
+          {_, <<"# Hello\n">>} = split_header(R)
+      end || V <- versions() ],
+    ok.
+
+%% A site with a restricted or private route asks for a client
+%% certificate; a site with only public routes does not. Observed on the
+%% client, by a debug-level handshake log (see cert_requested/4). The
+%% client holds a valid certificate in some of the runs, so the
+%% all-public site not asking is the server's choice, not the client's
+%% lack of one.
+client_cert_request(Config) ->
+    {ok, _} = application:ensure_all_started(blizanci),
+    Port = ?config(port, Config),
+    ok = apply_sites(Config, with_private, Port),
+    Cert = ?config(client_opts, Config),
+    [ begin
+          %% all-public site: nothing is requested, and a public page
+          %% is served to a client with and without a certificate
+          false = cert_requested(Port, ?HOST, V, Cert),
+          false = cert_requested(Port, ?HOST, V, []),
+          {ok, <<"20 ", _/binary>>} =
+              fetch(Port, ?HOST, V, Cert, "/hello.gmi"),
+          {ok, <<"20 ", _/binary>>} =
+              fetch(Port, ?HOST, V, [], "/hello.gmi"),
+          %% site with restricted and private routes: requested
+          true = cert_requested(Port, ?SECOND, V, Cert),
+          true = cert_requested(Port, ?SECOND, V, []),
+          %% a public route there needs no certificate
+          {ok, <<"20 ", _/binary>>} =
+              fetch(Port, ?SECOND, V, [], "/hello.gmi"),
+          [ begin
+                {ok, <<"60 ", _/binary>>} =
+                    fetch(Port, ?SECOND, V, [], Path),
+                {ok, <<"20 ", _/binary>>} =
+                    fetch(Port, ?SECOND, V, Cert, Path)
+            end || Path <- ["/restricted/x.gmi", "/private/x.gmi"] ]
+      end || V <- versions() ],
+    ok.
+
+%% A site that starts all-public and is then given a private route
+%% begins asking for certificates on the next handshake, and stops
+%% asking when the route is taken away again.
+client_cert_live_apply(Config) ->
+    {ok, _} = application:ensure_all_started(blizanci),
+    Port = ?config(port, Config),
+    Cert = ?config(client_opts, Config),
+    ok = apply_sites(Config, public_only, Port),
+    [ begin
+          false = cert_requested(Port, ?SECOND, V, Cert),
+          {ok, <<"20 ", _/binary>>} =
+              fetch(Port, ?SECOND, V, [], "/private/x.gmi"),
+          ok = apply_sites(Config, with_private, Port),
+          true = cert_requested(Port, ?SECOND, V, Cert),
+          {ok, <<"60 ", _/binary>>} =
+              fetch(Port, ?SECOND, V, [], "/private/x.gmi"),
+          {ok, <<"20 ", _/binary>>} =
+              fetch(Port, ?SECOND, V, Cert, "/private/x.gmi"),
+          ok = apply_sites(Config, public_only, Port),
+          false = cert_requested(Port, ?SECOND, V, Cert)
+      end || V <- versions() ],
+    ok.
+
 %% Nothing is left behind by a run of the application. After a first
 %% cycle, to create whatever is created once and then kept (ssl's
 %% session tables and the like), a baseline is taken; the application
@@ -347,6 +442,53 @@ two_site_config(Port, Config, Docroot, Docroot2) ->
     blizanci_config:new(Global, [Site(?HOST, Docroot),
                                  Site(?SECOND, Docroot2)]).
 
+versions() -> ['tlsv1.2', 'tlsv1.3'].
+
+%% Publish two sites on Port. ?HOST has only public routes, over the
+%% docroot of the test case. ?SECOND has the same routes plus, if Kind is
+%% with_private, restricted and private ones (the private one trusts the
+%% CA that issued the client certificate), over a second docroot that
+%% holds the same pages.
+apply_sites(Config, Kind, Port) ->
+    Cert = ?config(certfile, Config),
+    Key = ?config(keyfile, Config),
+    Docroot = ?config(docroot, Config),
+    Docroot2 = filename:join(filename:dirname(Docroot), "docroot2"),
+    [ begin
+          ok = filelib:ensure_path(filename:join(Docroot2, D)),
+          ok = file:write_file(filename:join([Docroot2, D, "x.gmi"]),
+                               <<"# x\n">>)
+      end || D <- ["restricted", "private"] ],
+    ok = file:write_file(filename:join(Docroot2, "hello.gmi"),
+                         <<"# Hello\n">>),
+    Route = fun(Rx, Auth, Root) ->
+                {ok, R} = blizanci_config:route(
+                            gemini, Rx, blizanci_static, Auth,
+                            #{docroot => Root}),
+                R
+            end,
+    Site = fun(Name, Routes) ->
+               {ok, S0} = blizanci_config:site(Name, Cert, Key),
+               lists:foldl(fun(R, S) -> blizanci_config:add_route(S, R) end,
+                           S0, Routes)
+           end,
+    Public = fun(Root) -> Route("(?<PATH>.*)", public, Root) end,
+    Second = case Kind of
+                 public_only -> [Public(Docroot2)];
+                 with_private ->
+                     [Route("(?<PATH>private.*)",
+                            {private, [?config(client_ca, Config)]},
+                            Docroot2),
+                      Route("(?<PATH>restricted.*)", restricted, Docroot2),
+                      Public(Docroot2)]
+             end,
+    Global = blizanci_config:global(Port, [blizanci_static,
+                                           blizanci_cgi,
+                                           blizanci_titan]),
+    blizanci_config:apply(
+      blizanci_config:new(Global, [Site(?HOST, [Public(Docroot)]),
+                                   Site(?SECOND, Second)])).
+
 load_app() ->
     case application:load(blizanci) of
         ok -> ok;
@@ -371,10 +513,62 @@ exec_works() ->
     end.
 
 connect(Port, Sni) ->
+    connect(Port, Sni, 'tlsv1.3', []).
+
+connect(Port, Sni, Version, Extra) ->
     ssl:connect({127,0,0,1}, Port,
                 [binary, {active, false}, {verify, verify_none},
-                 {versions, ['tlsv1.3']},
-                 {server_name_indication, Sni}], ?TIMEOUT).
+                 {versions, [Version]},
+                 {server_name_indication, Sni} | Extra], ?TIMEOUT).
+
+%% Did the server send a CertificateRequest in this handshake? The
+%% client is run at ssl log level debug, which logs each handshake
+%% message it receives, and a logger handler collects those: the
+%% handshake messages of both TLS versions are logged by the client's
+%% own process before connect/4 returns, so there is nothing to wait for.
+%% (OTP 28 has no connection_information item for this.) The handler is
+%% removed and the primary log level restored afterwards.
+cert_requested(Port, Sni, Version, Extra) ->
+    Id = cert_request_probe,
+    Level = maps:get(level, logger:get_primary_config()),
+    {ok, #{level := DefLevel}} = logger:get_handler_config(default),
+    ok = logger:set_primary_config(level, all),
+    ok = logger:set_handler_config(default, level, notice),
+    ok = logger:add_handler(Id, ?MODULE, #{config => self(), level => all}),
+    try
+        {ok, S} = connect(Port, Sni, Version,
+                          [{log_level, debug} | Extra]),
+        ok = ssl:close(S),
+        collect_cert_requests(false)
+    after
+        _ = logger:remove_handler(Id),
+        ok = logger:set_handler_config(default, level, DefLevel),
+        ok = logger:set_primary_config(level, Level)
+    end.
+
+collect_cert_requests(Seen) ->
+    receive
+        {handshake_logged, Event} ->
+            Text = lists:flatten(io_lib:format("~p", [Event])),
+            collect_cert_requests(
+              Seen orelse string:find(Text, "certificate_request")
+                  =/= nomatch)
+    after 0 -> Seen
+    end.
+
+%% logger handler callback
+log(Event, #{config := Pid}) ->
+    Pid ! {handshake_logged, Event},
+    ok.
+
+fetch(Port, Host, Version, Extra, Path) ->
+    {ok, S} = connect(Port, Host, Version, Extra),
+    try
+        ok = ssl:send(S, request(Host, Port, Path)),
+        recv_all(S, <<>>)
+    after
+        ssl:close(S)
+    end.
 
 request(Host, Port, Path) ->
     ["gemini://", Host, ":", integer_to_list(Port), Path, "\r\n"].
