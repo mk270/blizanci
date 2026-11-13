@@ -725,7 +725,17 @@ describe_error_test_() ->
                      {shutdown,
                       {failed_to_start_child, blizanci_servlets,
                        {servlet_start_failed, blizanci_cgi,
-                        {invalid_limit, 0}}}}))].
+                        {invalid_limit, 0}}}})),
+     ?_assertEqual("servlet blizanci_titan could not start: "
+                   "{invalid_limit,\"5\"}",
+                   describe_error(
+                     {servlet_start_failed, blizanci_titan,
+                      {invalid_limit, "5"}})),
+     ?_assertEqual("servlet blizanci_cgi could not start: "
+                   "{invalid_module,5}",
+                   describe_error(
+                     {servlet_start_failed, blizanci_cgi,
+                      {invalid_module, 5}}))].
 
 global_test() ->
     ?assertEqual(#global{port = 1965, servlets = [blizanci_static]},

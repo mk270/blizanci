@@ -15,16 +15,35 @@
 
 %% @doc
 %% Start the named pool, of at most Max workers of Module. A pool that is
-%% already running under the name is left alone and is `ok'. Any other
-%% refusal by ppool (an invalid name, limit or MFA, or a name held by
-%% some other registered process) is returned as `{error, Reason}',
-%% Reason being ppool's, unchanged.
+%% already running under the name is left alone and is `ok'.
+%%
+%% The arguments are checked here, before ppool is called, in the order
+%% name, limit, module: Queue must be an atom (other than `undefined'),
+%% Max an integer of at least 1, and Module an atom. A bad one gives
+%% `{error, {invalid_name, Queue}}', `{error, {invalid_limit, Max}}' or
+%% `{error, {invalid_module, Module}}' (ppool's own error shapes), and
+%% nothing is started or touched. This is deliberate defence in depth:
+%% the spec below is not enforced at run time, and the limits may one
+%% day come from configuration rather than being constants.
+%%
+%% Any other refusal by ppool (or a name held by some other registered
+%% process) is returned as `{error, Reason}', Reason being ppool's,
+%% unchanged.
 %% @end
 -spec start(Queue, Max, Module) -> Result
               when Queue  :: atom(),
                    Max    :: pos_integer(),
                    Module :: module(),
                    Result :: 'ok' | {'error', term()}.
+start(Queue, _Max, _Module)
+  when not is_atom(Queue); Queue =:= undefined ->
+    {error, {invalid_name, Queue}};
+start(_Queue, Max, _Module)
+  when not is_integer(Max); Max < 1 ->
+    {error, {invalid_limit, Max}};
+start(_Queue, _Max, Module)
+  when not is_atom(Module) ->
+    {error, {invalid_module, Module}};
 start(Queue, Max, Module) ->
     % through apply/3: ppool's spec is narrower than what we tolerate
     case apply(ppool, start_pool, [Queue, Max, {Module, start_link, []}]) of
@@ -130,29 +149,59 @@ start_twice_test() ->
           ?assertEqual({gateway_error, gateway_busy}, enqueue(Q, job2))
       end).
 
-%% Bad arguments are refused by ppool, and passed back as an error.
+%% Bad arguments are refused by start/3 itself, before ppool is called,
+%% in the order name, limit, module; no pool is left running.
 start_invalid_limit_test() ->
     with_pool_name(
       fun(Q) ->
           F = fun(Max) -> apply(?MODULE, start,
                                 [Q, Max, blizanci_test_worker]) end,
-          ?assertMatch({error, {invalid_limit, 0}}, F(0)),
-          ?assertMatch({error, {invalid_limit, -1}}, F(-1)),
-          ?assertMatch({error, {invalid_limit, many}}, F(many)),
-          ?assertEqual(false, pool_running(Q))
+          lists:foreach(
+            fun(Max) ->
+                ?assertEqual({error, {invalid_limit, Max}}, F(Max)),
+                ?assertEqual(false, pool_running(Q))
+            end, [0, -1, 1.5, "5", undefined, many])
       end).
 
 start_invalid_name_test() ->
-    ?assertMatch({error, {invalid_name, "pool"}},
-                 apply(?MODULE, start, ["pool", 1, blizanci_test_worker])).
+    lists:foreach(
+      fun(Name) ->
+          ?assertEqual({error, {invalid_name, Name}},
+                       apply(?MODULE, start,
+                             [Name, 1, blizanci_test_worker]))
+      end, ["x", 5, undefined]).
 
-start_invalid_mfa_test() ->
+start_invalid_module_test() ->
     with_pool_name(
       fun(Q) ->
-          % ppool is given {Module, start_link, []}, so break Module
-          ?assertMatch({error, {invalid_mfa, _}},
-                       apply(?MODULE, start, [Q, 1, "not a module"])),
-          ?assertEqual(false, pool_running(Q))
+          lists:foreach(
+            fun(Mod) ->
+                ?assertEqual({error, {invalid_module, Mod}},
+                             apply(?MODULE, start, [Q, 1, Mod])),
+                ?assertEqual(false, pool_running(Q))
+            end, ["m", 5])
+      end).
+
+%% The checks run in the order name, limit, module.
+start_invalid_order_test() ->
+    ?assertEqual({error, {invalid_name, "x"}},
+                 apply(?MODULE, start, ["x", 0, "m"])),
+    ?assertEqual({error, {invalid_limit, 0}},
+                 apply(?MODULE, start, [some_pool, 0, "m"])),
+    ?assertEqual(false, pool_running(some_pool)).
+
+%% A bad argument is refused even when the pool is already running, and
+%% the running pool is left alone.
+start_invalid_when_running_test() ->
+    with_pool_name(
+      fun(Q) ->
+          ok = start(Q, 1, blizanci_test_worker),
+          ?assertEqual({error, {invalid_limit, 0}},
+                       apply(?MODULE, start,
+                             [Q, 0, blizanci_test_worker])),
+          ?assertEqual({error, {invalid_module, "m"}},
+                       apply(?MODULE, start, [Q, 1, "m"])),
+          ?assertEqual(true, pool_running(Q))
       end).
 
 %% A name held by some other registered process is not an existing
