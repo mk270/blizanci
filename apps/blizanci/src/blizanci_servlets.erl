@@ -18,7 +18,11 @@
 %% not from any start argument, so a restart sees whatever
 %% blizanci_config:apply/1 last published, and calls start/0 on each,
 %% which is harmless for a pool that is already running. On termination
-%% it calls stop/0 on the servlets it believes are running. That list is
+%% it calls stop/0 on the servlets it believes are running. A stop/0
+%% that raises or returns something but ok is logged with
+%% logger:warning and ignored, here and on apply/1 and after a failed
+%% start, so every servlet is stopped and this process never crashes
+%% over one. The list of servlets running is
 %% kept in its own state, not read from the table, because when the
 %% table owner dies the table is gone before this process terminates.
 %%
@@ -94,8 +98,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 terminate(_Reason, Servlets) ->
-    [ ok = Servlet:stop() || Servlet <- Servlets ],
-    ok.
+    stop_servlets(Servlets).
 
 
 %%%===================================================================
@@ -115,7 +118,7 @@ switch(Port, Servlets, Sites, Old) ->
     case start_servlets(Added, []) of
         ok ->
             ok = blizanci_conf_serv:publish(Port, Servlets, Sites),
-            [ ok = S:stop() || S <- Removed ],
+            ok = stop_servlets(Removed),
             {reply, ok, Servlets};
         {error, _} = Error ->
             {reply, Error, Old}
@@ -147,8 +150,32 @@ start_servlets([Servlet | Rest], Started) ->
                    Result  :: {'error', {'servlet_start_failed', module(),
                                          term()}}.
 start_failed(Servlet, Reason, Started) ->
-    [ ok = S:stop() || S <- Started ],
+    ok = stop_servlets(Started),
     {error, {servlet_start_failed, Servlet, Reason}}.
+
+
+% Call stop/0 on every servlet given. A servlet whose stop/0 raises or
+% returns anything but ok is logged and otherwise ignored, so the rest
+% are still stopped and this process does not crash.
+-spec stop_servlets(Servlets) -> 'ok'
+              when Servlets :: [module()].
+stop_servlets(Servlets) ->
+    lists:foreach(fun stop_servlet/1, Servlets).
+
+-spec stop_servlet(Servlet) -> 'ok'
+              when Servlet :: module().
+stop_servlet(Servlet) ->
+    try Servlet:stop() of
+        ok ->
+            ok;
+        Other ->
+            logger:warning("servlet ~p: stop/0 returned ~p, ignored",
+                           [Servlet, Other])
+    catch
+        Class:Reason ->
+            logger:warning("servlet ~p: stop/0 failed: ~p, ignored",
+                           [Servlet, {Class, Reason}])
+    end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -226,3 +253,29 @@ unlink_and_kill(Name) ->
     unlink(Pid),
     exit(Pid, kill),
     receive {'DOWN', Ref, process, Pid, _} -> ok end.
+
+%% A servlet whose stop/0 returns something but ok, or raises, does not
+%% keep the others from being stopped, nor crash the process, on apply
+%% or at termination.
+bad_stop_test() ->
+    in_clean_state(fun bad_stop/0).
+
+bad_stop() ->
+    Fakes = [blizanci_test_stop_bad, blizanci_test_stop_raise,
+             blizanci_test_stop_ok],
+    register(blizanci_stop_probe, self()),
+    ok = blizanci_test_support:live_up(1965, Fakes, []),
+    Pid = whereis(blizanci_servlets),
+    ?assertEqual(ok, reconfigure(1965, [], [])),
+    ?assertEqual(Fakes, stopped([])),
+    ?assertEqual(Pid, whereis(blizanci_servlets)),
+    ?assertEqual(ok, ?MODULE:terminate(normal, Fakes)),
+    ?assertEqual(Fakes, stopped([])),
+    ?assertMatch({error, {servlet_start_failed, blizanci_test_failing,
+                          boom}},
+                 start_servlets(Fakes ++ [blizanci_test_failing], [])),
+    ?assertEqual(lists:reverse(Fakes), stopped([])).
+
+stopped(Acc) ->
+    receive {stopped, M} -> stopped(Acc ++ [M])
+    after 0 -> Acc end.

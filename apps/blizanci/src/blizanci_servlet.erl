@@ -44,7 +44,10 @@
 %% then not started, nor are any others in the same start-up or
 %% apply, and those already started are stopped again.
 %% <code>start/0</code> must be harmless if the resource is already
-%% running; <code>stop/0</code> must return <code>ok</code>.</li>
+%% running; <code>stop/0</code> should return <code>ok</code>. If it
+%% returns anything else, or raises, a warning is logged and it is
+%% otherwise ignored: the servlet is treated as stopped, the other
+%% servlets are still stopped, and nothing crashes.</li>
 %% <li><code>request/4</code> is called once per request that the
 %% router has matched to a route of the servlet and authorised. It runs
 %% in the process of the connection (blizanci_connection), via
@@ -248,7 +251,9 @@
 %% Called at application shutdown; the counterpart to start/0. Allows
 %% the servlet to tear down any pool/resource it set up there, so
 %% nothing is left running (e.g. leaked ppool pools) across a
-%% stop/start cycle in the same VM.
+%% stop/start cycle in the same VM. Should return ok; any other return
+%% value, or an exception, is logged as a warning and ignored, and the
+%% remaining servlets are still stopped.
 -callback stop() -> 'ok'.
 
 %% Called by blizanci_servlet_container:request/5, in the connection
