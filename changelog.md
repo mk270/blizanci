@@ -1,5 +1,15 @@
 # Blizanci Changelog
 
+## 5.31.3
+
+- Document the servlet contract in three parts (module, servlet process
+  and gateway) in the blizanci_servlet and blizanci_servlet_container
+  module docs, with links from the README and the overview
+- Fix the doc comments in blizanci_path and blizanci_x509 so that
+  `rebar3 edoc` builds
+- Rewrite docs-to-gh-pages to use a temporary git worktree and to
+  create the gh-pages branch when it does not exist
+
 ## 5.31.2
 
 - Pass Titan's upload state and job around as records, in place of
