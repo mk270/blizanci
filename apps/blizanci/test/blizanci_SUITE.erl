@@ -1,9 +1,6 @@
 %% blizanci, a Gemini protocol server, by Martin Keegan
 %%
-%% To the extent (if any) permissible by law, Copyright (C) 2026  Martin Keegan
-%%
-%% This programme is free software; you may redistribute and/or modify it under
-%% the terms of the Apache Software Licence v2.0.
+%% SPDX-License-Identifier: Apache-2.0
 
 %% Application-level Common Test suite: the real application is started
 %% on a free port, with a throwaway docroot and a self-signed certificate
