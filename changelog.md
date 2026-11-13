@@ -1,5 +1,12 @@
 # Blizanci Changelog
 
+## 5.31.1
+
+- Rename the exported types `peer_cert` and `client_cert` to
+  `raw_peer_cert` and `client_cert_details`; no behaviour change
+- Type a route's options as `map()` in the router and servlet
+  container specs; no behaviour change
+
 ## 5.31.0
 
 - A servlet's `start/0` callback may now return `{error, Reason}` as
