@@ -1,5 +1,13 @@
 # Blizanci Changelog
 
+## 5.33.0
+
+- Remove the relx release configuration from rebar.config, so that
+  `rebar3 release` no longer builds a release; `manage.sh start-daemon`
+  and `stop-daemon` report that no release is available
+- Name the remaining bare numeric limits and timeouts in the source as
+  macros with comments
+
 ## 5.32.1
 
 - Check the arguments of `blizanci_pool:start/3` before calling ppool:
