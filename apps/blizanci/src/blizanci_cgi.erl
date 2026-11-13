@@ -72,10 +72,20 @@
                      cgiprefix := string()
                     }.
 
+% The most CGI scripts running at once (the worker pool size); further
+% requests queue or are refused as too busy.
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
+
+% The most output accepted from one script, in bytes: past this the
+% script is killed and the request fails.
 -define(MAX_CGI_OUTPUT_BYTES, (10 * 1024 * 1024)). % 10 MiB
+
+% The most bytes of a script's stderr put in a single log entry.
 -define(MAX_STDERR_LOG_BYTES, 512).
+
+% The signal number used to kill a script that must stop.
+-define(SIGKILL, 9).
 
 % A note re environment variables.
 %
@@ -416,7 +426,7 @@ code_change(_OldVsn, State, _Extra) ->
               when State  :: worker_state(),
                    Result :: ok.
 stop_script(#worker_state{cgi_status=#cgi_proc{os_pid=OsPid}}) ->
-    _ = exec:kill(OsPid, 9),
+    _ = exec:kill(OsPid, ?SIGKILL),
     ok;
 stop_script(_State) ->
     ok.

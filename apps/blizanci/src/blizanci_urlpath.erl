@@ -39,6 +39,10 @@
 -type decoded() :: {decoded_path, binary()}.
 -export_type([decoded/0]).
 
+% The printable ASCII range: a decoded byte outside it is refused.
+-define(MIN_PRINTABLE, 16#20). % space
+-define(MAX_PRINTABLE, 16#7E). % tilde
+
 
 %% @doc
 %% Decode the (already normalised, leading-slash-free) path of a request.
@@ -129,7 +133,8 @@ decode_segment(<<C, Rest/binary>>, Acc) ->
                    Rest   :: binary(),
                    Acc    :: binary(),
                    Result :: {ok, binary()} | {error, bad_filename}.
-add_byte(Byte, _Rest, _Acc) when Byte < 16#20; Byte > 16#7E ->
+add_byte(Byte, _Rest, _Acc)
+  when Byte < ?MIN_PRINTABLE; Byte > ?MAX_PRINTABLE ->
     {error, bad_filename};
 add_byte($/, _Rest, _Acc) ->
     {error, bad_filename};

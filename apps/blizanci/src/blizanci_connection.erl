@@ -47,8 +47,20 @@
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini">>).
 -define(CRLF, <<"\r\n">>).
+
+% How long a client has to complete the whole exchange, in milliseconds,
+% before connection_timeout fires and the connection is answered and
+% closed.
 -define(TIMEOUT_MS, 30000).
+
+% The most bytes buffered while waiting for the CRLF that ends the
+% request line. It is a guard on the connection layer's buffer, so a
+% client that never sends CRLF cannot make it grow without bound; past
+% it the answer is 59. It is deliberately looser than the 1024-byte URL
+% limit in blizanci_request (?MAX_URL_BYTES), which is checked once the
+% line is complete and also answers 59.
 -define(MAX_REQUEST_BYTES, 4000).
+
 -define(CGI_MODULE, blizanci_cgi).
 
 

@@ -69,6 +69,10 @@
 
 -define(SERVER, ?MODULE).
 
+% How long defer_request/5 waits for the servlet process to start and
+% acknowledge, in milliseconds; failing that the request gets a 40.
+-define(START_TIMEOUT_MS, 2000).
+
 -record(servlet_state, {parent,
                         matches,
                         request,
@@ -180,8 +184,7 @@ defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
     process_flag(trap_exit, true),
     %% TBD: there should also be a timeout not on startup but on completion
     %%      though the protocol handler timeout might make this redundant
-    Timeout = 2000, % i.e., two seconds
-    case proc_lib:start_link(?MODULE, init, [Args], Timeout) of
+    case proc_lib:start_link(?MODULE, init, [Args], ?START_TIMEOUT_MS) of
         {ok, Pid} -> {init_servlet, Pid};
         {error, _} -> {error_code, internal_server_error}
     end.

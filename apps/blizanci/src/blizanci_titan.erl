@@ -40,9 +40,13 @@
 -type filepath() :: binary() | string().
 
 -define(QUEUE, ?MODULE).
+
+% The most Titan uploads being processed at once (the worker pool size).
 -define(MAX_TITAN, 10).
 
--define(MAX_AGE, 3600). % for expiring files; measured in seconds
+% How old a leftover temporary file must be before it is expired, in
+% seconds (one hour).
+-define(MAX_AGE, 3600).
 -define(DEFAULT_MIME, <<"text/gemini">>). % per the Titan specification
 
 % Hidden files are refused, as everywhere, except that a ".well-known"

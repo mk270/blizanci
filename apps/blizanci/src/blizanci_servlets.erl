@@ -35,6 +35,8 @@
 -export([start_link/0, reconfigure/3]).
 -export([init/1, handle_call/3, handle_cast/2, terminate/2]).
 
+% How long a reconfigure call waits for the servlets server to answer,
+% in milliseconds.
 -define(CALL_TIMEOUT, 30000).
 
 
