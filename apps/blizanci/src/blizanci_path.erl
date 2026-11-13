@@ -99,7 +99,7 @@ path_under_root(S, Root) when is_list(S), is_list(Root) ->
 %%
 %% A canonicalisation failure (e.g. a symlink loop tripping
 %% realpath's TTL guard) and a path which resolves outside Root are
-%% deliberately reported identically, as `file_not_found`: a remote
+%% deliberately reported identically, as `file_not_found': a remote
 %% client should not be able to use the response to distinguish "this
 %% doesn't exist" from "you tried to escape the root". The real reason
 %% is still logged.
@@ -125,7 +125,7 @@ path_under_root(S, Root) when is_list(S), is_list(Root) ->
 %% Root that itself lies under a dot-directory is fine. The one exception
 %% is a ".well-known" directory as the FIRST segment under Root, as RFC
 %% 8615 places it, and only when the caller asks for it with the option
-%% `well_known` (confine/3); a ".well-known" further down is an ordinary
+%% `well_known' (confine/3); a ".well-known" further down is an ordinary
 %% hidden directory, and a dotfile inside ".well-known" is still hidden.
 %% confine/2 allows no exception.
 %% @end
@@ -161,7 +161,7 @@ confine(SubPath, Root, _Opts) ->
 
 %% @doc
 %% The step every servlet starts with: take the request path from the
-%% route's Matches (key <<"PATH">>, which must be present) and confine
+%% route's Matches (key `<<"PATH">>', which must be present) and confine
 %% it under Root with confine/3. Each servlet chooses the Root and
 %% options it needs, and wraps the error atom in its own result shape.
 %% @end

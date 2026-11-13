@@ -34,10 +34,10 @@
 %% A certificate is remote-attacker-controlled input: decoding it, or
 %% dumping its RDNs, must never crash the calling process. Any failure
 %% is reported as a distinct {error, Reason}, distinguishing a
-%% certificate we plain couldn't decode (`cert_not_parsed`) from one
+%% certificate we plain couldn't decode (`cert_not_parsed') from one
 %% which decoded fine but uses a directory-string encoding for an RDN
 %% attribute value that we don't know how to render
-%% (`cert_unsupported_encoding`), e.g. bmpString/universalString.
+%% (`cert_unsupported_encoding'), e.g. bmpString/universalString.
 %%
 %% A certificate with no Common Name is not an error: the corresponding
 %% value in the result is the atom `undefined' (for the subject, the
@@ -148,9 +148,9 @@ verify_cert(_Cert, _Event, _InitialUserState) ->
 %%
 %% As with peercert_cn/1, the input is remote-attacker-controlled, so a
 %% certificate we can't decode at all is reported distinctly
-%% (`cert_not_parsed`) from one which decodes fine but is outside its
-%% validity period: past NotAfter (`cert_expired`) or before NotBefore
-%% (`cert_not_yet_valid`).
+%% (`cert_not_parsed') from one which decodes fine but is outside its
+%% validity period: past NotAfter (`cert_expired') or before NotBefore
+%% (`cert_not_yet_valid').
 %% @end
 -spec check_cert(DerCert) -> Result
               when DerCert :: public_key:der_encoded(),
