@@ -1,5 +1,17 @@
 # Blizanci Changelog
 
+## 5.32.0
+
+- Check at configuration time that a servlet module exports every
+  blizanci_servlet callback: start/0, stop/0, cancel/1 and
+  handle_client_data/2 are now checked as well as the four checked
+  before, and a module missing any is refused with
+  {servlet_missing_callbacks, Module, Missing} (breaking change for a
+  servlet that omits one)
+- Stop all servlets at shutdown, on reconfiguration and after a failed
+  start even if one servlet's stop/0 returns something other than ok or
+  raises; the servlet is logged as a warning and treated as stopped
+
 ## 5.31.3
 
 - Document the servlet contract in three parts (module, servlet process
