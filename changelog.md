@@ -1,5 +1,13 @@
 # Blizanci Changelog
 
+## 5.34.0
+
+- Accept TLS 1.2 as well as TLS 1.3
+- Request a client certificate only for a site that has a restricted or
+  private route; a site whose routes are all public never requests one
+- Keep the running configuration in ETS as one row per site, so that
+  looking up a site copies only that site
+
 ## 5.33.1
 
 - Add tests of a successful CGI run, of the error paths of
