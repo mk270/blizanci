@@ -21,14 +21,16 @@
 
 -export([all/0, init_per_suite/1, end_per_suite/1,
          init_per_testcase/2, end_per_testcase/2]).
--export([static/1, cgi/1, titan/1, sni_live_apply/1, restart/1]).
+-export([static/1, cgi/1, titan/1, sni_live_apply/1, restart/1,
+         no_leaks/1]).
 
 -define(HOST, "first.test").
 -define(SECOND, "second.test").
 -define(TIMEOUT, 5000).
+-define(LEAK_TIMEOUT, 5000).
 
 all() ->
-    [static, cgi, titan, sni_live_apply, restart].
+    [static, cgi, titan, sni_live_apply, restart, no_leaks].
 
 %%%===================================================================
 %%% Setup
@@ -89,7 +91,8 @@ init_per_testcase(Case, Config) ->
     %% load first: loading after set_env would reset the env
     ok = load_app(),
     [ ok = application:set_env(blizanci, K, V) || {K, V} <- Env ],
-    [{port, Port}, {docroot, Docroot}, {cgiroot, CgiRoot} | Config].
+    [{port, Port}, {docroot, Docroot}, {cgiroot, CgiRoot},
+     {casedir, Dir} | Config].
 
 end_per_testcase(_Case, _Config) ->
     _ = application:stop(blizanci),
@@ -202,6 +205,127 @@ restart(Config) ->
     {ok, R2} = fetch(Port, ?HOST, ?HOST, "/hello.gmi"),
     <<"20 ", _/binary>> = R2,
     ok.
+
+%% Nothing is left behind by a run of the application. After a first
+%% cycle, to create whatever is created once and then kept (ssl's
+%% session tables and the like), a baseline is taken; the application
+%% is then run through a representative set of requests and stopped,
+%% and the processes, ports, ETS tables, registered names and files
+%% must be back to the baseline, within a timeout (shutdown is
+%% asynchronous), polled for rather than slept for.
+%%
+%% The dependencies (ranch, ppool, ssl, erlexec, ...) are started before
+%% the baseline and left running: they outlive the application, so
+%% whatever they hold is not blizanci's leak and is not counted. Their
+%% processes that blizanci's connections cause to appear must still go
+%% away, and are counted.
+no_leaks(Config) ->
+    Port = ?config(port, Config),
+    CgiOk = exec_works() =:= ok,
+    ok = write_cgi_script(Config),
+    [ {ok, _} = application:ensure_all_started(A)
+      || A <- dependencies() ],
+    ok = leak_cycle(Port, CgiOk),
+    Base = snapshot(Config),
+    ok = leak_cycle(Port, CgiOk),
+    Deadline = erlang:monotonic_time(millisecond) + ?LEAK_TIMEOUT,
+    case await_no_leaks(Base, Config, Deadline) of
+        ok -> ok;
+        {leaked, Report} ->
+            ct:log("leaked: ~p", [Report]),
+            ct:fail({leaked, Report})
+    end.
+
+dependencies() ->
+    {ok, Apps} = application:get_key(blizanci, applications),
+    Apps -- [kernel, stdlib].
+
+%% Start, serve a representative set of requests, stop.
+leak_cycle(Port, CgiOk) ->
+    {ok, _} = application:ensure_all_started(blizanci),
+    {ok, <<"20 ", _/binary>>} = fetch(Port, ?HOST, ?HOST, "/hello.gmi"),
+    {ok, <<"51 ", _/binary>>} = fetch(Port, ?HOST, ?HOST, "/nope.gmi"),
+    %% malformed: not a URL
+    {ok, <<"59 ", _/binary>>} =
+        converse(Port, ?HOST, ["not a url\r\n"]),
+    %% hangs up without sending a request
+    {ok, S} = connect(Port, ?HOST),
+    ok = ssl:close(S),
+    %% sends part of a request, then hangs up
+    {ok, S2} = connect(Port, ?HOST),
+    ok = ssl:send(S2, "gemini://first"),
+    ok = ssl:close(S2),
+    %% a Titan upload, which is staged in the work dir
+    Body = <<"leak check\n">>,
+    Size = integer_to_list(byte_size(Body)),
+    Line = "titan://" ?HOST ":" ++ integer_to_list(Port)
+        ++ "/leak.txt;size=" ++ Size ++ ";mime=text/plain\r\n",
+    {ok, <<"2", _/binary>>} = converse(Port, ?HOST, [Line, Body]),
+    %% a deferred (pooled) servlet, where exec works
+    case CgiOk of
+        true ->
+            {ok, <<"20 ", _/binary>>} =
+                fetch(Port, ?HOST, ?HOST, "/cgi-bin/hi.sh");
+        false -> ok
+    end,
+    ok = application:stop(blizanci).
+
+write_cgi_script(Config) ->
+    Script = filename:join(?config(cgiroot, Config), "hi.sh"),
+    ok = file:write_file(Script, <<"#!/bin/sh\nprintf '20 text/plain"
+                                   "\\r\\n'\necho hi\n">>),
+    ok = file:change_mode(Script, 8#755).
+
+snapshot(Config) ->
+    #{processes => maps:from_list(
+                     [ {P, proc_info(P)} || P <- processes() ]),
+      ports => erlang:ports(),
+      tables => maps:from_list(
+                  [ {T, {ets:info(T, name), ets:info(T, owner)}}
+                    || T <- ets:all() ]),
+      names => lists:sort(registered()),
+      %% the case's whole directory: docroot, cgi-bin and Titan's
+      %% work dir, the only places the application writes
+      files => lists:sort(
+                 filelib:wildcard("**", ?config(casedir, Config)))}.
+
+proc_info(P) ->
+    case process_info(P, [initial_call, current_function,
+                          registered_name]) of
+        undefined -> gone;
+        I -> I
+    end.
+
+await_no_leaks(Base, Config, Deadline) ->
+    case leaks(Base, snapshot(Config)) of
+        [] -> ok;
+        Report ->
+            case erlang:monotonic_time(millisecond) >= Deadline of
+                true -> {leaked, Report};
+                false ->
+                    timer:sleep(50),
+                    await_no_leaks(Base, Config, Deadline)
+            end
+    end.
+
+%% What is in Now and not in Base, as a list of {What, Items}.
+leaks(Base, Now) ->
+    #{processes := P0, ports := Po0, tables := T0, names := N0,
+      files := F0} = Base,
+    #{processes := P1, ports := Po1, tables := T1, names := N1,
+      files := F1} = Now,
+    Checks =
+        [{extra_registered_names, N1 -- N0},
+         {extra_processes,
+          [ {P, proc_info(P)} || P <- maps:keys(P1),
+                                 not maps:is_key(P, P0) ]},
+         {extra_ports,
+          [ {Po, erlang:port_info(Po, name)} || Po <- Po1 -- Po0 ]},
+         {extra_tables, [ {T, maps:get(T, T1)}
+                          || T <- maps:keys(T1),
+                             not maps:is_key(T, T0) ]},
+         {extra_files, F1 -- F0}],
+    [ C || {_, V} = C <- Checks, V =/= [] ].
 
 %%%===================================================================
 %%% Helpers
