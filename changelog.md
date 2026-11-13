@@ -1,5 +1,15 @@
 # Blizanci Changelog
 
+## 5.32.1
+
+- Check the arguments of `blizanci_pool:start/3` before calling ppool:
+  a pool name that is not an atom, a limit that is not an integer of at
+  least 1, or a module that is not an atom is refused with
+  `{error, {invalid_name | invalid_limit | invalid_module, Value}}`
+- Replace the per-file copyright lines with an SPDX licence identifier
+  (`Apache-2.0`), and put one copyright and licence notice in the
+  README; the package's `licenses` entry now reads `Apache-2.0`
+
 ## 5.32.0
 
 - Check at configuration time that a servlet module exports every
