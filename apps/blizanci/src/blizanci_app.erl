@@ -32,3 +32,125 @@ start(_StartType, _StartArgs) ->
 % (blizanci_config:apply/1).
 stop(_State) ->
     ok.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(ENV_KEYS, [certfile, keyfile, hostname, port, servlets,
+                   routing]).
+
+%% start/2 reads the application environment of the application it runs
+%% in, so these tests start blizanci itself (application:start/1, which
+%% calls start/2) with an environment of the test's choosing, in a
+%% process of their own. The environment, the loaded state of the
+%% application, any applications started on the way, the logger handler
+%% and the PEM fixture are all put back afterwards, pass or fail. Port
+%% 0, and neither test gets as far as a listener: nothing binds a
+%% fixed port.
+with_app_env(Env, Fun) ->
+    blizanci_test_support:isolated(
+      fun() ->
+          Dir = blizanci_x509:test_tmp_dir(),
+          Pki = blizanci_x509:test_pki(),
+          Cert = blizanci_x509:test_write_pem(
+                   Dir, "cert.pem",
+                   [{'Certificate', maps:get(ca, Pki), not_encrypted}]),
+          Loaded = lists:keymember(blizanci, 1,
+                                   application:loaded_applications()),
+          ok = case Loaded of
+                   true -> ok;
+                   false -> application:load(blizanci)
+               end,
+          Saved = [ {K, application:get_env(blizanci, K)}
+                    || K <- ?ENV_KEYS ],
+          Before = running_apps(),
+          Handler = list_to_atom(
+                      "blizanci_app_test_log_"
+                      ++ integer_to_list(
+                           erlang:unique_integer([positive]))),
+          ok = logger:add_handler(Handler, blizanci_test_log_handler,
+                                  #{config => #{notify => self()}}),
+          Base = [{certfile, Cert}, {keyfile, Cert},
+                  {hostname, "test.example"}, {port, 0}],
+          [ application:set_env(blizanci, K, V)
+            || {K, V} <- Base ++ Env ],
+          try Fun()
+          after
+              ok = logger:remove_handler(Handler),
+              [ stop_app(A) || A <- running_apps() -- Before ],
+              [ case V of
+                    undefined -> application:unset_env(blizanci, K);
+                    {ok, Old} -> application:set_env(blizanci, K, Old)
+                end || {K, V} <- Saved ],
+              case Loaded of
+                  true -> ok;
+                  false -> application:unload(blizanci)
+              end,
+              file:del_dir_r(Dir)
+          end
+      end).
+
+running_apps() ->
+    [ A || {A, _, _} <- application:which_applications() ].
+
+stop_app(A) ->
+    _ = application:stop(A),
+    ok.
+
+%% What the handler has been sent so far, in order. start/2 logs in the
+%% application master's process before application:start/1 returns, so
+%% by then everything it logged is already in the mailbox.
+logged() ->
+    receive {logged, L, T} -> [{L, T} | logged()]
+    after 0 -> []
+    end.
+
+blizanci_lines(Logged) ->
+    [ T || {error, "blizanci: " ++ _ = T} <- Logged ].
+
+%% A servlet whose start/0 returns {error, boom}: the application does
+%% not start, with that reason, and says so in one line, rather than
+%% crashing on a badmatch.
+servlet_start_failure_test() ->
+    with_app_env(
+      [{servlets, [blizanci_test_failing]}, {routing, []}],
+      fun() ->
+          Result = application:ensure_all_started(blizanci),
+          ?assertMatch({error, {blizanci, {{shutdown,
+                                 {failed_to_start_child,
+                                  blizanci_servlets,
+                                  {servlet_start_failed,
+                                   blizanci_test_failing, boom}}},
+                                {blizanci_app, start, _}}}},
+                       Result),
+          ?assertEqual(["blizanci: servlet blizanci_test_failing could "
+                        "not start: boom"],
+                       blizanci_lines(logged())),
+          ?assertEqual(undefined, whereis(blizanci_sup)),
+          ?assertEqual(undefined, whereis(blizanci_servlets)),
+          ?assertEqual(undefined, whereis(blizanci_conf_serv))
+      end).
+
+%% A routing table that will not build is a configuration error, found
+%% before the tree is started; it is logged once, and no process or
+%% table is left behind.
+invalid_routing_test() ->
+    Bad = {gemini, "x", blizanci_test_stub, public, #{}},
+    with_app_env(
+      [{servlets, [blizanci_test_stub]}, {routing, [Bad]}],
+      fun() ->
+          Result = application:ensure_all_started(blizanci),
+          ?assertMatch({error, {blizanci, {{invalid_routing,
+                                 {route_without_path_group, "x",
+                                  blizanci_test_stub}},
+                                {blizanci_app, start, _}}}},
+                       Result),
+          ?assertMatch(["blizanci: invalid routing table: route \"x\" "
+                        ++ _], blizanci_lines(logged())),
+          ?assertEqual(undefined, whereis(blizanci_sup)),
+          ?assertEqual(undefined, whereis(blizanci_conf_serv))
+      end).
