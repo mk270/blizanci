@@ -1,5 +1,10 @@
 # Blizanci Changelog
 
+## 5.31.2
+
+- Pass Titan's upload state and job around as records, in place of
+  long positional argument lists; no behaviour change
+
 ## 5.31.1
 
 - Rename the exported types `peer_cert` and `client_cert` to
