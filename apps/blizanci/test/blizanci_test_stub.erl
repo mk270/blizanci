@@ -15,7 +15,7 @@
 -module(blizanci_test_stub).
 
 -export([request/4, serve/4, handle_client_data/2, cancel/1,
-         default_options/0, validate_options/1]).
+         default_options/0, validate_options/1, start/0, stop/0]).
 -export([worker/2]).
 
 default_options() -> #{}.
@@ -35,6 +35,10 @@ handle_client_data(Pid, Payload) ->
         {worker_reply, Reply} -> Reply
     after 5000 -> error(worker_timeout)
     end.
+
+start() -> ok.
+
+stop() -> ok.
 
 cancel(Pid) ->
     Pid ! cancel,
