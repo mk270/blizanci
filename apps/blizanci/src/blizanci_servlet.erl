@@ -12,8 +12,9 @@
 %% named in a route (see blizanci_router) and in the configured list of
 %% servlets. The three servlets shipped are blizanci_static (files, with
 %% no worker), blizanci_cgi and blizanci_titan (both with a worker in a
-%% ppool queue). The contract has two parts, which this behaviour
-%% declares in this order: the module contract, and the process contract.
+%% ppool queue). The contract has three layers, which this behaviour
+%% declares in this order: the module contract, the servlet process
+%% contract, and the gateway contract.
 %%
 %% == 1. The module contract ==
 %%
@@ -56,7 +57,7 @@
 %%
 %% A servlet with no worker, such as blizanci_static, does all its work
 %% in <code>request/4</code> and always answers <code>immediate</code>.
-%% It need only implement the callbacks of part 2 trivially:
+%% It need only implement the callbacks of parts 2 and 3 trivially:
 %% <code>serve/4</code> is never called (it may return
 %% <code>{gateway_error, unimplemented}</code>),
 %% <code>handle_client_data/2</code> may return <code>none</code>, and
@@ -105,16 +106,16 @@
 %% blizanci_titan. The router does not interpret them.</li>
 %% </ul>
 %%
-%% == 2. The process contract ==
+%% == 2. The servlet process contract ==
 %%
-%% What the servlet's running WORK must do, once <code>request/4</code>
-%% has answered <code>defer</code>. blizanci_servlet_container:request/5
-%% then starts and links a new process, a blizanci_servlet_container
-%% (the "container"), and the connection traps exits to hear of its
-%% end. The container is a gen_server which the connection and the
-%% worker talk to; the servlet's worker, if any, is a further process,
-%% started by <code>serve/4</code> (blizanci_cgi and blizanci_titan use
-%% a ppool queue).
+%% What the servlet does in the CONTAINER process, once
+%% <code>request/4</code> has answered <code>defer</code>.
+%% blizanci_servlet_container:request/5 then starts and links a new
+%% process, a blizanci_servlet_container (the "container"), and the
+%% connection traps exits to hear of its end. The servlet's worker, if
+%% any, is a further process, started by <code>serve/4</code>
+%% (blizanci_cgi and blizanci_titan use a ppool queue); how it and the
+%% container talk is the gateway contract, part 3.
 %%
 %% <ul>
 %% <li><code>serve/4</code> is called once, in the container process,
@@ -137,7 +138,24 @@
 %% </ul>
 %% (<code>gateway_output</code>, also a gateway_result(), is not a
 %% valid return from <code>serve/4</code>: the container would crash
-%% and the client get an internal error.)</li>
+%% and the client get an internal error. This is documented as invalid,
+%% not endorsed.)</li>
+%% </ul>
+%%
+%% == 3. The gateway contract ==
+%%
+%% The protocol between the container and the worker (the "gateway")
+%% which <code>serve/4</code> started, once it has returned
+%% <code>{gateway_started, Pid}</code>. The container is then a
+%% gen_server (blizanci_servlet_container) which the connection and the
+%% worker talk to, and it remembers Pid and the servlet module. The
+%% worker's own messages are hidden behind the servlet module, as a
+%% gen_server module hides its protocol: the container never sends the
+%% worker anything but through the callbacks below.
+%%
+%% Container to worker, through the servlet module:
+%%
+%% <ul>
 %% <li><code>handle_client_data/2</code> is called in the container
 %% process, once the worker has started, with the client's further
 %% input (for example a Titan upload body) as the connection receives
@@ -154,8 +172,10 @@
 %% not return <code>gateway_started</code>.</li>
 %% </ul>
 %%
-%% The obligation which is NOT a callback: a worker which does not
-%% answer through <code>handle_client_data/2</code> must itself report
+%% Worker to container, which is NOT a callback: the cast
+%% blizanci_servlet_container:gateway_exit(ContainerPid, Result). A
+%% worker which does not answer through
+%% <code>handle_client_data/2</code> must itself report
 %% how it ended, exactly once, by calling
 %% blizanci_servlet_container:gateway_exit/2 with the container's pid
 %% (the pid of the process that called <code>serve/4</code>, which the
@@ -163,27 +183,42 @@
 %% <code>{gateway_output, Binary}</code>, the finished response as the
 %% script produced it, or <code>{gateway_error, Reason}</code>, treated
 %% as for <code>serve/4</code>. gateway_exit/2 is a cast, harmless if
-%% the container has gone. No other gateway_result() may be passed to
-%% it. The container turns the report into a message to the
-%% connection, which answers the client and closes the connection. A
-%% worker that never reports leaves the client waiting for the
-%% connection's own timeout. blizanci_cgi reports this way;
-%% blizanci_titan instead answers its client through the return value
-%% of <code>handle_client_data/2</code> and does not call
-%% gateway_exit/2.
+%% the container has gone. The container turns the report into a
+%% message to the connection, which answers the client and closes the
+%% connection. A worker that never reports leaves the client waiting
+%% for the connection's own timeout.
+%%
+%% There are thus two reply paths, as the code stands. CGI-style
+%% workers (blizanci_cgi) report with gateway_exit/2, and
+%% <code>handle_client_data/2</code> returns <code>none</code>.
+%% blizanci_titan never calls gateway_exit/2: it answers its client
+%% through the return value of <code>handle_client_data/2</code>, which
+%% is <code>none</code> while more data is awaited and the response once
+%% the upload is over.
+%%
+%% Not every gateway_result() is valid on every path. The container has
+%% no case clause for some, and would crash (the client getting an
+%% internal error). Invalid on the <code>serve/4</code> path (part 2):
+%% <code>{gateway_output, Binary}</code>. Invalid as the argument of
+%% gateway_exit/2: <code>{gateway_finished, Response}</code> and
+%% <code>{gateway_started, Pid}</code>; only
+%% <code>{gateway_output, Binary}</code> and
+%% <code>{gateway_error, Reason}</code> are valid there. These are
+%% documented as invalid, not endorsed: the gateway_result() type is
+%% wider than either use.
 %%
 %% === Who runs what ===
 %%
 %% <pre>
-%% callback              process                    when
-%% default_options/0     route builder              config check, apply
-%% validate_options/1    route builder              config check, apply
-%% start/0               blizanci_servlets          app start, apply
-%% stop/0                blizanci_servlets          app stop, apply
-%% request/4             connection                 each request
-%% serve/4               container (new, linked)    after defer
-%% handle_client_data/2  container                  later client input
-%% cancel/1              container                  connection closing
+%% callback              layer    process                  when
+%% default_options/0     1 module route builder            config, apply
+%% validate_options/1    1 module route builder            config, apply
+%% start/0               1 module blizanci_servlets        start, apply
+%% stop/0                1 module blizanci_servlets        stop, apply
+%% request/4             1 module connection               each request
+%% serve/4               2 proc   container (new, linked)  after defer
+%% handle_client_data/2  3 gway   container                later input
+%% cancel/1              3 gway   container                conn closing
 %% </pre>
 %% @end
 
@@ -226,7 +261,8 @@
     'defer'.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Part 2: the process contract (after request/4 has answered 'defer').
+%% Part 2: the servlet process contract (after request/4 has answered
+%% 'defer'), run in the container process.
 
 %% Serve the request asynchronously, in the process started for it (the
 %% container). The result is one of
@@ -245,6 +281,11 @@
 -callback serve(path_matches(), request_details(), server_config(),
                 map()) ->
     gateway_result().
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Part 3: the gateway contract (after serve/4 has returned
+%% {gateway_started, Pid}); the worker's own reports to the container,
+%% blizanci_servlet_container:gateway_exit/2, are not callbacks.
 
 %% Called with further data sent by the client after its request line
 %% (e.g., a Titan upload body), for a servlet that started a process

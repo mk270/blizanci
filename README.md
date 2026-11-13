@@ -11,7 +11,8 @@ Features:
 * distributed PKI: authorisation by subject or *issuer* of certificates
 * Titan protocol uploads
 * servlet interface for in-process dynamic page generation; the contract
-  a servlet module must meet is described in the module documentation of
+  a servlet module must meet, in three layers (module, servlet process,
+  gateway), is described in the module documentation of
   `blizanci_servlet` (`apps/blizanci/src/blizanci_servlet.erl`, or
   `blizanci_servlet.html` in the generated docs)
 

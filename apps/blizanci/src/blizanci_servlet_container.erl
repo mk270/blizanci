@@ -8,7 +8,10 @@
 %% @doc
 %% The process side of the servlet contract (see blizanci_servlet): a
 %% servlet module's request/4 is called here, and, if it defers, a
-%% container process is started to run its serve/4.
+%% container process is started to run its serve/4. This is the
+%% servlet process contract (part 2 of blizanci_servlet), and, once
+%% serve/4 has started a worker, the container's side of the gateway
+%% contract (part 3).
 %%
 %% What goes on, for one request:
 %%
