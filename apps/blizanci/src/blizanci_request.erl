@@ -43,6 +43,12 @@
 -define(PROTO, <<"gemini">>).
 -define(CRLF, <<"\r\n">>).
 
+% The longest request line (the URL) allowed, in bytes, excluding the
+% CRLF. Fixed by the Gemini specification: a longer request is answered
+% with 59. This is checked once the line is complete; the connection
+% layer's separate ?MAX_REQUEST_BYTES guards its buffer before that.
+-define(MAX_URL_BYTES, 1024).
+
 %% @doc
 %% @hidden
 %% @end
@@ -57,7 +63,7 @@
                    Result :: gemini_response().
 
 handle_line(Cmd, _Config, _Cert, _Rest) when is_binary(Cmd),
-                                             size(Cmd) > 1024 ->
+                                             size(Cmd) > ?MAX_URL_BYTES ->
     {error_code, request_too_long};
 
 handle_line(Cmd, Config, Cert, Rest) when is_binary(Cmd) ->

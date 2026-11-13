@@ -63,7 +63,11 @@
          new/2, validate/1, apply/1, ascii_lowercase/1,
          describe_error/1]).
 
+% The default port: the one assigned to Gemini.
 -define(PORT, 1965).
+
+% The highest valid TCP port number.
+-define(MAX_PORT, 65535).
 -define(DEFAULT_SERVLETS, [blizanci_static, blizanci_cgi, blizanci_titan]).
 
 % Build and validate one route, eagerly: a bad route fails here, with a
@@ -207,7 +211,7 @@ first_error([Check | Rest]) ->
               when Global :: global_config(),
                    Result :: 'ok' | {'error', term()}.
 validate_global(#global{port = Port, servlets = Servlets}) ->
-    case is_integer(Port) andalso Port >= 1 andalso Port =< 65535 of
+    case is_integer(Port) andalso Port >= 1 andalso Port =< ?MAX_PORT of
         true  -> validate_servlets(Servlets);
         false -> {error, {invalid_port, Port}}
     end.

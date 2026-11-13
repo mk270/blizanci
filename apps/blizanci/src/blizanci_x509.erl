@@ -19,6 +19,12 @@
 -export([check_cert/1]).
 -export([verify_signed_by/2]).
 
+% RFC 5280 UTCTime has a two-digit year: 50 to 99 mean 1950 to 1999 and
+% 00 to 49 mean 2000 to 2049.
+-define(UTC_PIVOT_YEAR, 50).
+-define(UTC_CENTURY_HIGH, 1900).
+-define(UTC_CENTURY_LOW, 2000).
+
 % Certificate-making helpers for the tests here and in blizanci_auth.
 -ifdef(TEST).
 -export([test_pki/0, test_tmp_dir/0, test_write_pem/3]).
@@ -201,9 +207,9 @@ cert_time_status(Cert) ->
 
 asn1_time_to_gregorian({utcTime, [Y1, Y2 | Rest]}) ->
     Year2 = list_to_integer([Y1, Y2]),
-    Year = case Year2 >= 50 of
-               true  -> 1900 + Year2;
-               false -> 2000 + Year2
+    Year = case Year2 >= ?UTC_PIVOT_YEAR of
+               true  -> ?UTC_CENTURY_HIGH + Year2;
+               false -> ?UTC_CENTURY_LOW + Year2
            end,
     to_gregorian(Year, Rest);
 asn1_time_to_gregorian({generalTime, Str}) ->

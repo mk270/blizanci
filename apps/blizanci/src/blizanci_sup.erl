@@ -39,6 +39,16 @@
 -define(SERVER, ?MODULE).
 -define(LISTENER, blizanci_service_ssl).
 
+% Restart intensity: more than this many restarts within the period
+% below takes the supervisor, and so the application, down.
+-define(RESTART_INTENSITY, 3).
+% The restart period, in seconds.
+-define(RESTART_PERIOD_S, 10).
+% How long the table owner may take to stop, in milliseconds.
+-define(TABLE_SHUTDOWN_MS, 5000).
+% How long the servlets server may take to stop, in milliseconds.
+-define(SERVLETS_SHUTDOWN_MS, 10000).
+
 start_link(Config) ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, Config).
 
@@ -52,8 +62,8 @@ init(Config) ->
      } = Config,
 
     SupFlags = #{strategy => rest_for_one,
-                 intensity => 3,
-                 period => 10},
+                 intensity => ?RESTART_INTENSITY,
+                 period => ?RESTART_PERIOD_S},
 
     RanchChildSpec = ranch:child_spec(?LISTENER, ranch_ssl, SSL_Opts,
                                       blizanci_connection, Proto_Opts),
@@ -64,14 +74,14 @@ init(Config) ->
                                     servlets => Servlets,
                                     sites => Sites}]},
                        restart => permanent,
-                       shutdown => 5000,
+                       shutdown => ?TABLE_SHUTDOWN_MS,
                        type => worker,
                        modules => [blizanci_conf_serv]},
 
     ServletsChildSpec = #{id => blizanci_servlets,
                           start => {blizanci_servlets, start_link, []},
                           restart => permanent,
-                          shutdown => 10000,
+                          shutdown => ?SERVLETS_SHUTDOWN_MS,
                           type => worker,
                           modules => [blizanci_servlets]},
 
