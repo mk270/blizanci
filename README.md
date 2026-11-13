@@ -40,7 +40,10 @@ the certificates cannot be read.
 Build
 -----
 
-    $ rebar3 release
+    $ rebar3 compile
+
+The relx release config was removed pending the packaging phase, so
+`rebar3 release` is not available for now.
 
 Run
 ---

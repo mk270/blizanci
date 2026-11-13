@@ -29,12 +29,22 @@ fi
 APP=blizanci
 REL=_build/default/rel/${APP}/bin/${APP}
 
+need-release () {
+    if [ ! -x "$REL" ]; then
+        echo "$REL not found: the release config was removed" >&2
+        echo "pending packaging; use '$(basename $0) repl'." >&2
+        exit 1
+    fi
+}
+
 case "$1" in
      start-daemon)
+         need-release
          setup-env
          $REL start
          ;;
      stop-daemon)
+         need-release
          setup-env
          $REL stop
          ;;
