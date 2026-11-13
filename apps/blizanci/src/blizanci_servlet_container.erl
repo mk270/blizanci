@@ -6,37 +6,52 @@
 %% the terms of the Apache Software Licence v2.0.
 
 %% @doc
-% This module provides a mechanism for dynamic content generation for
-% Gemini requests.
-%
-% One blizanci_servlet_container process is generated per deferred
-% request. This is done by calling blizanci_servlet_container:request/5,
-% which has the side-effect of caching the caller's Pid and passing it to
-% the servlet process it creates.
-%
-% On completion of the request, which may well not be synchronous, results
-% are communicated back to the Gemini parent (the original caller) by
-% a gen_server:cast of {servlet_result, Result} to the connection
-% process (so that the container never blocks on a connection which may
-% itself be waiting on the container), where Result has one of the
-% following forms:
-%
-%    {servlet_failed, ErrorCode :: atom()}
-%  | {servlet_complete, Output :: binary()}
-%
-% It is likely unnecessary for a handler module to provide substantive
-% implementations of both Module:serve/4 and Module:request/4. This is
-% because a handler module will likely behave wholly synchronously or
-% wholly asychronously.
-%
-% A synchrononous handler module should have a substantive implementation
-% of Module:request/4 which returns a gemini response marked with the
-% atom 'immediate'; this means its implementation of Module:serve/4 will
-% never be called and may be left as a stub. Conversely, an asychronous
-% handler module would have a trivial implementation of Module:request/4,
-% returning the atom 'defer', and the substantive implementation would be
-% afforded via its Module:serve/4 implementation instead.
-%
+%% The process side of the servlet contract (see blizanci_servlet): a
+%% servlet module's request/4 is called here, and, if it defers, a
+%% container process is started to run its serve/4.
+%%
+%% What goes on, for one request:
+%%
+%% <ol>
+%% <li>blizanci_router calls request/5 in the connection process
+%% (blizanci_connection). This calls Module:request/4 there. An
+%% <code>{immediate, Response}</code> is returned as it stands.</li>
+%% <li>On <code>defer</code>, defer_request/5 makes the connection trap
+%% exits and starts a new, linked container process with
+%% proc_lib:start_link/4 (two seconds allowed to start), returning
+%% <code>{init_servlet, Pid}</code>, after which the connection
+%% remembers Pid as its servlet process.</li>
+%% <li>The container acknowledges at once, then calls Module:serve/4 in
+%% its own process. <code>gateway_finished</code> and
+%% <code>gateway_error</code> end the container here, with an exit
+%% reason <code>{shutdown, {gateway_complete, Pid, Response}}</code>
+%% or <code>{shutdown, {gateway_init_error, Pid, Reason}}</code>, which
+%% the connection, trapping exits, answers the client from.
+%% <code>gateway_started</code> turns the process into a gen_server
+%% (gen_server:enter_loop/3) whose state names the worker and the
+%% module.</li>
+%% <li>The gen_server then handles three things. Client data: the
+%% connection calls handle_client_data/2, which calls
+%% Module:handle_client_data/2 with the worker's pid and returns what
+%% it returns. The worker's report: the worker calls gateway_exit/2
+%% (a cast), and the container passes the result on to the connection
+%% by a gen_server:cast of <code>{servlet_result, Result}</code> (so
+%% the container never blocks on a connection which may itself be
+%% waiting on the container), where Result is
+%% <code>{servlet_complete, Output :: binary()}</code> or
+%% <code>{servlet_failed, ErrorCode :: atom()}</code>. Cancellation:
+%% when the connection ends it calls cancel/1, which casts
+%% <code>servlet_quit</code>; the container calls Module:cancel/1 with
+%% the worker's pid and stops.</li>
+%% </ol>
+%%
+%% A servlet is unlikely to need a substantive implementation of both
+%% Module:serve/4 and Module:request/4, since it will behave either
+%% wholly synchronously or wholly asynchronously. A synchronous one
+%% implements Module:request/4, answering <code>immediate</code>, so
+%% that its Module:serve/4 is never called and may be a stub. An
+%% asynchronous one has a trivial Module:request/4 returning
+%% <code>defer</code>, and does its work from Module:serve/4.
 %% @end
 
 -module(blizanci_servlet_container).
@@ -83,9 +98,11 @@ cancel({proc, Pid}) ->
     end.
 
 
-% Called by the CGI runner. This is a cast: the container's reply was
-% always 'ok' and no caller used it, and a cast cannot fail or block if
-% the container has already gone (no check-then-act race, no timeout).
+% Called by the servlet's worker (the CGI runner, say), with the pid of
+% the container, to report how it ended. This is a cast: the container's
+% reply was always 'ok' and no caller used it, and a cast cannot fail or
+% block if the container has already gone (no check-then-act race, no
+% timeout).
 -spec gateway_exit(Pid, GWResult) -> Result
               when Pid      :: pid(),
                    GWResult :: gateway_result(),
@@ -95,10 +112,14 @@ gateway_exit(Pid, Result) when is_pid(Pid) ->
     gen_server:cast(Pid, {gateway_result, Result}).
 
 
-% TODO: document what on earth is going on here
-% Passes further client data to the servlet via its container. A
-% container that has already gone gives an internal-server-error
-% response (status 40), not 'ok'.
+% Called by the connection, in its own process, with the client input
+% that follows the request line once a servlet process exists (e.g., a
+% Titan upload body). It is a call to the container, in whose process
+% Module:handle_client_data(WorkerPid, Payload) runs; the reply is that
+% function's gemini_response(), where 'none' means more is awaited. If
+% that function raises, the container exits with an internal error
+% instead. A container that has already gone gives an
+% internal-server-error response (status 40), not 'ok'.
 -spec handle_client_data(Pid, Payload) -> Result
               when Pid     :: pid(),
                    Payload :: binary(),
@@ -111,9 +132,11 @@ handle_client_data(Pid, Payload) when is_binary(Payload) ->
     end.
 
 
-%% @doc Called by the router to dispatch a request to a specific handler.
+%% @doc Called by the router, in the connection process, to dispatch a
+%% request to a specific handler.
 %% @param Module the module implementing the handler
-%% @param Matches a list of binary key-value pairs representing the manner in which the request matched the pattern associated with the route
+%% @param Matches a map of binary keys to binary values: what each named
+%% group of the route's pattern captured (see blizanci_servlet)
 %% @param Request the request
 %% @param ServerConfig the configuration for the Gemini server
 %% @param RouteOpts the configuration to be passed to the servlet module
@@ -121,10 +144,12 @@ handle_client_data(Pid, Payload) when is_binary(Payload) ->
 %% The function calls Module:request(Matches, Request, ServerConfig,
 %% RouteOpts), which may return either {immediate, Response} or the atom
 %% 'defer'. Where it is indicated that the response will be deferred, a
-%% new process is started and Module:serve(Matches, Req, ServerConfig,
-%% RouteOpts) is called. This sets things up
+%% new container process is started, and in it Module:serve(Matches, Req,
+%% ServerConfig, RouteOpts) is called. This sets things up
 %% for the results of the request to be notified back to the caller
 %% (of request/5), which is a ranch handler for the Gemini protocol.
+%% The result here is then <code>{init_servlet, Pid}</code> (or an
+%% internal-server-error code if the process did not start).
 %% @end
 -spec request(Module, Matches, Request, ServerConfig, RouteOpts) -> Result
               when Module       :: module(),

@@ -203,7 +203,7 @@ stop() ->
     blizanci_pool:stop(?QUEUE).
 
 
-% Called by the servlet to cancel a job, e.g., if the TCP connection has
+% Called by the container to cancel a job, e.g., if the TCP connection has
 % been closed by the remote end.
 -spec cancel(Pid) -> Result
               when Pid    :: pid(),
@@ -212,7 +212,7 @@ cancel(Pid) ->
     blizanci_pool:cancel(Pid, cgi_quit).
 
 
-% Called by the servlet
+% Called by blizanci_servlet_container, in the connection process
 %
 -spec request(Path, Req, ServerConfig, RouteOpts) -> Result
               when Path         :: any(),
