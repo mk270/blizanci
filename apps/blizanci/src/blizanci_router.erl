@@ -191,7 +191,10 @@ compile_regex(Regex) ->
 
 %% @doc
 %% Check that Module is loadable and exports the callbacks a servlet
-%% needs: default_options/0, validate_options/1, request/4 and serve/4.
+%% needs: all the blizanci_servlet callbacks, that is default_options/0,
+%% validate_options/1, request/4, serve/4, start/0, stop/0, cancel/1 and
+%% handle_client_data/2. A missing one is reported as
+%% {servlet_missing_callbacks, Module, [{Name, Arity}]}.
 %% @end
 -spec check_servlet(Module) -> Result
               when Module :: term(),
@@ -204,12 +207,13 @@ check_servlet(Module) ->
     end.
 
 
-% What a route's servlet must export to be of any use: the options
-% callbacks, used when the route is built, and the two that handle a
-% request (see blizanci_servlet). cancel/1, handle_client_data/2,
-% start/0 and stop/0 are also callbacks but are not checked here.
+% What a route's servlet must export: every callback of the
+% blizanci_servlet behaviour, so that a missing one is refused at
+% configuration time rather than failing at run time.
 -define(SERVLET_CALLBACKS, [{default_options, 0}, {validate_options, 1},
-                            {request, 4}, {serve, 4}]).
+                            {request, 4}, {serve, 4}, {start, 0},
+                            {stop, 0}, {cancel, 1},
+                            {handle_client_data, 2}]).
 
 -spec valid_servlet(Module) -> Result
               when Module :: term(),
