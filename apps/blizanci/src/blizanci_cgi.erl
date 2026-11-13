@@ -904,3 +904,119 @@ cgi_environment_test_() ->
                    lists:keyfind("QUERY_STRING", 1,
                      element(2, cgi_environment(
                                   test_cgi_req(#{ query => <<>> })))))].
+
+
+%% End to end, through the real servlet code and its worker pool: real
+%% scripts are run and the outcome the worker reports to its container
+%% (here the test process) is checked. Skipped if erlexec cannot run
+%% here. Fixture, under a fresh temporary directory:
+%%   Base/cgi/{hello,env,nostatus,fail,flood}
+run_setup() ->
+    Base = blizanci_test_support:tmp_path("cgi_run_test"),
+    Dir = filename:join(Base, "cgi"),
+    ok = filelib:ensure_path(Dir),
+    Scripts =
+        [{"hello",
+          "printf '20 text/gemini\\r\\nhello, world\\n'\n"},
+         {"env",
+          "printf '20 text/plain\\r\\n%s|%s|%s|%s|%s|%s\\n' "
+          "\"$SERVER_NAME\" \"$SERVER_PORT\" \"$PATH_INFO\" "
+          "\"$QUERY_STRING\" \"$SCRIPT_NAME\" \"$REMOTE_USER\"\n"},
+         {"nostatus", "printf 'just a body\\n'\n"},
+         {"fail", "printf '20 text/gemini\\r\\npartial\\n'\nexit 3\n"},
+         {"flood", "exec dd if=/dev/zero bs=1048576 count=11 "
+                   "2>/dev/null\n"}],
+    [ begin
+          Path = filename:join(Dir, Name),
+          ok = file:write_file(Path, ["#!/bin/sh\n", Body]),
+          ok = file:change_mode(Path, 8#755)
+      end || {Name, Body} <- Scripts ],
+    Started = case application:ensure_all_started([erlexec, ppool]) of
+                  {ok, Apps} -> Apps;
+                  _ -> failed
+              end,
+    Up = Started =/= failed andalso catch blizanci_cgi:start() =:= ok,
+    {Base, Started, Up}.
+
+run_teardown({Base, Started, Up}) ->
+    case Up of
+        true -> blizanci_cgi:stop();
+        false -> ok
+    end,
+    undefined = whereis(blizanci_cgi),
+    ok = file:del_dir_r(Base),
+    false = filelib:is_file(Base),
+    case Started of
+        failed -> ok;
+        Apps -> [ ok = application:stop(A) || A <- lists:reverse(Apps) ]
+    end,
+    ok.
+
+run_cgi_test_() ->
+    {setup, fun run_setup/0, fun run_teardown/1, fun run_cgi_tests/1}.
+
+run_cgi_tests({_Base, _Started, false}) ->
+    [];
+run_cgi_tests({Base, _Started, true}) ->
+    T = fun(Fun) -> {timeout, 60, fun() -> Fun(Base) end} end,
+    [T(fun run_hello/1), T(fun run_env/1), T(fun run_remote_user/1),
+     T(fun run_nostatus/1), T(fun run_fail/1), T(fun run_flood/1)].
+
+% Run the script Name as the container (this process) would, and return
+% what the worker reports; then wait for the worker to be gone.
+run_script(Base, Name, Matches, ReqExtra) ->
+    Dir = filename:join(Base, "cgi"),
+    Cfg = #server_config{hostname = <<"example.org">>, port = 1965,
+                         routing = [], docroot = Dir},
+    Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
+    M = maps:merge(#{ <<"PATH">> => list_to_binary(Name) }, Matches),
+    {gateway_started, Worker} =
+        serve(M, test_request(ReqExtra), Cfg, Opts),
+    Ref = erlang:monitor(process, Worker),
+    Got = receive
+              {'$gen_cast', {gateway_result, R}} -> R
+          after 20000 -> no_result
+          end,
+    receive
+        {'DOWN', Ref, process, Worker, _} -> ok
+    after 20000 -> error(worker_still_running)
+    end,
+    receive {'$gen_cast', Extra} -> error({second_report, Extra})
+    after 0 -> ok
+    end,
+    Got.
+
+run_hello(Base) ->
+    ?assertEqual({gateway_output, <<"20 text/gemini\r\nhello, world\n">>},
+                 run_script(Base, "hello", #{}, #{})).
+
+run_env(Base) ->
+    Got = run_script(Base, "env", #{ <<"PATH_INFO">> => <<"/x/y">> },
+                     #{ query => <<"q=1">> }),
+    ?assertEqual({gateway_output,
+                  <<"20 text/plain\r\n"
+                    "example.org|1965|/x/y|q=1|/cgi-bin/env|\n">>}, Got).
+
+run_remote_user(Base) ->
+    #{peer := Peer} = blizanci_x509:test_pki(),
+    Got = run_script(Base, "env", #{}, #{ client_cert => {ok, Peer} }),
+    ?assertEqual({gateway_output,
+                  <<"20 text/plain\r\n"
+                    "example.org|1965||"
+                    "|/cgi-bin/env|alice\n">>}, Got).
+
+% The worker does not validate the output: a body without a status line
+% is reported as the output, verbatim.
+run_nostatus(Base) ->
+    ?assertEqual({gateway_output, <<"just a body\n">>},
+                 run_script(Base, "nostatus", #{}, #{})).
+
+% Non-zero exit: the partial output is discarded.
+run_fail(Base) ->
+    ?assertEqual({gateway_error, cgi_exec_error},
+                 run_script(Base, "fail", #{}, #{})).
+
+% 11 MiB of output is over the 10 MiB cap.
+run_flood(Base) ->
+    ?assertEqual({gateway_error, cgi_output_too_large},
+                 run_script(Base, "flood", #{}, #{})).
