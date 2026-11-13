@@ -6,4 +6,8 @@ A Gemini server.
 This documentation is largely for server internals. The authors do not really
 know how to use EDoc, so please bear with us.
 
+Dynamic content is produced by servlets; the contract a servlet module
+must meet is described in {@link blizanci_servlet}, with the process
+side in {@link blizanci_servlet_container}.
+
 @end

@@ -65,7 +65,7 @@ validate_options(Opts) ->
 cancel(Pid) when is_pid(Pid) ->
     ok.
 
-% Called by the servlet
+% Called by blizanci_servlet_container, in the connection process
 %
 -spec request(Matches, Req, ServerConfig, RouteOpts) -> Result
               when Matches      :: path_matches(),
