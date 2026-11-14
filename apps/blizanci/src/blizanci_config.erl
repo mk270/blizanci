@@ -1145,22 +1145,34 @@ test_tmp() ->
 
 % The project's own default table must not trigger the shadowing warning.
 default_table_no_shadow_warning_test_() ->
-    Warnings = fun(Table) ->
-                   Id = default_table_log_handler,
-                   ok = logger:add_handler(Id, blizanci_test_log_handler,
-                                           #{config =>
-                                             #{notify => self()}}),
-                   try {ok, _} = blizanci_router:prepare(
-                                   Table, #{},
-                                   #{ warn_old_format => false }),
-                       drain()
-                   after ok = logger:remove_handler(Id)
-                   end
-               end,
-    CGI = blizanci_x509:test_tmp_dir(),
-    [?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI, []))),
-     ?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI, [],
-                                              test_tmp())))].
+    {setup,
+     fun() -> blizanci_x509:test_tmp_dir() end,
+     fun(Dir) -> file:del_dir_r(Dir) end,
+     fun(CGI) ->
+         CA = blizanci_x509:test_write_pem(
+                CGI, "ca.pem",
+                [{'Certificate',
+                  maps:get(ca, blizanci_x509:test_pki()),
+                  not_encrypted}]),
+         {ok, Realms} = add_realm(realms(), <<"default">>, [CA]),
+         Warnings =
+             fun(Table) ->
+                 Id = default_table_log_handler,
+                 ok = logger:add_handler(Id, blizanci_test_log_handler,
+                                         #{config =>
+                                           #{notify => self()}}),
+                 try {ok, _} = blizanci_router:prepare(
+                                 Table, Realms,
+                                 #{ warn_old_format => false }),
+                     drain()
+                 after ok = logger:remove_handler(Id)
+                 end
+             end,
+         [?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI,
+                                                   [CA]))),
+          ?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI,
+                                                   [CA], test_tmp())))]
+     end}.
 
 drain() ->
     receive {logged, _, "routing: " ++ _ = T} -> [T | drain()];
