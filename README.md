@@ -235,6 +235,127 @@ directory in the Titan route, as above). Relative paths are allowed in
 `docroot` and `cgiroot`. Without the `/private` and `/restricted`
 routes, the `/` route serves those directories publicly.
 
+Several sites
+-------------
+
+By default blizanci serves one site, set by the single-site keys
+(`hostname`, `certfile`, `keyfile`, `docroot`, `cgiroot`, `ca_certs`,
+`titan_work_dir` and `routing`). To serve several hostnames from one
+port, each with its own certificate and routes, use the `sites` key
+instead:
+
+    {blizanci, [
+      {port, 1965},
+      {sites, [
+        {"a.example", [{certfile, "/srv/a/cert.pem"},
+                       {keyfile, "/srv/a/key.pem"},
+                       {routing, [...]}]},
+        {"b.example", [{certfile, "/srv/b/cert.pem"},
+                       {keyfile, "/srv/b/key.pem"},
+                       {routing, [...]}]}
+      ]}
+    ]}
+
+The rules:
+
+* A site is `{Hostname, Options}`, and the hostname is a string. A site
+  takes `certfile`, `keyfile` and `routing`, and nothing else; all
+  three are required. There is no default routing table and there are
+  no shorthand keys: `docroot`, `cgiroot`, `titan_work_dir` and
+  `ca_certs` are not accepted in a site. Every site spells out its own
+  routes, and each route names its own root in its options (see
+  Routing, above).
+* `port` and `servlets` stay global, as does `realms`. A route in a
+  site names realms defined in the global `realms` key. Since
+  `ca_certs` cannot be used with `sites`, there is no realm `default`
+  unless you define one in `realms`.
+* `sites` cannot be combined with any single-site key: `hostname`,
+  `certfile`, `keyfile`, `docroot`, `cgiroot`, `ca_certs`,
+  `titan_work_dir` or `routing`. If any of them is also set, start-up
+  is refused with one line listing the ones found; blizanci does not
+  guess which form was meant.
+* One hostname per site. TLS clients send the name they are connecting
+  to (SNI), and that picks the site and so its certificate and its
+  routes. A client that sends a name that is not a site, or sends no
+  name at all, is refused in the TLS handshake, before any request is
+  read. If the host in the request URL differs from the SNI name, the
+  client gets status 53 (host unrecognised).
+* Hostnames are folded to lower case, so "A.Example" and "a.example"
+  are the same name. The same name twice, after folding, is an error.
+* A site whose routes are all public does not ask clients for a
+  certificate; a site with a restricted or private route does.
+
+A worked example: `a.example` is a public static site, and `b.example`
+is a static site that also takes Titan uploads from clients holding a
+certificate signed by the CA in the realm `staff`:
+
+    {blizanci, [
+      {port, 1965},
+      {realms, [{<<"staff">>, ["/srv/ssl/staff-ca.pem"]}]},
+      {sites, [
+        {"a.example", [
+          {certfile, "/srv/a/cert.pem"},
+          {keyfile, "/srv/a/key.pem"},
+          {routing, [
+            {mount, gemini, "/", blizanci_static, public,
+             #{docroot => "/srv/a/gemini"}}
+          ]}]},
+        {"b.example", [
+          {certfile, "/srv/b/cert.pem"},
+          {keyfile, "/srv/b/key.pem"},
+          {routing, [
+            {mount, gemini, "/", blizanci_static, public,
+             #{docroot => "/srv/b/gemini"}},
+            {mount, titan, "/", blizanci_titan,
+             {private, {realm, <<"staff">>}},
+             #{docroot => "/srv/b/gemini",
+               work_dir => "/srv/b/titan-work"}}
+          ]}]}
+      ]}
+    ]}
+
+The warnings about old-format and shadowed routes (see Routing) are
+logged for each site's table, and in a multi-site configuration the
+line names the site, for example (one line in the log):
+
+    routing: site b.example: route 2 (gemini mount "/docs") is
+    shadowed by route 1 (gemini mount "/") and is never used
+
+Start-up errors
+---------------
+
+At start-up blizanci checks the whole configuration and reports every
+problem it finds in one pass, not just the first. Each problem is one
+error-level log line starting `blizanci:` and naming the site or the
+route concerned, so you can fix them all before the next attempt.
+Start-up then fails. For example (these would not all occur together,
+and each is one line in the log):
+
+    blizanci: site a.example: certificate /srv/a/cert.pem and private
+    key /srv/b/key.pem are not a matching pair
+    blizanci: site b.example: the required key certfile is missing
+    blizanci: port 0 is not a TCP port number (1 to 65535)
+    blizanci: the sites key cannot be combined with the single-site
+    keys hostname, certfile; use one or the other
+
+Other problems reported this way include a hostname that is not a
+string, a site configured twice, an unreadable or undecodable
+certificate or key file, a route that names an undefined realm or a
+servlet that is not in `servlets`, an invalid route, and a Titan work
+directory that is missing or on the wrong filesystem.
+
+For each site, the certificate and the private key must be a matching
+pair; otherwise every TLS handshake for that site would fail, so
+start-up is refused instead and the line names both files. If the key
+is of a type that cannot be compared with its certificate (DSA, for
+example), the pair is accepted with one warning (one line in the log):
+
+    site a.example: cannot verify that certificate /srv/a/cert.pem and
+    private key /srv/a/key.pem are a pair (unsupported key type DSA)
+
+Warnings never stop start-up. They are: a shadowed route, a table that
+uses the old route format, and a pair that could not be verified.
+
 Build
 -----
 

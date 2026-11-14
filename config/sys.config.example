@@ -45,6 +45,32 @@
    %%      work_dir => "/path/to/titan-work"}}
    %% ]},
 
+   %% Several sites on one port, instead of the single-site keys above.
+   %% The two forms cannot be mixed: with `sites', the keys hostname,
+   %% certfile, keyfile, docroot, cgiroot, ca_certs, titan_work_dir and
+   %% routing must all be left out (start-up is refused otherwise).
+   %% A site is {Hostname, Options}; Options takes certfile, keyfile and
+   %% routing only, and all three are required.  There is no default
+   %% routing table, so each site gives its own routes.  port,
+   %% servlets and realms stay global.  SNI picks the site.  See
+   %% README, Several sites.
+   %% {sites, [
+   %%   {"a.example", [
+   %%     {certfile, "/path/to/a/certificate.pem"},
+   %%     {keyfile, "/path/to/a/key.pem"},
+   %%     {routing, [
+   %%       {mount, gemini, "/", blizanci_static, public,
+   %%        #{docroot => "/path/to/a/public_gemini"}}
+   %%     ]}]},
+   %%   {"b.example", [
+   %%     {certfile, "/path/to/b/certificate.pem"},
+   %%     {keyfile, "/path/to/b/key.pem"},
+   %%     {routing, [
+   %%       {mount, gemini, "/", blizanci_static, public,
+   %%        #{docroot => "/path/to/b/public_gemini"}}
+   %%     ]}]}
+   %% ]},
+
    {port, 1965}
    ]},
   {kernel, [
