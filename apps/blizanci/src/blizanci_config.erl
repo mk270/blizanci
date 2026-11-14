@@ -49,11 +49,24 @@
 %%   <dt><code>{port, Port::integer()}</code></dt>
 %%   <dd>the port to listen on (defaults to 1965)</dd>
 %%   <dt><code>{routing, [Route]}</code></dt>
-%%   <dd>the routing table (for the format of which, currently,
-%%       see the source code). Each entry in the table has the form
-%%       {Scheme, Regexp, Module, AuthPolicy, Options}
-%%
-%%   </dd>
+%%   <dd>the routing table: an ordered list, first match wins, one
+%%       protocol per route. Each entry is
+%%       <code>{mount, Proto, Path, Module, Auth, Opts}</code> (whole
+%%       path segments; the servlet's PATH is the remainder after the
+%%       mount), <code>{regex, Proto, Re, Module, Auth, Opts}</code>
+%%       (anchored; needs a named group PATH), or the old
+%%       <code>{Proto, Regex, Module, Auth, Opts}</code>, translated with
+%%       its unanchored behaviour and one start-up warning. FULL_PATH is
+%%       the whole request path. See blizanci_router:prepare/3 and the
+%%       README, Routing. Without this key the default table is
+%%       mounts /cgi-bin and /, plus a Titan route if titan_work_dir is
+%%       set.</dd>
+%%   <dt><code>{titan_work_dir, WorkDir::string()}</code></dt>
+%%   <dd>opts in to the Titan route of the default routing table (ignored
+%%       if routing is set): an absolute path to an existing directory on
+%%       the docroot's filesystem. Titan has no default work directory.
+%%       The route requires a client certificate from the realm
+%%       <code>&lt;&lt;"default"&gt;&gt;</code>.</dd>
 %% </dl>
 %%
 %% Relative paths are allowed in all configuration items other than

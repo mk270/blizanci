@@ -97,9 +97,8 @@
 %% <code>port</code> and <code>path</code> (the request path as sent,
 %% before the decoding described above).</li>
 %% <li>ServerConfig, the server_config() record of the site serving the
-%% request: <code>hostname</code>, <code>port</code>,
-%% <code>routing</code> (its list of routes) and <code>docroot</code>
-%% (the site's, or <code>undefined</code>). blizanci_cgi takes the
+%% request: <code>hostname</code>, <code>port</code> and
+%% <code>routing</code> (its list of routes). blizanci_cgi takes the
 %% server name and port from it; blizanci_static and blizanci_titan
 %% ignore it.</li>
 %% <li>RouteOpts, the route's options map, merged with the defaults and

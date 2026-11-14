@@ -1,8 +1,51 @@
+%% Example sys.config.  Everything in the blizanci section is optional
+%% except as noted; the values shown are examples, not all defaults.
 [
   {blizanci, [
-   {certfile, "/home/mk270/Src/blizanci/ssl/certificate.pem"},
-   {keyfile, "/home/mk270/Src/blizanci/ssl/key.pem"},
-   {hostname, "your.fully.qualified.host.name"}
+   {certfile, "/path/to/blizanci/ssl/certificate.pem"},
+   {keyfile, "/path/to/blizanci/ssl/key.pem"},
+   {hostname, "your.fully.qualified.host.name"},
+
+   %% Where the documents and CGI scripts are (defaults shown).
+   {docroot, "./public_gemini"},
+   {cgiroot, "./cgi-bin"},
+
+   %% CA certificates for client certificates: shorthand for a realm
+   %% named <<"default">>, used by the Titan route below.
+   {ca_certs, ["/path/to/blizanci/ssl/cacert.pem"]},
+
+   %% Other realms, global to all sites: {Name :: binary(), [CAFile]}.
+   %% Do not define <<"default">> here if ca_certs is set.
+   %% {realms, [{<<"staff">>, ["/path/to/staff-ca1.pem",
+   %%                          "/path/to/staff-ca2.pem"]}]},
+
+   %% Opt in to Titan uploads in the default routing table.  There is
+   %% no default: an absolute path to an existing directory on the same
+   %% filesystem as docroot.  Ignored if routing is given.
+   %% {titan_work_dir, "/path/to/titan-work"},
+
+   %% An explicit routing table, replacing the default one, which is
+   %% /cgi-bin, then / (and Titan, if titan_work_dir is set).  First
+   %% match wins.  A mount matches whole path segments, and the servlet
+   %% gets the remainder as PATH, so each mount names its own root.
+   %% See README, Routing.
+   %% {routing, [
+   %%   {mount, gemini, "/cgi-bin", blizanci_cgi, public,
+   %%    #{cgiroot => "./cgi-bin"}},
+   %%   {mount, gemini, "/private", blizanci_static,
+   %%    {private, {realm, <<"default">>}},
+   %%    #{docroot => "./public_gemini/private"}},
+   %%   {mount, gemini, "/restricted", blizanci_static, restricted,
+   %%    #{docroot => "./public_gemini/restricted"}},
+   %%   {mount, gemini, "/", blizanci_static, public,
+   %%    #{docroot => "./public_gemini"}},
+   %%   {mount, titan, "/", blizanci_titan,
+   %%    {private, {realm, <<"default">>}},
+   %%    #{docroot => "./public_gemini",
+   %%      work_dir => "/path/to/titan-work"}}
+   %% ]},
+
+   {port, 1965}
    ]},
   {kernel, [
    {logger_level, debug},
