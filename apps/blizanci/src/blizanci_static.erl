@@ -21,7 +21,7 @@
 
 -type options() :: #{ bare_mimetype := binary(),
                       unknown_mimetype := binary(),
-                      docroot := string(),
+                      docroot := binary(),
                       index := string()
                     }.
 
@@ -47,7 +47,7 @@ validate_options(#{ docroot          := Docroot,
                     index            := Index,
                     bare_mimetype    := BareMimetype,
                     unknown_mimetype := UnknownMimetype })
-  when is_list(Docroot), is_list(Index), Index =/= "",
+  when is_binary(Docroot), is_list(Index), Index =/= "",
        is_binary(BareMimetype), is_binary(UnknownMimetype) ->
     case filelib:is_dir(filename:absname(Docroot)) of
         true -> ok;
@@ -101,7 +101,7 @@ serve(_, _, _, _) ->
 
 serve_file(Matches, Opts) ->
     #{ <<"PATH">> := Path } = Matches,
-    Docroot = ensure_list(maps:get(docroot, Opts)),
+    Docroot = maps:get(docroot, Opts),
     % hidden files are never served, except under a ".well-known"
     % directory at the top of the docroot
     case blizanci_path:resolve_request(Matches, Docroot,
@@ -135,14 +135,6 @@ serve_confined_file(Full, Path, Opts) ->
         _ ->
             {error_code, file_not_found}
     end.
-
-
--spec ensure_list(Input) -> Result
-              when Input  :: list()
-                           | binary(),
-                   Result :: list().
-ensure_list(X) when is_binary(X) -> binary_to_list(X);
-ensure_list(X) when is_list(X)   -> X.
 
 
 % Look up the MIME type for a given filename. If the filename doesn't contain
@@ -226,7 +218,7 @@ nonascii_teardown(Base) ->
     file:del_dir_r(Base).
 
 nonascii_tests(Base) ->
-    Docs = binary_to_list(filename:join(Base, <<"docs">>)),
+    Docs = filename:join(Base, <<"docs">>),
     Opts = maps:merge(default_options(), #{ docroot => Docs }),
     Request = fun(Path) ->
                   request(#{ <<"PATH">> => Path }, test_request(#{}),
@@ -253,7 +245,7 @@ hidden_files_test_() ->
 
 hidden_setup() ->
     Base = blizanci_test_support:tmp_path("static_hidden_test"),
-    Docs = filename:join(Base, "docs"),
+    Docs = filename:join(Base, <<"docs">>),
     [ begin
           Path = filename:join(Docs, Rel),
           ok = filelib:ensure_path(filename:dirname(Path)),
@@ -268,7 +260,7 @@ hidden_teardown(Base) ->
     file:del_dir_r(Base).
 
 hidden_tests(Base) ->
-    Docs = filename:join(Base, "docs"),
+    Docs = filename:join(Base, <<"docs">>),
     Opts = maps:merge(default_options(), #{ docroot => Docs }),
     Request = fun(Path) ->
                   request(#{ <<"PATH">> => Path }, test_request(#{}),
@@ -290,7 +282,7 @@ hidden_tests(Base) ->
 redirect_under_mount_test_() ->
     {setup, fun hidden_setup/0, fun hidden_teardown/1,
      fun(Base) ->
-         Docs = filename:join(Base, "docs"),
+         Docs = filename:join(Base, <<"docs">>),
          Opts = maps:merge(default_options(), #{ docroot => Docs }),
          Request = fun(Matches) ->
                        request(Matches, test_request(#{}),
@@ -313,12 +305,12 @@ redirect_under_mount_test_() ->
 
 %% default_options/0 plus a docroot is a complete, valid map.
 default_options_valid_test() ->
-    Opts = maps:merge(default_options(), #{ docroot => "." }),
+    Opts = maps:merge(default_options(), #{ docroot => <<".">> }),
     ?assertEqual(ok, validate_options(Opts)).
 
 %% A map lacking any one of the four required keys is refused.
 missing_option_refused_test_() ->
-    Full = maps:merge(default_options(), #{ docroot => "." }),
+    Full = maps:merge(default_options(), #{ docroot => <<".">> }),
     [ ?_assertMatch({error, {invalid_options, _}},
                     validate_options(maps:remove(Key, Full)))
       || Key <- [docroot, index, bare_mimetype, unknown_mimetype] ].

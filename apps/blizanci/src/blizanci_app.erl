@@ -42,6 +42,7 @@ stop(_State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -include_lib("eunit/include/eunit.hrl").
+-include("blizanci_types.hrl").
 
 -define(ENV_KEYS, [certfile, keyfile, hostname, port, servlets, realms,
                    routing, docroot, cgiroot, sites, ca_certs,
@@ -378,6 +379,53 @@ two_sites_start_test() ->
                   || H <- [<<"a.example">>, <<"b.example">>] ],
                 ?assertEqual(not_found,
                              blizanci_conf_serv:find_site(<<"c.example">>))
+            end)
+      end).
+
+%% The path options of a site's routes are converted to binaries when
+%% its routes are built, as for the single site; one that is not plain
+%% ASCII is refused, naming the site, the route and the option.
+sites_path_options_test_() ->
+    {timeout, 120, fun sites_path_options_body/0}.
+
+sites_path_options_body() ->
+    with_pairs(
+      fun(A, B) ->
+          Route = fun(Opts) ->
+                      [{mount, gemini, "/", blizanci_test_stub, public,
+                        Opts}]
+                  end,
+          Site = fun(Pair, Opts) ->
+                     [{certfile, element(1, Pair)},
+                      {keyfile, element(2, Pair)},
+                      {routing, Route(Opts)}]
+                 end,
+          with_app_env(
+            sites_env([{"a.example",
+                        Site(A, #{ docroot => "some/docs",
+                                   cgiroot => <<"/srv/cgi">>,
+                                   work_dir => "/srv/work" })}]),
+            fun() ->
+                ?assertMatch({ok, _},
+                             application:ensure_all_started(blizanci)),
+                {ok, S} = blizanci_conf_serv:find_site(<<"a.example">>),
+                ?assertMatch([#route{options = #{
+                                       docroot := <<"some/docs">>,
+                                       cgiroot := <<"/srv/cgi">>,
+                                       work_dir := <<"/srv/work">> }}],
+                             blizanci_config:routes(S))
+            end),
+          with_app_env(
+            sites_env([{"a.example", Site(A, #{ docroot => "ok" })},
+                       {"b.example",
+                        Site(B, #{ cgiroot => [$c, 233] })}]),
+            fun() ->
+                ?assertEqual(
+                   ["blizanci: site b.example: invalid routing table: "
+                    "route 1 (mount route): the cgiroot option must be a "
+                    "plain ASCII file name (printable ASCII characters "
+                    "only), not [99,233]"],
+                   start_errors())
             end)
       end).
 

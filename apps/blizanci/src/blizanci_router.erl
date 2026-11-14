@@ -402,11 +402,9 @@ first_overlap([{Kind, Dir, Root} | Rest]) ->
 
 
 -spec canonical_dir(Dir) -> Result
-              when Dir    :: binary() | string(),
-                   Result :: {'ok', string()} | {'error', atom()}.
+              when Dir    :: binary(),
+                   Result :: {'ok', binary()} | {'error', atom()}.
 canonical_dir(Dir) when is_binary(Dir) ->
-    canonical_dir(unicode:characters_to_list(Dir));
-canonical_dir(Dir) when is_list(Dir) ->
     blizanci_path:fix_path(filename:absname(Dir)).
 
 
@@ -516,7 +514,7 @@ finish_route(Proto, Selector, Pattern, Module, AuthPolicy, Opts, Realms) ->
     % here, once, so every caller (production config, tests, any
     % future third-party caller) gets the same guarantee -- callers
     % are not responsible for remembering to merge before calling in.
-    FullOpts = maps:merge(Module:default_options(), Opts),
+    FullOpts = path_options(maps:merge(Module:default_options(), Opts)),
     ok = valid_module_opts(Module, FullOpts),
     ok = valid_new_format_authz(Selector, AuthPolicy),
     {ok, Authz} = valid_authz(AuthPolicy, Realms, Pattern, Module),
@@ -529,6 +527,62 @@ finish_route(Proto, Selector, Pattern, Module, AuthPolicy, Opts, Realms) ->
            module=Module,
            auth_policy=Authz,
            options=FullOpts}.
+
+
+% The options that name directories are file names, and file names are
+% bytes end to end: here, once, when the route is built, each is
+% converted to a binary (the operator may write a string or a binary), and
+% from here on nothing downstream sees a string.  Only printable ASCII is
+% accepted, so that no UTF-8, look-alike or invisible character can get
+% into a root.  (cgiprefix is a URL prefix, not a file name, and is left
+% alone.)  A relative path is kept as given.
+-define(PATH_OPTIONS, [docroot, cgiroot, work_dir]).
+
+-spec path_options(Opts) -> Opts
+              when Opts :: map().
+path_options(Opts) ->
+    lists:foldl(fun path_option/2, Opts, ?PATH_OPTIONS).
+
+
+-spec path_option(Key, Opts) -> Opts
+              when Key  :: atom(),
+                   Opts :: map().
+path_option(Key, Opts) ->
+    case maps:find(Key, Opts) of
+        error -> Opts;
+        {ok, Value} -> Opts#{ Key := plain_ascii(Key, Value) }
+    end.
+
+
+-spec plain_ascii(Key, Value) -> Binary
+              when Key    :: atom(),
+                   Value  :: term(),
+                   Binary :: binary().
+plain_ascii(Key, Value) ->
+    case plain_bytes(Value) of
+        {ok, Bytes} -> Bytes;
+        error -> throw({invalid_path_option, Key, Value})
+    end.
+
+
+% The bytes of a binary or string, if all are printable ASCII.
+-spec plain_bytes(Value) -> Result
+              when Value  :: term(),
+                   Result :: {'ok', binary()} | 'error'.
+plain_bytes(Value) when is_binary(Value) ->
+    case [ B || <<B>> <= Value, B < 32 orelse B > 126 ] of
+        [] -> {ok, Value};
+        _ -> error
+    end;
+plain_bytes(Value) when is_list(Value) ->
+    try lists:all(fun (C) -> is_integer(C) andalso C >= 32
+                                 andalso C =< 126 end, Value) of
+        true -> {ok, list_to_binary(Value)};
+        false -> error
+    catch error:_ -> error % an improper list
+    end;
+plain_bytes(_) ->
+    error.
 
 
 % Check a mount path (see route_info()) and return it as a prefix of
@@ -1386,3 +1440,96 @@ old_format_warning_test_() ->
                                                 blizanci_static, public,
                                                 ?SOPTS)
                                 end))].
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests: the path-valued options are binaries once a route is built.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-define(PATH_KEYS, [docroot, cgiroot, work_dir]).
+
+% A stub servlet's route in each of the three formats, with Opts.
+formats(Opts) ->
+    S = blizanci_test_stub,
+    [{mount, {mount, gemini, "/m", S, public, Opts}},
+     {regex, {regex, gemini, "(?<PATH>m.*)", S, public, Opts}},
+     {tuple, {gemini, "(?<PATH>m.*)", S, public, Opts}}].
+
+converted(Info) ->
+    {ok, [#route{options = O}]} = prepare([Info]),
+    O.
+
+path_options_converted_test_() ->
+    Opts = fun(V) -> #{ docroot => V, cgiroot => V, work_dir => V,
+                        cgiprefix => "/cgi-bin/" } end,
+    Expect = #{ docroot => <<"/srv/docs">>, cgiroot => <<"/srv/docs">>,
+                work_dir => <<"/srv/docs">>, cgiprefix => "/cgi-bin/" },
+    Relative = #{ docroot => "rel/dir", cgiroot => <<"./c d">>,
+                  work_dir => "" },
+    [ ?_assertEqual(Expect, converted(Info))
+      || V <- ["/srv/docs", <<"/srv/docs">>],
+         {_, Info} <- formats(Opts(V)) ]
+    ++
+    [% relative paths are kept as given (a space is printable ASCII)
+     ?_assertEqual(#{ docroot => <<"rel/dir">>, cgiroot => <<"./c d">>,
+                      work_dir => <<>> },
+                   converted(Info))
+     || {_, Info} <- formats(Relative) ]
+    ++
+    [% build_route/2 and build_route/5 convert as well
+     ?_assertMatch({ok, #route{options = #{ docroot := <<"d">> }}},
+                   build_route({mount, gemini, "/", blizanci_test_stub,
+                                public, #{ docroot => "d" }}, #{})),
+     ?_assertMatch({ok, #route{options = #{ docroot := <<"d">> }}},
+                   build_route(gemini, "(?<PATH>x)", blizanci_test_stub,
+                               public, #{ docroot => "d" })),
+     % the options a servlet's validate_options/1 sees are converted
+     ?_test(begin
+                {ok, _} = prepare([{mount, gemini, "/", blizanci_test_stub,
+                                    public,
+                                    #{ docroot => "d", cgiroot => "c",
+                                       report_to => self() }}]),
+                receive
+                    {validate_options, O} ->
+                        ?assertMatch(#{ docroot := <<"d">>,
+                                        cgiroot := <<"c">> }, O)
+                after 1000 -> error(not_validated)
+                end
+            end),
+     ?_assert(is_binary(maps:get(docroot,
+                                 blizanci_titan:default_options())))].
+
+path_options_refused_test_() ->
+    % strings with a code point above 126, above 255, a control
+    % character, DEL; binaries with a byte above 126, NUL, a newline;
+    % and things that are not file names at all
+    Values = [[$a, 233], [$a, 8364], "a\nb", "a\tb", [127], [0],
+              <<"a", 233>>, <<"caf", 195, 169>>, <<"a", 0>>, <<"a\nb">>,
+              <<127>>, not_a_string, 42, [a, b], ["a", "b"], {x}, #{},
+              improper()],
+    [ ?_assertEqual({error, {bad_route, 2, Kind,
+                             {invalid_path_option, Key, V}}},
+                    prepare([mount("/ok"),
+                             hd([ I || {K, I} <- formats(#{ Key => V }),
+                                       K =:= Kind ])]))
+      || Key <- ?PATH_KEYS, V <- Values, Kind <- [mount, regex, tuple] ]
+    ++
+    [% the message is one line naming the route's position and the option
+     ?_assertEqual(
+        "invalid routing table: route 2 (mount route): the docroot "
+        "option must be a plain ASCII file name (printable ASCII "
+        "characters only), not [100,233]",
+        blizanci_config:describe_error(
+          {invalid_routing,
+           element(2, prepare([mount("/ok"),
+                               element(2, hd(formats(
+                                               #{ docroot =>
+                                                  [$d, 233] })))])) })),
+     % build_route reports it without a position
+     ?_assertEqual({error, {invalid_path_option, cgiroot, [$a, 233]}},
+                   build_route({mount, gemini, "/", blizanci_test_stub,
+                                public, #{ cgiroot => [$a, 233] }}, #{}))].
+
+% An improper list (built so that dialyzer does not object).
+improper() ->
+    lists:foldl(fun(X, Acc) -> [X | Acc] end, tail, [$a]).

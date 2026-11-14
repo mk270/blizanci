@@ -32,12 +32,12 @@
          terminate/2, code_change/3]).
 
 -type options() :: #{
-                     docroot := string(),
-                     work_dir := string() | binary()
+                     docroot := binary(),
+                     work_dir := binary()
                     }.
 
 -type io_device() :: pid() | {'file_descriptor', atom(), any()}.
--type filepath() :: binary() | string().
+-type filepath() :: binary().
 
 -define(QUEUE, ?MODULE).
 
@@ -102,7 +102,7 @@
               when Result :: map().
 default_options() ->
     #{
-      docroot => "docroot"
+      docroot => <<"docroot">>
      }.
 
 
@@ -110,8 +110,7 @@ default_options() ->
               when Opts   :: map(),
                    Result :: 'ok' | {'error', term()}.
 validate_options(#{ docroot := Docroot, work_dir := WorkDir })
-  when is_binary(Docroot) orelse is_list(Docroot),
-       is_binary(WorkDir) orelse is_list(WorkDir) ->
+  when is_binary(Docroot), is_binary(WorkDir) ->
     case {filelib:is_dir(filename:absname(Docroot)),
           filename:pathtype(WorkDir)} of
         {false, _} -> {error, {docroot_not_a_directory, Docroot}};
@@ -201,8 +200,8 @@ serve(Matches, Req, _ServerConfig, RouteOpts) ->
     #{ work_dir := WorkDirBase,
        docroot := RootDirBase } = RouteOpts,
 
-    WorkDir = filename:absname(ensure_binary(WorkDirBase)),
-    RootDir = filename:absname(ensure_binary(RootDirBase)),
+    WorkDir = filename:absname(WorkDirBase),
+    RootDir = filename:absname(RootDirBase),
     serve_titan_request(Fragment, Rest, WorkDir, RootDir).
 
 
@@ -362,14 +361,6 @@ handle_all_in_one_request(#titan_job{request=TitanReq,
 
 enqueue_titan_job(Job) ->
     blizanci_pool:enqueue(?QUEUE, Job).
-
-
--spec ensure_binary(Input) -> Result
-              when Input  :: list()
-                           | binary(),
-                   Result :: binary().
-ensure_binary(X) when is_list(X) -> binary:list_to_bin(X);
-ensure_binary(X) when is_binary(X) -> X.
 
 
 -spec handle_client_data(Pid, Data) -> Result
@@ -897,7 +888,8 @@ failed_tests({Base, Other}) ->
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
                          routing = []},
     Serve = fun(Work, Fragment, Rest) ->
-                Opts = #{ docroot => Root, work_dir => list_to_binary(Work) },
+                Opts = #{ docroot => list_to_binary(Root),
+                          work_dir => list_to_binary(Work) },
                 serve(#{ <<"PATH">> => Fragment },
                       test_request(#{ rest_of_input => Rest }), Cfg, Opts)
             end,
@@ -1019,7 +1011,8 @@ delete_teardown(Base) ->
 
 delete_tests(Base) ->
     Root = filename:join(Base, "root"),
-    Opts = #{ docroot => Root, work_dir => list_to_binary(Base ++ "/work") },
+    Opts = #{ docroot => list_to_binary(Root),
+              work_dir => list_to_binary(Base ++ "/work") },
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
                          routing = []},
     Serve = fun(Fragment, Rest) ->
@@ -1081,7 +1074,8 @@ size_cap_test_() ->
      fun(Base) ->
          Root = filename:join(Base, "root"),
          Work = filename:join(Base, "work"),
-         Opts = #{ docroot => Root, work_dir => list_to_binary(Work) },
+         Opts = #{ docroot => list_to_binary(Root),
+                   work_dir => list_to_binary(Work) },
          Cfg = #server_config{hostname = <<"h">>, port = 1965,
                               routing = []},
          Big = list_to_binary("big.txt;size=" ++
@@ -1110,7 +1104,7 @@ excess_data_test_() ->
 excess_tests(Base) ->
     Root = filename:join(Base, "root"),
     Work = list_to_binary(filename:join(Base, "work")),
-    Opts = #{ docroot => Root, work_dir => Work },
+    Opts = #{ docroot => list_to_binary(Root), work_dir => Work },
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
                          routing = []},
     Serve = fun(Fragment, Rest) ->
@@ -1183,7 +1177,7 @@ hidden_files_test_() ->
 hidden_tests(Base) ->
     Root = filename:join(Base, "root"),
     Work = list_to_binary(filename:join(Base, "work")),
-    Opts = #{ docroot => Root, work_dir => Work },
+    Opts = #{ docroot => list_to_binary(Root), work_dir => Work },
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
                          routing = []},
     Serve = fun(Fragment, Rest) ->
