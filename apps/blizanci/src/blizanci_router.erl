@@ -4,20 +4,51 @@
 
 -module(blizanci_router).
 
--export([prepare/1, prepare/2, build_route/5, build_route/6, check_servlet/1,
-         check_upload_dirs/1]).
+-export([prepare/1, prepare/2, prepare/3, build_route/2, build_route/5,
+         build_route/6, check_servlet/1, check_upload_dirs/1]).
 -export([route/4]).
 
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 
--type route_info() :: {Proto      :: atom(),
+%% A route as configured.  The old format, {Proto, Regex, Module, Auth,
+%% Opts}, is translated (see below); the new one is a tagged tuple,
+%% {mount, Proto, Path, Module, Auth, Opts} or {regex, Proto, Re, Module,
+%% Auth, Opts}.
+%%
+%% A mount Path must be a non-empty string or binary (UTF-8) that starts
+%% with "/".  Split on "/", it may have no empty segment (so no "//"),
+%% except that one trailing "/" is allowed and ignored, no "." or ".."
+%% segment and no control character.  "/" is the whole site.  A mount
+%% matches whole path segments only: "/docs" and "/docs/" are the same
+%% and match "/docs", "/docs/" and "/docs/a.gmi", but not "/docsx".  The
+%% servlet's PATH is what follows the mount, without a leading slash
+%% (empty for "/docs" itself); FULL_PATH is the whole request path.
+%% Request paths here are the decoded ones, without the leading slash.
+%%
+%% A regex route's Re must match the WHOLE request path (it is anchored
+%% by wrapping it in \A(?:...)\z, so a trailing comment in (?x) mode
+%% will not compile), and must have a named group PATH and none called
+%% FULL_PATH.  Other named groups pass through to the servlet.
+%%
+%% An old-format tuple behaves exactly as before: its regex is searched
+%% for, not anchored, in the path, and must have a PATH group.  FULL_PATH
+%% is added to its Matches unless its regex has a group of that name.
+-type route_info() :: {'mount', Proto :: atom(), Path :: string() | binary(),
+                       Module :: module(), Auth :: authorisation_config(),
+                       Opts :: map()}
+                    | {'regex', Proto :: atom(), Re :: string() | binary(),
+                       Module :: module(), Auth :: authorisation_config(),
+                       Opts :: map()}
+                    | {Proto      :: atom(),
                        Regex      :: string() | binary(),
                        Module     :: module(),
                        AuthPolicy :: authorisation_config(),
                        Opts       :: map()
                       }.
+
+-type prepare_opts() :: #{ warn_old_format => boolean() }.
 
 %% @doc
 %% Check that a routing table entry is valid.
@@ -40,15 +71,65 @@ prepare(RouteInfo) ->
                    Result    :: {'ok', [route()]} |
                                 {'error', term()}.
 prepare(RouteInfo, Realms) ->
+    prepare(RouteInfo, Realms, #{}).
+
+
+%% @doc
+%% As prepare/2, with options.  Routes are one ordered list, first match
+%% wins.  An error names the route: {bad_route, Index, Kind, Reason},
+%% where Index is the 1-based position in the list, Kind is mount, regex,
+%% tuple (the old format) or unknown, and Reason says what is wrong.
+%%
+%% Old-format routes are translated, not refused.  If there are any,
+%% one warning is logged saying how many, unless the option
+%% warn_old_format is false (the default routing table, which is the
+%% project's own, uses that; default true).
+%% @end
+-spec prepare(RouteInfo, Realms, Opts) -> Result
+              when RouteInfo :: [route_info()],
+                   Realms    :: realm_table(),
+                   Opts      :: prepare_opts(),
+                   Result    :: {'ok', [route()]} |
+                                {'error', term()}.
+prepare(RouteInfo, Realms, Opts) ->
     try make_routes(RouteInfo, Realms) of
         Routes ->
             case check_upload_dirs(Routes) of
-                ok -> {ok, Routes};
+                ok ->
+                    warn_old_format(RouteInfo, Opts),
+                    {ok, Routes};
                 {error, _} = Error -> Error
             end
     catch
         Err -> {error, Err}
     end.
+
+
+-spec warn_old_format(RouteInfo, Opts) -> ok
+              when RouteInfo :: [route_info()],
+                   Opts      :: prepare_opts().
+warn_old_format(RouteInfo, Opts) ->
+    case maps:get(warn_old_format, Opts, true) of
+        false -> ok;
+        true ->
+            case length([ R || R <- RouteInfo, route_kind(R) =:= tuple ]) of
+                0 -> ok;
+                N -> logger:warning(
+                       "routing: ~b routes use the old tuple format "
+                       "{Proto, Regex, Module, Auth, Opts}; translated, "
+                       "behaviour unchanged (see README, Routing)", [N])
+            end
+    end.
+
+
+% What kind of route a configured entry is, going by its shape.
+-spec route_kind(RouteInfo) -> Kind
+              when RouteInfo :: term(),
+                   Kind      :: 'mount' | 'regex' | 'tuple' | 'unknown'.
+route_kind(R) when tuple_size(R) =:= 6, element(1, R) =:= mount -> mount;
+route_kind(R) when tuple_size(R) =:= 6, element(1, R) =:= regex -> regex;
+route_kind(R) when tuple_size(R) =:= 5 -> tuple;
+route_kind(_) -> unknown.
 
 
 %% @doc
@@ -109,7 +190,26 @@ canonical_dir(Dir) when is_list(Dir) ->
                    Realms    :: realm_table(),
                    Routes    :: [route()].
 make_routes(RouteInfo, Realms) ->
-    [ make_route(R, Realms) || R <- RouteInfo ].
+    [ try make_route(R, Realms)
+      catch throw:Why -> throw({bad_route, I, route_kind(R), Why}) end
+      || {I, R} <- lists:enumerate(RouteInfo) ].
+
+
+%% @doc
+%% Build and validate a single route of either format, given as a tuple
+%% (see prepare/3), resolving realms against a realm table.  An old-format
+%% tuple is translated silently.
+%% @end
+-spec build_route(RouteInfo, Realms) -> Result
+              when RouteInfo :: route_info(),
+                   Realms    :: realm_table(),
+                   Result    :: {'ok', route()} | {'error', term()}.
+build_route(RouteInfo, Realms) ->
+    try make_route(RouteInfo, Realms) of
+        Route -> {ok, Route}
+    catch
+        throw:Reason -> {error, Reason}
+    end.
 
 
 %% @doc
@@ -152,9 +252,39 @@ build_route(Proto, Regex, Module, AuthPolicy, Opts, Realms) ->
                    Realms    :: realm_table(),
                    Route     :: route().
 
-make_route({Proto, Regex, Module, AuthPolicy, Opts}, Realms) ->
+make_route({mount, Proto, Path, Module, AuthPolicy, Opts}, Realms) ->
     ok = valid_proto(Proto),
-    RE = compile_regex(Regex),
+    Prefix = parse_mount(Path),
+    finish_route(Proto, {mount, Prefix}, Path, Module, AuthPolicy, Opts,
+                 Realms);
+make_route({regex, Proto, Re, Module, AuthPolicy, Opts}, Realms) ->
+    ok = valid_proto(Proto),
+    RE = compile_regex(anchor(Re), Re),
+    ok = no_full_path_group(Re, RE),
+    finish_route(Proto, {regex, RE}, Re, Module, AuthPolicy, Opts, Realms);
+make_route({Proto, Regex, Module, AuthPolicy, Opts}, Realms) ->
+    % the old format: translated, behaving as it always did
+    ok = valid_proto(Proto),
+    RE = compile_regex(Regex, Regex),
+    finish_route(Proto, {legacy, RE}, Regex, Module, AuthPolicy, Opts,
+                 Realms);
+make_route(_, _) ->
+    throw(invalid_route).
+
+
+% The checks every kind of route shares, and the route itself.  What
+% names the route in errors (Pattern) is its mount path or regex.
+-spec finish_route(Proto, Selector, Pattern, Module, AuthPolicy, Opts,
+                   Realms) -> Route
+              when Proto      :: atom(),
+                   Selector   :: selector(),
+                   Pattern    :: string() | binary(),
+                   Module     :: term(),
+                   AuthPolicy :: term(),
+                   Opts       :: term(),
+                   Realms     :: realm_table(),
+                   Route      :: route().
+finish_route(Proto, Selector, Pattern, Module, AuthPolicy, Opts, Realms) ->
     ok = valid_servlet(Module),
     ok = valid_route_opts(Opts),
     % The route's own options are merged with the module's defaults
@@ -163,15 +293,78 @@ make_route({Proto, Regex, Module, AuthPolicy, Opts}, Realms) ->
     % are not responsible for remembering to merge before calling in.
     FullOpts = maps:merge(Module:default_options(), Opts),
     ok = valid_module_opts(Module, FullOpts),
-    {ok, Authz} = valid_authz(AuthPolicy, Realms, Regex, Module),
-    ok = valid_path_group(Regex, RE, Module),
+    {ok, Authz} = valid_authz(AuthPolicy, Realms, Pattern, Module),
+    case Selector of
+        {mount, _} -> ok;
+        {_, RE} -> ok = valid_path_group(Pattern, RE, Module)
+    end,
     #route{proto=Proto,
-           pattern=RE,
+           selector=Selector,
            module=Module,
            auth_policy=Authz,
-           options=FullOpts};
-make_route(_, _) ->
-    throw(invalid_route).
+           options=FullOpts}.
+
+
+% Check a mount path (see route_info()) and return it as a prefix of
+% whole segments: no leading or trailing slash, <<>> for "/".
+-spec parse_mount(Path) -> Prefix
+              when Path   :: term(),
+                   Prefix :: binary().
+parse_mount(Path) ->
+    Bin = try unicode:characters_to_binary(Path) of
+              B when is_binary(B) -> B;
+              _ -> throw({invalid_mount, Path, not_utf8})
+          catch
+              error:badarg -> throw({invalid_mount, Path, not_a_string})
+          end,
+    case Bin of
+        <<>> -> throw({invalid_mount, Path, empty});
+        <<"/", _/binary>> -> ok;
+        _ -> throw({invalid_mount, Path, not_absolute})
+    end,
+    [<<>> | Segs0] = binary:split(Bin, <<"/">>, [global]),
+    Segs = case lists:reverse(Segs0) of
+               [<<>> | Rest] -> lists:reverse(Rest);
+               _ -> Segs0
+           end,
+    lists:foreach(fun(S) -> valid_segment(Path, S) end, Segs),
+    iolist_to_binary(lists:join(<<"/">>, Segs)).
+
+
+-spec valid_segment(Path, Segment) -> ok
+              when Path    :: term(),
+                   Segment :: binary().
+valid_segment(Path, <<>>) ->
+    throw({invalid_mount, Path, empty_segment});
+valid_segment(Path, S) when S =:= <<".">>; S =:= <<"..">> ->
+    throw({invalid_mount, Path, dot_segment});
+valid_segment(Path, S) ->
+    case [ C || <<C>> <= S, C < 32 orelse C =:= 127 ] of
+        [] -> ok;
+        _ -> throw({invalid_mount, Path, control_character})
+    end.
+
+
+% Make a regex match only the whole path.  Group numbering is
+% unchanged, as the wrapper's group does not capture.
+-spec anchor(Re) -> Anchored
+              when Re       :: term(),
+                   Anchored :: term().
+anchor(Re) when is_binary(Re) -> <<"\\A(?:", Re/binary, ")\\z">>;
+anchor(Re) when is_list(Re) -> "\\A(?:" ++ Re ++ ")\\z";
+anchor(Re) -> Re.
+
+
+-spec no_full_path_group(Re, RE) -> Result
+              when Re     :: string() | binary(),
+                   RE     :: mp(),
+                   Result :: 'ok'.
+no_full_path_group(Re, RE) ->
+    {namelist, Names} = re:inspect(RE, namelist),
+    case lists:member(<<"FULL_PATH">>, Names) of
+        false -> ok;
+        true -> throw({reserved_group, Re, <<"FULL_PATH">>})
+    end.
 
 
 -spec valid_authz(AuthPolicy, Realms, Regex, Module) -> Result
@@ -211,11 +404,13 @@ valid_path_group(Regex, RE, Module) ->
     end.
 
 
--spec compile_regex(Regex) -> Result
-              when Regex  :: term(),
-                   Result :: mp().
-compile_regex(Regex) ->
-    try re:compile(Regex) of
+% Compile what to compile; Regex is what the operator wrote, for errors.
+-spec compile_regex(ToCompile, Regex) -> Result
+              when ToCompile :: term(),
+                   Regex     :: term(),
+                   Result    :: mp().
+compile_regex(ToCompile, Regex) ->
+    try re:compile(ToCompile) of
         {ok, RE} -> RE;
         {error, Why} -> throw({invalid_regex, Regex, Why})
     catch
@@ -362,15 +557,60 @@ try_route(Path, Request, Config, [Route|Tail]) ->
                    Route  :: route(),
                    Result :: match() | 'nomatch'.
 
-route_match(Path, #route{pattern=Regex,
+route_match(Path, #route{selector=Selector,
                          module=Module,
                          auth_policy=AuthPolicy,
                          options=RouteOpts}) ->
+    case select(Selector, Path) of
+        {match, Matches} ->
+            {match, Matches, Module, AuthPolicy, RouteOpts};
+        nomatch -> nomatch
+    end.
+
+
+% Match the path against the route's selector, and give the servlet's
+% Matches.  Every route gets FULL_PATH, the path as it was given to the
+% router; an old-format route's own group of that name takes precedence,
+% so it sees nothing different from before.
+-spec select(Selector, Path) -> Result
+              when Selector :: selector(),
+                   Path     :: binary(),
+                   Result   :: {'match', path_matches()} | 'nomatch'.
+select({mount, <<>>}, Path) ->
+    {match, #{ <<"PATH">> => Path, <<"FULL_PATH">> => Path }};
+select({mount, Prefix}, Path) ->
+    N = byte_size(Prefix),
+    case Path of
+        Prefix ->
+            {match, #{ <<"PATH">> => <<>>, <<"FULL_PATH">> => Path }};
+        <<Prefix:N/binary, "/", Rest/binary>> ->
+            {match, #{ <<"PATH">> => Rest, <<"FULL_PATH">> => Path }};
+        _ -> nomatch
+    end;
+select({regex, Regex}, Path) ->
+    case run_regex(Regex, Path) of
+        {match, Matches} ->
+            {match, Matches#{ <<"FULL_PATH">> => Path }};
+        nomatch -> nomatch
+    end;
+select({legacy, Regex}, Path) ->
+    case run_regex(Regex, Path) of
+        {match, Matches} ->
+            {match, maps:merge(#{ <<"FULL_PATH">> => Path }, Matches)};
+        nomatch -> nomatch
+    end.
+
+
+% See the documentation for re:inspect/2 for what Matches represents and
+% its format.
+-spec run_regex(Regex, Path) -> Result
+              when Regex  :: mp(),
+                   Path   :: binary(),
+                   Result :: {'match', path_matches()} | 'nomatch'.
+run_regex(Regex, Path) ->
     {namelist, Names} = re:inspect(Regex, namelist),
     case re:run(Path, Regex, [{capture, all_names, binary}]) of
-        {match, M} ->
-            Matches = maps:from_list(lists:zip(Names, M)),
-            {match, Matches, Module, AuthPolicy, RouteOpts};
+        {match, M} -> {match, maps:from_list(lists:zip(Names, M))};
         _ -> nomatch
     end.
 
@@ -440,7 +680,8 @@ path_group_test_() ->
      ?_assertMatch({error, {route_without_path_group, "(?<path>.*)", _}},
                    Build("(?<path>.*)")),
      % the whole table is refused if any one route is bad
-     ?_assertMatch({error, {route_without_path_group, "bad", _}},
+     ?_assertMatch({error, {bad_route, 2, tuple,
+                            {route_without_path_group, "bad", _}}},
                    prepare([{gemini, ?RX, blizanci_static, public, Opts},
                             {gemini, "bad", blizanci_static, public,
                              Opts}]))].
@@ -499,3 +740,313 @@ upload_tests(Base) ->
                             {titan, <<"(?<PATH>t)">>, blizanci_titan, public,
                              #{ docroot => D("cgi"),
                                 work_dir => D("work") }}]))].
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Tests: route formats, matching, translation.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-define(SOPTS, #{ docroot => "test-docroot" }).
+
+mount(Path) -> {mount, gemini, Path, blizanci_static, public, ?SOPTS}.
+regex(Re) -> {regex, gemini, Re, blizanci_static, public, ?SOPTS}.
+old(Re) -> {gemini, Re, blizanci_static, public, ?SOPTS}.
+
+% Build one route, which must be valid
+built(Spec) ->
+    {ok, R} = build_route(Spec, #{}),
+    R.
+
+% What a route says of a path: the Matches, or nomatch
+matches(Spec, Path) ->
+    case route_match(Path, built(Spec)) of
+        {match, M, _, _, _} -> M;
+        nomatch -> nomatch
+    end.
+
+mount_matching_test_() ->
+    M = fun(Mount, Path) -> matches(mount(Mount), Path) end,
+    Hit = fun(Path, Rest) ->
+              #{ <<"PATH">> => Rest, <<"FULL_PATH">> => Path }
+          end,
+    [% whole segments only
+     ?_assertEqual(Hit(<<"docs/a.gmi">>, <<"a.gmi">>),
+                   M("/docs", <<"docs/a.gmi">>)),
+     ?_assertEqual(Hit(<<"docs">>, <<>>), M("/docs", <<"docs">>)),
+     ?_assertEqual(Hit(<<"docs/">>, <<>>), M("/docs", <<"docs/">>)),
+     ?_assertEqual(nomatch, M("/docs", <<"docsx/a.gmi">>)),
+     ?_assertEqual(nomatch, M("/docs", <<"docsx">>)),
+     ?_assertEqual(nomatch, M("/docs", <<"doc">>)),
+     ?_assertEqual(nomatch, M("/docs", <<"x/docs/a.gmi">>)),
+     ?_assertEqual(nomatch, M("/docs", <<"Docs/a.gmi">>)),
+     ?_assertEqual(nomatch, M("/docs", <<>>)),
+     % a trailing slash on the mount is optional and normalised
+     ?_assertEqual(Hit(<<"docs/a/b.gmi">>, <<"a/b.gmi">>),
+                   M("/docs/", <<"docs/a/b.gmi">>)),
+     ?_assertEqual(Hit(<<"docs">>, <<>>), M("/docs/", <<"docs">>)),
+     ?_assertEqual(nomatch, M("/docs/", <<"docsx/a">>)),
+     ?_assertEqual(matches(mount("/docs"), <<"docs/q">>),
+                   matches(mount("/docs/"), <<"docs/q">>)),
+     % binaries as well as strings
+     ?_assertEqual(Hit(<<"docs/a">>, <<"a">>),
+                   M(<<"/docs">>, <<"docs/a">>)),
+     % nested mounts
+     ?_assertEqual(Hit(<<"a/b/c">>, <<"c">>), M("/a/b", <<"a/b/c">>)),
+     ?_assertEqual(nomatch, M("/a/b", <<"a/bc">>)),
+     ?_assertEqual(nomatch, M("/a/b", <<"a">>)),
+     % the root mount takes everything, and PATH is the whole path
+     ?_assertEqual(Hit(<<"x/y.gmi">>, <<"x/y.gmi">>),
+                   M("/", <<"x/y.gmi">>)),
+     ?_assertEqual(Hit(<<>>, <<>>), M("/", <<>>)),
+     % unicode mount
+     ?_assertEqual(Hit(<<"caf\303\251/a">>, <<"a">>),
+                   M([$/, $c, $a, $f, 233], <<"caf\303\251/a">>))].
+
+regex_anchoring_test_() ->
+    R = fun(Re, Path) -> matches(regex(Re), Path) end,
+    Old = fun(Re, Path) -> matches(old(Re), Path) end,
+    [?_assertMatch(#{ <<"PATH">> := <<"private/x">> },
+                   R("(?<PATH>private.*)", <<"private/x">>)),
+     % the whole path, not a search
+     ?_assertEqual(nomatch, R("(?<PATH>private.*)", <<"docs/private/x">>)),
+     ?_assertEqual(nomatch, R("(?<PATH>private.*)", <<"x-private">>)),
+     ?_assertEqual(nomatch, R("cgi-bin/(?<PATH>.*)", <<"a/cgi-bin/x">>)),
+     ?_assertEqual(nomatch, R("(?<PATH>a)", <<"ab">>)),
+     ?_assertMatch(#{ <<"PATH">> := <<"ab">> },
+                   R("(?<PATH>a|ab)", <<"ab">>)),
+     % alternation is anchored as a whole
+     ?_assertMatch(#{ <<"PATH">> := <<"a">> }, R("(?<PATH>a)|b", <<"a">>)),
+     ?_assertEqual(nomatch, R("(?<PATH>a)|b", <<"ba">>)),
+     ?_assertMatch(#{ <<"PATH">> := <<"ab">> },
+                   R(<<"(?<PATH>a.)">>, <<"ab">>)),
+     % no trailing newline slips through
+     ?_assertEqual(nomatch, R("(?<PATH>a)", <<"a\n">>)),
+     % FULL_PATH, and other groups still pass through
+     ?_assertEqual(#{ <<"PATH">> => <<"x.cgi">>,
+                      <<"PATH_INFO">> => <<"/i">>,
+                      <<"FULL_PATH">> => <<"cgi-bin/x.cgi/i">> },
+                   R("cgi-bin/(?<PATH>[^/]*)(?<PATH_INFO>/.*)?",
+                     <<"cgi-bin/x.cgi/i">>)),
+     % ... whereas the old format searches, as it always did
+     ?_assertMatch(#{ <<"PATH">> := <<"private/x">> },
+                   Old("(?<PATH>private.*)", <<"docs/private/x">>)),
+     ?_assertMatch(#{ <<"PATH">> := <<"cgi-bin/hello.sh">> },
+                   Old("(?<PATH>cgi-bin/.*)", <<"docs/cgi-bin/hello.sh">>))].
+
+full_path_test_() ->
+    [?_assertMatch(#{ <<"FULL_PATH">> := <<"a/b">> },
+                   matches(regex("(?<PATH>.*)"), <<"a/b">>)),
+     ?_assertMatch(#{ <<"FULL_PATH">> := <<"a/b">> },
+                   matches(mount("/a"), <<"a/b">>)),
+     ?_assertMatch(#{ <<"FULL_PATH">> := <<"a/b">> },
+                   matches(old("(?<PATH>b)"), <<"a/b">>)),
+     % an old route's own FULL_PATH group is not overridden
+     ?_assertEqual(#{ <<"PATH">> => <<"b">>, <<"FULL_PATH">> => <<"a">> },
+                   matches(old("(?<FULL_PATH>a)/(?<PATH>b)"), <<"a/b">>)),
+     % a new regex route may not use the name
+     ?_assertMatch({error, {reserved_group, _, <<"FULL_PATH">>}},
+                   build_route(regex("(?<PATH>a)(?<FULL_PATH>b)"), #{}))].
+
+% Dispatch to a stub servlet that says which route it is
+labelled(Label, Proto, Kind, Pattern) ->
+    Opts = #{ script => fun(request) ->
+                            {immediate, {success, <<"text/gemini">>, Label}}
+                        end },
+    {Kind, Proto, Pattern, blizanci_test_stub, public, Opts}.
+
+routed(Routes, Proto, Path) ->
+    {ok, Prepared} = prepare(Routes),
+    Req = #{ client_cert => {error, no_peer_cert}, query => <<>>,
+             rest_of_input => <<>>, scheme => <<"gemini">>,
+             host => <<"h">>, port => 1, path => Path },
+    route(Proto, Path, Req, #server_config{hostname = <<"h">>, port = 1,
+                                           routing = Prepared}).
+
+route_order_test_() ->
+    A = labelled(<<"A">>, gemini, mount, "/docs/private"),
+    B = labelled(<<"B">>, gemini, mount, "/docs"),
+    C = labelled(<<"C">>, gemini, regex, "(?<PATH>.*\\.gmi)"),
+    D = labelled(<<"D">>, gemini, mount, "/"),
+    T = labelled(<<"T">>, titan, mount, "/docs"),
+    Ok = fun(L) -> {success, <<"text/gemini">>, L} end,
+    [% first match wins, whatever the kind
+     ?_assertEqual(Ok(<<"A">>),
+                   routed([A, B, C, D], gemini, <<"docs/private/x.gmi">>)),
+     ?_assertEqual(Ok(<<"B">>),
+                   routed([A, B, C, D], gemini, <<"docs/x.gmi">>)),
+     ?_assertEqual(Ok(<<"C">>),
+                   routed([A, C, B, D], gemini, <<"docs/x.gmi">>)),
+     ?_assertEqual(Ok(<<"D">>),
+                   routed([A, B, C, D], gemini, <<"other.txt">>)),
+     % an earlier, wider route shadows a later one
+     ?_assertEqual(Ok(<<"D">>),
+                   routed([D, A], gemini, <<"docs/private/x">>)),
+     % the boundary is respected in the table too
+     ?_assertEqual(Ok(<<"D">>),
+                   routed([A, B, D], gemini, <<"docsx/a">>)),
+     ?_assertEqual({error_code, file_not_found},
+                   routed([A, B], gemini, <<"docsx/a">>)),
+     % each route serves one protocol
+     ?_assertEqual(Ok(<<"T">>), routed([B, T], titan, <<"docs/x">>)),
+     ?_assertEqual(Ok(<<"B">>), routed([T, B], gemini, <<"docs/x">>)),
+     ?_assertEqual({error_code, file_not_found},
+                   routed([B], titan, <<"docs/x">>))].
+
+translation_test_() ->
+    % The old format selects as it did: the old route's regex compiled
+    % bare, and searched for
+    Reference = fun(Re, Path) ->
+                    {ok, MP} = re:compile(Re),
+                    {namelist, Ns} = re:inspect(MP, namelist),
+                    case re:run(Path, MP, [{capture, all_names, binary}]) of
+                        {match, M} -> maps:from_list(lists:zip(Ns, M));
+                        _ -> nomatch
+                    end
+                end,
+    Strip = fun(nomatch) -> nomatch;
+               (M) -> maps:remove(<<"FULL_PATH">>, M)
+            end,
+    Paths = [<<>>, <<"private">>, <<"private/x.gmi">>, <<"privatefoo">>,
+             <<"docs/private/x.gmi">>, <<"public/x-private.txt">>,
+             <<"cgi-bin/hello.sh">>, <<"docs/cgi-bin/hello.sh">>,
+             <<"restricted/a">>, <<"a/b/c.gmi">>, <<"x">>],
+    Res = ["(?<PATH>private.*)", "cgi-bin/(?<PATH>.*)",
+           "(?<PATH>restricted.*)", "(?<PATH>.*)", "(?<PATH>x)",
+           "(?<D>[a-z]+)/(?<PATH>.*\\.gmi)"],
+    [ ?_assertEqual(Reference(Re, P), Strip(matches(old(Re), P)))
+      || Re <- Res, P <- Paths ]
+    ++
+    [?_assertMatch({ok, #route{selector = {legacy, _}}},
+                   build_route(old("(?<PATH>x)"), #{})),
+     ?_assertMatch({ok, #route{selector = {mount, <<"a/b">>}}},
+                   build_route(mount("/a/b/"), #{})),
+     ?_assertMatch({ok, #route{selector = {mount, <<>>}}},
+                   build_route(mount("/"), #{})),
+     ?_assertMatch({ok, #route{selector = {regex, _}}},
+                   build_route(regex("(?<PATH>x)"), #{}))].
+
+mount_validation_test_() ->
+    Bad = fun(Path) -> build_route(mount(Path), #{}) end,
+    [?_assertMatch({ok, _}, Bad("/")),
+     ?_assertMatch({ok, _}, Bad("/a")),
+     ?_assertMatch({ok, _}, Bad("/a/")),
+     ?_assertMatch({ok, _}, Bad("/a b/c.d")),
+     ?_assertEqual({error, {invalid_mount, "", empty}}, Bad("")),
+     ?_assertEqual({error, {invalid_mount, <<>>, empty}}, Bad(<<>>)),
+     ?_assertEqual({error, {invalid_mount, "docs", not_absolute}},
+                   Bad("docs")),
+     ?_assertEqual({error, {invalid_mount, "//", empty_segment}},
+                   Bad("//")),
+     ?_assertEqual({error, {invalid_mount, "/a//b", empty_segment}},
+                   Bad("/a//b")),
+     ?_assertEqual({error, {invalid_mount, "/a//", empty_segment}},
+                   Bad("/a//")),
+     ?_assertEqual({error, {invalid_mount, "/a/../b", dot_segment}},
+                   Bad("/a/../b")),
+     ?_assertEqual({error, {invalid_mount, "/.", dot_segment}}, Bad("/.")),
+     ?_assertEqual({error, {invalid_mount, "/a\n", control_character}},
+                   Bad("/a\n")),
+     ?_assertEqual({error, {invalid_mount, 42, not_a_string}}, Bad(42)),
+     ?_assertEqual({error, {invalid_mount, docs, not_a_string}},
+                   Bad(docs)),
+     ?_assertEqual({error, {invalid_mount, <<"/a", 255>>, not_utf8}},
+                   Bad(<<"/a", 255>>))].
+
+route_error_position_test_() ->
+    Good = mount("/ok"),
+    P = fun(Routes) -> apply(?MODULE, prepare, [Routes]) end,
+    [?_assertMatch({ok, [_, _, _]},
+                   P([Good, regex("(?<PATH>x)"), old("(?<PATH>y)")])),
+     ?_assertMatch({error, {bad_route, 1, mount,
+                            {invalid_mount, "nope", not_absolute}}},
+                   P([mount("nope"), Good])),
+     ?_assertMatch({error, {bad_route, 3, mount,
+                            {invalid_mount, "/a//b", empty_segment}}},
+                   P([Good, Good, mount("/a//b")])),
+     ?_assertMatch({error, {bad_route, 2, regex,
+                            {route_without_path_group, "x", _}}},
+                   P([Good, regex("x")])),
+     ?_assertMatch({error, {bad_route, 2, regex,
+                            {invalid_regex, "(", _}}},
+                   P([Good, regex("(")])),
+     ?_assertMatch({error, {bad_route, 2, regex,
+                            {reserved_group, _, <<"FULL_PATH">>}}},
+                   P([Good, regex("(?<PATH>a)(?<FULL_PATH>b)")])),
+     ?_assertMatch({error, {bad_route, 1, tuple, {invalid_regex, "(", _}}},
+                   P([old("(")])),
+     ?_assertMatch({error, {bad_route, 2, mount, {invalid_proto, gopher}}},
+                   P([Good, {mount, gopher, "/x", blizanci_static, public,
+                             ?SOPTS}])),
+     ?_assertMatch({error, {bad_route, 2, mount,
+                            {unknown_servlet, no_such_servlet}}},
+                   P([Good, {mount, gemini, "/x", no_such_servlet, public,
+                             ?SOPTS}])),
+     ?_assertMatch({error, {bad_route, 2, regex, {invalid_route_opts, x}}},
+                   P([Good, {regex, gemini, "(?<PATH>x)", blizanci_static,
+                             public, x}])),
+     % neither kind nor arity is right
+     ?_assertMatch({error, {bad_route, 2, unknown, invalid_route}},
+                   P([Good, {mountt, gemini, "/x", blizanci_static, public,
+                             ?SOPTS}])),
+     ?_assertMatch({error, {bad_route, 1, unknown, invalid_route}},
+                   P([{mount, gemini, "/x"}])),
+     ?_assertMatch({error, {bad_route, 1, unknown, invalid_route}},
+                   P([not_a_tuple])),
+     ?_assertMatch({error, {bad_route, 1, unknown, invalid_route}},
+                   P([{mount, gemini, "/x", blizanci_static, public,
+                       ?SOPTS, extra}])),
+     % realms are resolved for the new kinds too, and the error names
+     % the mount
+     ?_assertMatch({error, {bad_route, 1, mount,
+                            {unknown_realm, {realm, <<"r">>}, "/p",
+                             blizanci_static}}},
+                   P([{mount, gemini, "/p", blizanci_static,
+                       {private, {realm, <<"r">>}}, ?SOPTS}]))].
+
+% Run Fun with a logger handler that sends us what is logged; return
+% what it logged about routing
+with_log(Fun) ->
+    Id = list_to_atom("router_test_log_" ++
+                      integer_to_list(erlang:unique_integer([positive]))),
+    ok = logger:add_handler(Id, blizanci_test_log_handler,
+                            #{config => #{notify => self()}}),
+    try Fun(), logged_routing()
+    after ok = logger:remove_handler(Id)
+    end.
+
+logged_routing() ->
+    receive {logged, L, "routing: " ++ _ = T} -> [{L, T} | logged_routing()];
+            {logged, _, _} -> logged_routing()
+    after 0 -> []
+    end.
+
+old_format_warning_test_() ->
+    Mounts = [mount("/a"), regex("(?<PATH>x)")],
+    Olds = [old("(?<PATH>a)"), old("(?<PATH>b)"), old("(?<PATH>c)")],
+    Warn = fun(Routes, Opts) ->
+               with_log(fun() -> {ok, _} = prepare(Routes, #{}, Opts) end)
+           end,
+    [?_assertEqual([{warning,
+                     "routing: 3 routes use the old tuple format "
+                     "{Proto, Regex, Module, Auth, Opts}; translated, "
+                     "behaviour unchanged (see README, Routing)"}],
+                   Warn(Mounts ++ Olds, #{})),
+     ?_assertMatch([{warning, "routing: 1 routes use" ++ _}],
+                   Warn(Mounts ++ [hd(Olds)], #{})),
+     % nothing to say if there are none, or if the caller is the project
+     ?_assertEqual([], Warn(Mounts, #{})),
+     ?_assertEqual([], Warn([], #{})),
+     ?_assertEqual([], Warn(Olds, #{ warn_old_format => false })),
+     ?_assertMatch([{warning, _}],
+                   Warn(Olds, #{ warn_old_format => true })),
+     % not logged for a table that is refused, nor by building one route
+     ?_assertEqual([], with_log(fun() ->
+                                    {error, _} = prepare(Olds ++ [old("(")])
+                                end)),
+     ?_assertEqual([], with_log(fun() ->
+                                    {ok, _} = build_route(hd(Olds), #{}),
+                                    {ok, _} = build_route(
+                                                gemini, "(?<PATH>x)",
+                                                blizanci_static, public,
+                                                ?SOPTS)
+                                end))].

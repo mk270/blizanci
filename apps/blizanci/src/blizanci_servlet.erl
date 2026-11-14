@@ -72,9 +72,12 @@
 %%
 %% <ul>
 %% <li>Matches, a path_matches() map from binary to binary. The router
-%% matches the route's regular expression (not anchored) against the
-%% request path, and Matches holds what each NAMED group of the regular
-%% expression captured, keyed by the group's name; a group that took
+%% matches the route's regular expression (anchored, except for an
+%% old-format route) against the request path, or a mount against its
+%% start; Matches holds what each NAMED group of the regular
+%% expression captured, keyed by the group's name, and
+%% <code>FULL_PATH</code>, the whole request path (for a mount, PATH is
+%% what follows the mount); a group that took
 %% no part in the match gives <code>&lt;&lt;&gt;&gt;</code>. The path
 %% matched is the decoded one: leading slash removed, percent-escapes
 %% decoded, normalised, and known to contain no

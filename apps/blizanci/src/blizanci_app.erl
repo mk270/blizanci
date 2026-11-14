@@ -41,7 +41,7 @@ stop(_State) ->
 -include_lib("eunit/include/eunit.hrl").
 
 -define(ENV_KEYS, [certfile, keyfile, hostname, port, servlets,
-                   routing]).
+                   routing, docroot, cgiroot]).
 
 %% start/2 reads the application environment of the application it runs
 %% in, so these tests start blizanci itself (application:start/1, which
@@ -145,12 +145,60 @@ invalid_routing_test() ->
       fun() ->
           Result = application:ensure_all_started(blizanci),
           ?assertMatch({error, {blizanci, {{invalid_routing,
-                                 {route_without_path_group, "x",
-                                  blizanci_test_stub}},
+                                 {bad_route, 1, tuple,
+                                  {route_without_path_group, "x",
+                                   blizanci_test_stub}}},
                                 {blizanci_app, start, _}}}},
                        Result),
-          ?assertMatch(["blizanci: invalid routing table: route \"x\" "
-                        ++ _], blizanci_lines(logged())),
+          ?assertMatch(["blizanci: invalid routing table: route 1 "
+                        "(old-format route): route \"x\" " ++ _],
+                       blizanci_lines(logged())),
           ?assertEqual(undefined, whereis(blizanci_sup)),
           ?assertEqual(undefined, whereis(blizanci_conf_serv))
+      end).
+
+routing_warnings(Logged) ->
+    [ {L, T} || {L, "routing: " ++ _ = T} <- Logged ].
+
+%% An operator's own old-format routes are translated, with one warning
+%% at start-up giving their number.
+old_format_routes_warning_test() ->
+    Stub = #{ script => fun(_) -> {immediate, {error_code, no_such}} end },
+    Old = fun(Re) -> {gemini, Re, blizanci_test_stub, public, Stub} end,
+    with_app_env(
+      [{servlets, [blizanci_test_stub]},
+       {routing, [Old("(?<PATH>a)"), Old("(?<PATH>b)"),
+                  {mount, gemini, "/m", blizanci_test_stub, public,
+                   Stub}]}],
+      fun() ->
+          ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
+          ?assertMatch([{warning, "routing: 2 routes use the old tuple "
+                         "format {Proto, Regex, Module, Auth, Opts}; "
+                         "translated, behaviour unchanged (see README, "
+                         "Routing)"}],
+                       routing_warnings(logged()))
+      end).
+
+%% New-format routes alone give no warning.
+new_format_routes_quiet_test() ->
+    Stub = #{ script => fun(_) -> {immediate, {error_code, no_such}} end },
+    with_app_env(
+      [{servlets, [blizanci_test_stub]},
+       {routing, [{mount, gemini, "/m", blizanci_test_stub, public, Stub},
+                  {regex, gemini, "(?<PATH>a)", blizanci_test_stub,
+                   public, Stub}]}],
+      fun() ->
+          ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
+          ?assertEqual([], routing_warnings(logged()))
+      end).
+
+%% The project's own default table is still made of old tuples, but it
+%% is not the operator's doing, so it does not warn.
+default_routing_quiet_test() ->
+    with_app_env(
+      [{servlets, [blizanci_static, blizanci_cgi]},
+       {docroot, "."}, {cgiroot, "."}],
+      fun() ->
+          ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
+          ?assertEqual([], routing_warnings(logged()))
       end).
