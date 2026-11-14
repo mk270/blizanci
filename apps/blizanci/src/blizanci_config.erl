@@ -346,12 +346,25 @@ describe_route_error({route_without_path_group, Regex, Module}) ->
     flat("route ~0p (servlet ~0p) has no named group PATH in its regex; "
          "add one, e.g. (?<PATH>.*)", [Regex, Module]);
 describe_route_error({invalid_route_options, blizanci_titan,
+                      work_dir_missing}) ->
+    flat("the Titan route has no work_dir; set work_dir in its options "
+         "to an existing absolute directory on the docroot's filesystem",
+         []);
+describe_route_error({invalid_route_options, blizanci_titan,
+                      {work_dir_not_absolute, Dir}}) ->
+    flat("the Titan route's work_dir ~ts is not an absolute path; set it "
+         "to an existing absolute directory", [Dir]);
+describe_route_error({invalid_route_options, blizanci_titan,
                       {work_dir_not_a_directory, Dir}}) ->
-    {ok, Cwd} = file:get_cwd(),
-    flat("the Titan route's work_dir ~ts is not a directory (a relative "
-         "path is taken from the working directory, ~ts); create it, "
+    flat("the Titan route's work_dir ~ts is not a directory; create it, "
          "or set work_dir in the Titan route's options to an existing "
-         "directory", [Dir, Cwd]);
+         "directory", [Dir]);
+describe_route_error({invalid_route_options, blizanci_titan,
+                      {work_dir_other_filesystem, Dir}}) ->
+    flat("the Titan route's work_dir ~ts is on a different filesystem "
+         "from its docroot; uploads are installed by hard link and "
+         "rename, so use a directory on the docroot's filesystem",
+         [Dir]);
 describe_route_error({invalid_ca_file, File, Why}) ->
     flat("a private route's CA file ~ts cannot be used (~0p); check that "
          "it exists and holds a PEM certificate", [File, Why]);
@@ -476,7 +489,9 @@ proto_opts(Port) ->
     [{port, Port}].
 
 
--type route_entry() :: {atom(), string(), atom(), atom(), map()}.
+-type route_entry() :: {atom(), string(), atom(),
+                      public | restricted | {private, [string()]},
+                      map()}.
 
 -spec routing_table(Docroot, CGIroot, CACerts) -> RoutingTable
               when Docroot      :: string(),
@@ -485,6 +500,18 @@ proto_opts(Port) ->
                    RoutingTable :: [route_entry()].
 
 routing_table(Docroot, CGIroot, CACerts) ->
+    routing_table(Docroot, CGIroot, CACerts, undefined).
+
+% As routing_table/3; the Titan route is added only if a work_dir is
+% given, as Titan has no default work directory.
+-spec routing_table(Docroot, CGIroot, CACerts, WorkDir) -> RoutingTable
+              when Docroot      :: string(),
+                   CGIroot      :: string(),
+                   CACerts      :: [string()],
+                   WorkDir      :: string() | 'undefined',
+                   RoutingTable :: [route_entry()].
+
+routing_table(Docroot, CGIroot, CACerts, WorkDir) ->
     CGI_Opts = #{ cgiroot => CGIroot },
     Static_Opts = #{ docroot => Docroot },
     CAs = CACerts, % e.g., CAs = ["./ssl/cacert0.pem"]
@@ -499,15 +526,24 @@ routing_table(Docroot, CGIroot, CACerts) ->
       restricted,     Static_Opts},
 
      {gemini, "(?<PATH>.*)",           blizanci_static,
-      public,         Static_Opts},
-
-     {titan,  "(?<PATH>.*)",           blizanci_titan,
-      {private, CAs}, #{}}
-    ],
+      public,         Static_Opts}
+    ] ++ titan_route(Docroot, CAs, WorkDir),
     % blizanci_router:make_route/1 merges each route's Opts with the
     % module's own default_options/0; nothing to do here but pass
     % the per-route overrides through.
     Default_Route_Specs.
+
+
+-spec titan_route(Docroot, CAs, WorkDir) -> Routes
+              when Docroot :: string(),
+                   CAs     :: [string()],
+                   WorkDir :: string() | 'undefined',
+                   Routes  :: [route_entry()].
+titan_route(_Docroot, _CAs, undefined) ->
+    [];
+titan_route(Docroot, CAs, WorkDir) ->
+    [{titan, "(?<PATH>.*)", blizanci_titan, {private, CAs},
+      #{ docroot => Docroot, work_dir => WorkDir }}].
 
 
 -spec get_pem_file_from_environment(App, Key, Default_Filename) -> Result
@@ -568,7 +604,8 @@ from_app_env() ->
     Docroot = application:get_env(App, docroot, "./public_gemini"),
     CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
     CACerts = application:get_env(App, ca_certs, []),
-    Default_Routing = routing_table(Docroot, CGIroot, CACerts),
+    TitanWork = application:get_env(App, titan_work_dir, undefined),
+    Default_Routing = routing_table(Docroot, CGIroot, CACerts, TitanWork),
     Routes = application:get_env(App, routing, Default_Routing),
     % Today's sys.config only ever describes a single site, so this
     % is a one-element list; everything downstream looks sites up by
@@ -720,10 +757,7 @@ make_site_test_() ->
      ?_assertEqual({error, hostname_not_lowercase},
                    Make("Example.org", [Good]))].
 
-% The default Titan route has a relative work_dir, which is missing
-% unless the working directory has a titan-temp in it.
 describe_titan_work_dir_test() ->
-    {ok, Cwd} = file:get_cwd(),
     Work = filename:join(blizanci_x509:test_tmp_dir(), "no-such-dir"),
     {error, Reason} =
         blizanci_router:prepare([{titan, ?RX, blizanci_titan, public,
@@ -733,21 +767,58 @@ describe_titan_work_dir_test() ->
                   {work_dir_not_a_directory, list_to_binary(Work)}},
                  Reason),
     ?assertEqual("invalid routing table: the Titan route's work_dir "
-                 ++ Work ++ " is not a directory (a relative path is "
-                 "taken from the working directory, " ++ Cwd ++ "); "
-                 "create it, or set work_dir in the Titan route's "
+                 ++ Work ++ " is not a directory; create it, "
+                 "or set work_dir in the Titan route's "
                  "options to an existing directory",
-                 describe_error({invalid_routing, Reason})),
-    % and for the default relative directory
-    ?assertEqual("invalid routing table: the Titan route's work_dir "
-                 "titan-temp is not a directory (a relative path is "
-                 "taken from the working directory, " ++ Cwd ++ "); "
-                 "create it, or set work_dir in the Titan route's "
-                 "options to an existing directory",
-                 describe_error(
-                   {invalid_routing,
-                    {invalid_route_options, blizanci_titan,
-                     {work_dir_not_a_directory, <<"titan-temp">>}}})).
+                 describe_error({invalid_routing, Reason})).
+
+titan_work_dir_refusals_test_() ->
+    Prep = fun(Opts) ->
+               blizanci_router:prepare(
+                 [{titan, ?RX, blizanci_titan, public,
+                   maps:merge(#{ docroot => ?TEST_DOCROOT }, Opts)}])
+           end,
+    Bad = fun(Why) -> {error, {invalid_route_options, blizanci_titan,
+                               Why}} end,
+    Msg = fun(Why) ->
+              describe_error({invalid_routing,
+                              {invalid_route_options, blizanci_titan,
+                               Why}})
+          end,
+    [?_assertEqual(Bad(work_dir_missing), Prep(#{})),
+     ?_assertEqual(Bad({work_dir_not_absolute, "rel"}),
+                   Prep(#{ work_dir => "rel" })),
+     ?_assertEqual(Bad({work_dir_not_absolute, <<"rel">>}),
+                   Prep(#{ work_dir => <<"rel">> })),
+     ?_assertEqual(Bad({work_dir_other_filesystem, "/proc"}),
+                   Prep(#{ work_dir => "/proc" })),
+     ?_assertMatch({ok, _}, Prep(#{ work_dir => test_tmp() })),
+     ?_assertEqual("invalid routing table: the Titan route has no "
+                   "work_dir; set work_dir in its options to an "
+                   "existing absolute directory on the docroot's "
+                   "filesystem", Msg(work_dir_missing)),
+     ?_assertEqual("invalid routing table: the Titan route's work_dir "
+                   "rel is not an absolute path; set it to an existing "
+                   "absolute directory",
+                   Msg({work_dir_not_absolute, "rel"})),
+     ?_assertEqual("invalid routing table: the Titan route's work_dir "
+                   "/proc is on a different filesystem from its "
+                   "docroot; uploads are installed by hard link and "
+                   "rename, so use a directory on the docroot's "
+                   "filesystem",
+                   Msg({work_dir_other_filesystem, "/proc"}))].
+
+% An existing directory on the same filesystem as the test docroot.
+test_tmp() ->
+    filename:absname(?TEST_DOCROOT).
+
+default_titan_route_test_() ->
+    Titan = fun(L) -> [R || {titan, _, _, _, _} = R <- L] end,
+    [?_assertEqual([], Titan(routing_table("d", "c", []))),
+     ?_assertEqual([], Titan(routing_table("d", "c", [], undefined))),
+     ?_assertMatch([{titan, _, blizanci_titan, {private, ["ca"]},
+                     #{ docroot := "d", work_dir := "/w" }}],
+                   Titan(routing_table("d", "c", ["ca"], "/w")))].
 
 describe_error_test_() ->
     [?_assertEqual("invalid routing table: route \"x\" (servlet "
@@ -904,7 +975,8 @@ site_wants_client_cert_test_() ->
          #{ca := CA} = blizanci_x509:test_pki(),
          CAFile = blizanci_x509:test_write_pem(
                     Dir, "ca.pem", [{'Certificate', CA, not_encrypted}]),
-         Opts = #{ docroot => ?TEST_DOCROOT },
+         Opts = #{ docroot => ?TEST_DOCROOT,
+                   work_dir => filename:absname(?TEST_DOCROOT) },
          R = fun(Proto, Mod, Auth) ->
                  {ok, Route} = route(Proto, ?RX, Mod, Auth, Opts),
                  Route

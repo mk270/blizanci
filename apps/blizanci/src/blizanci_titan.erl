@@ -33,7 +33,7 @@
 
 -type options() :: #{
                      docroot := string(),
-                     work_dir := binary()
+                     work_dir := string() | binary()
                     }.
 
 -type io_device() :: pid() | {'file_descriptor', atom(), any()}.
@@ -102,7 +102,6 @@
               when Result :: map().
 default_options() ->
     #{
-      work_dir => <<"titan-temp">>,
       docroot => "docroot"
      }.
 
@@ -114,13 +113,39 @@ validate_options(#{ docroot := Docroot, work_dir := WorkDir })
   when is_binary(Docroot) orelse is_list(Docroot),
        is_binary(WorkDir) orelse is_list(WorkDir) ->
     case {filelib:is_dir(filename:absname(Docroot)),
-          filelib:is_dir(filename:absname(WorkDir))} of
-        {true, true} -> ok;
+          filename:pathtype(WorkDir)} of
         {false, _} -> {error, {docroot_not_a_directory, Docroot}};
-        {_, false} -> {error, {work_dir_not_a_directory, WorkDir}}
+        {true, absolute} -> check_work_dir(Docroot, WorkDir);
+        {true, _} -> {error, {work_dir_not_absolute, WorkDir}}
     end;
+validate_options(#{ docroot := _ } = Opts)
+  when not is_map_key(work_dir, Opts) ->
+    {error, work_dir_missing};
 validate_options(Opts) ->
     {error, {invalid_options, Opts}}.
+
+% The work directory must exist and be on the docroot's filesystem,
+% as uploads are installed by hard link and rename.
+-spec check_work_dir(Docroot, WorkDir) -> Result
+              when Docroot :: filepath(),
+                   WorkDir :: filepath(),
+                   Result  :: 'ok' | {'error', term()}.
+check_work_dir(Docroot, WorkDir) ->
+    case {filelib:is_dir(WorkDir), device(WorkDir), device(Docroot)} of
+        {false, _, _} -> {error, {work_dir_not_a_directory, WorkDir}};
+        {true, Dev, Dev} -> ok;
+        {true, _, _} -> {error, {work_dir_other_filesystem, WorkDir}}
+    end.
+
+-spec device(Path) -> Result
+              when Path   :: filepath(),
+                   Result :: term().
+device(Path) ->
+    case file:read_file_info(filename:absname(Path)) of
+        {ok, #file_info{major_device = Maj, minor_device = Min}} ->
+            {Maj, Min};
+        {error, Reason} -> {unreadable, Reason}
+    end.
 
 -spec start() -> Result
               when Result :: 'ok' | {'error', term()}.
