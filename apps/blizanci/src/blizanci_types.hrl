@@ -9,14 +9,26 @@
 
 -include_lib("public_key/include/public_key.hrl").
 
-% What a route is configured with: for private, the CA files.
--type authorisation_config() :: public | restricted | {private, [string()]}.
+% An authentication realm: a named set of CA certificates.  Built only by
+% blizanci_auth:realm/1, which checks the name.
+-type realm() :: {'realm', binary()}.
 
-% What a built route holds (see blizanci_auth:valid_authz_policy/1): for
-% private, the CA files and every certificate decoded from them, once,
-% when the route was built.
+% The global realm table: for each realm, its CA files and every
+% certificate decoded from them (see blizanci_auth:add_realm/3).
+-type realm_table() :: #{realm() => {[string()], [#'OTPCertificate'{}]}}.
+
+% What a route is configured with: for private, the CA files (old form)
+% or one realm or a list of realms, any of which authorises.
+-type authorisation_config() :: public | restricted
+                              | {private, [string()]}
+                              | {private, realm() | [realm()]}.
+
+% What a built route holds (see blizanci_auth:valid_authz_policy/2): for
+% private, the CA files (or realms) and every certificate decoded from
+% them, once, when the route was built.
 -type authorisation() :: public | restricted
-                       | {private, [string()], [#'OTPCertificate'{}]}.
+                       | {private, [string()] | [realm()],
+                          [#'OTPCertificate'{}]}.
 
 -type route_option() :: {atom(), any()}.
 

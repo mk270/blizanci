@@ -20,12 +20,22 @@
 % A CA file may be a bundle: the client certificate is accepted if it is
 % signed by ANY certificate in ANY of the route's files, so trust extends
 % to every certificate in a file, not just the first.
+%
+% A route may instead name authentication realms: {private, Realm} or
+% {private, [Realm]}.  A realm is a named set of CA files, defined once
+% for the whole server (see add_realm/3) and decoded then.  The route's
+% realms are resolved when it is built, and it holds the certificates;
+% nothing is looked up per request.
 
 -module(blizanci_auth).
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
--export([authorisation_policy/1, authorised/2, valid_authz_policy/1]).
+-export([authorisation_policy/1, authorised/2, valid_authz_policy/1,
+         valid_authz_policy/2]).
+-export([realm/1, add_realm/3, realm_table/1]).
+
+-define(MAX_REALM_NAME, 64).
 
 %% @doc Derive the authorisation policy of a given routing table entry
 %% @returns {ok, public | restricted | private} | {error, atom()}
@@ -44,20 +54,123 @@ authorisation_policy(Options) when is_map(Options) ->
 -spec valid_authz_policy(Policy) -> Result
               when Policy :: term(),
                    Result :: {ok, authorisation()} | {error, term()}.
+valid_authz_policy(Policy) ->
+    valid_authz_policy(Policy, #{}).
+
+
+%% @doc As valid_authz_policy/1, resolving any realms against a realm
+%% table (see realm_table/1).
+%% @end
+-spec valid_authz_policy(Policy, Realms) -> Result
+              when Policy :: term(),
+                   Realms :: realm_table(),
+                   Result :: {ok, authorisation()} | {error, term()}.
 % For {private, Files} the files are read and every certificate in them
 % decoded here; the result is {private, Files, Certs}, Certs being all
 % the certificates of all the files, in order.  A file that is missing,
 % unreadable, holds no certificate or holds any undecodable certificate
 % is refused with {invalid_ca_file, File, Why}.
+%
+% For {private, Realm} or {private, [Realm]} the realms are looked up in
+% the table, once, here; the result is {private, Realms, Certs}, Certs
+% being the certificates of all the named realms.  A realm that is not
+% in the table is {unknown_realm, Realm}; one with no certificates
+% authorises nobody and is {empty_realm, Realm}.  A realm tuple that
+% realm/1 would not have built is {invalid_realm_name, Name}.
 
-valid_authz_policy(public) -> {ok, public};
-valid_authz_policy(restricted) -> {ok, restricted};
-valid_authz_policy({private, Files}) when is_list(Files) ->
+valid_authz_policy(public, _) -> {ok, public};
+valid_authz_policy(restricted, _) -> {ok, restricted};
+valid_authz_policy({private, {realm, _} = Realm}, Realms) ->
+    resolve_realms([Realm], Realms, []);
+valid_authz_policy({private, [{realm, _} | _] = List}, Realms) ->
+    resolve_realms(List, Realms, []);
+valid_authz_policy({private, Files}, _) when is_list(Files) ->
     case load_ca_files(Files, []) of
         {ok, Certs} -> {ok, {private, Files, Certs}};
         {error, _} = Error -> Error
     end;
-valid_authz_policy(_) -> {error, invalid_authz_policy}.
+valid_authz_policy(_, _) -> {error, invalid_authz_policy}.
+
+
+-spec resolve_realms(List, Realms, Acc) -> Result
+              when List   :: [term()],
+                   Realms :: realm_table(),
+                   Acc    :: [{realm(), [#'OTPCertificate'{}]}],
+                   Result :: {ok, authorisation()} | {error, term()}.
+resolve_realms([], _, Acc) ->
+    Found = lists:reverse(Acc),
+    {ok, {private, [ R || {R, _} <- Found ],
+          lists:append([ C || {_, C} <- Found ])}};
+resolve_realms([{realm, Name} = Realm | Rest], Realms, Acc) ->
+    case realm(Name) of
+        {ok, Realm} ->
+            case maps:find(Realm, Realms) of
+                {ok, {_, []}} -> {error, {empty_realm, Realm}};
+                {ok, {_, Certs}} ->
+                    resolve_realms(Rest, Realms, [{Realm, Certs} | Acc]);
+                error -> {error, {unknown_realm, Realm}}
+            end;
+        {error, _} -> {error, {invalid_realm_name, Name}}
+    end;
+resolve_realms(_, _, _) ->
+    {error, invalid_authz_policy}.
+
+
+%% @doc The one way to make a realm: a non-empty, case-sensitive name of
+%% printable ASCII, at most 64 characters.
+%% @end
+-spec realm(Name) -> Result
+              when Name   :: term(),
+                   Result :: {ok, realm()} | {error, term()}.
+realm(Name) when is_binary(Name), byte_size(Name) > 0,
+                 byte_size(Name) =< ?MAX_REALM_NAME ->
+    case lists:all(fun(C) -> C >= $\s andalso C =< $~ end,
+                   binary_to_list(Name)) of
+        true  -> {ok, {realm, Name}};
+        false -> {error, {invalid_realm_name, Name}}
+    end;
+realm(Name) ->
+    {error, {invalid_realm_name, Name}}.
+
+
+%% @doc Add a realm to a realm table, reading and decoding its CA files
+%% now.  A realm may have no files; a private route may not use it.
+%% @end
+-spec add_realm(Realms, Name, Files) -> Result
+              when Realms :: realm_table(),
+                   Name   :: term(),
+                   Files  :: term(),
+                   Result :: {ok, realm_table()} | {error, term()}.
+add_realm(Realms, Name, Files) ->
+    case realm(Name) of
+        {error, _} = Error -> Error;
+        {ok, Realm} ->
+            case maps:is_key(Realm, Realms) of
+                true -> {error, {duplicate_realm, Realm}};
+                false when is_list(Files) ->
+                    case load_ca_files(Files, []) of
+                        {ok, Certs} ->
+                            {ok, Realms#{Realm => {Files, Certs}}};
+                        {error, _} = Error -> Error
+                    end;
+                false -> {error, {invalid_realm_files, Realm}}
+            end
+    end.
+
+
+%% @doc Build a realm table from a list of {Name, Files}, as in the
+%% sys.config key realms.
+%% @end
+-spec realm_table(Defs) -> Result
+              when Defs   :: term(),
+                   Result :: {ok, realm_table()} | {error, term()}.
+realm_table(Defs) when is_list(Defs) ->
+    lists:foldl(fun({Name, Files}, {ok, T}) -> add_realm(T, Name, Files);
+                   (Other, {ok, _}) -> {error, {invalid_realm, Other}};
+                   (_, Error) -> Error
+                end, {ok, #{}}, Defs);
+realm_table(Defs) ->
+    {error, {invalid_realms, Defs}}.
 
 
 -spec load_ca_files(Files, Acc) -> Result
@@ -404,4 +517,102 @@ authorised_private_no_file_reads_test_() ->
           [?_assertEqual(authorised, Before),
            ?_assertEqual(Expected, Corrupted),
            ?_assertEqual(Expected, Deleted)]
+      end).
+
+% The smart constructor accepts only sensible names.
+realm_constructor_test_() ->
+    Bad = fun(N) -> {error, {invalid_realm_name, N}} end,
+    Long = binary:copy(<<"a">>, 64),
+    TooLong = binary:copy(<<"a">>, 65),
+    [?_assertEqual({ok, {realm, <<"staff">>}}, realm(<<"staff">>)),
+     ?_assertEqual({ok, {realm, <<"Staff 1">>}}, realm(<<"Staff 1">>)),
+     ?_assertNotEqual(realm(<<"staff">>), realm(<<"Staff">>)),
+     ?_assertEqual({ok, {realm, Long}}, realm(Long)),
+     ?_assertEqual(Bad(TooLong), realm(TooLong)),
+     ?_assertEqual(Bad(<<>>), realm(<<>>)),
+     ?_assertEqual(Bad(<<"a\nb">>), realm(<<"a\nb">>)),
+     ?_assertEqual(Bad(<<"caf", 195, 169>>), realm(<<"caf", 195, 169>>)),
+     ?_assertEqual(Bad(<<127>>), realm(<<127>>)),
+     ?_assertEqual(Bad(staff), realm(staff)),
+     ?_assertEqual(Bad("staff"), realm("staff"))].
+
+realm_table_test_() ->
+    authorised_fixture(
+      fun(_Pki, #{ca := CA, ca2 := CA2, text := Text, missing := Missing,
+                  bundle := Bundle}) ->
+          Staff = {realm, <<"staff">>},
+          {ok, T} = realm_table([{<<"staff">>, [CA, CA2]},
+                                 {<<"b">>, [Bundle]},
+                                 {<<"none">>, []}]),
+          [?_assertMatch(#{Staff := {[CA, CA2], [_, _]}}, T),
+           ?_assertMatch(#{{realm, <<"b">>} := {[Bundle], [_, _]}}, T),
+           ?_assertMatch(#{{realm, <<"none">>} := {[], []}}, T),
+           ?_assertEqual({error, {duplicate_realm, Staff}},
+                         realm_table([{<<"staff">>, []},
+                                      {<<"staff">>, []}])),
+           ?_assertEqual({error, {invalid_realm_name, <<>>}},
+                         realm_table([{<<>>, []}])),
+           ?_assertEqual({error, {invalid_realm_name, staff}},
+                         realm_table([{staff, []}])),
+           ?_assertEqual({error, {invalid_realm_files, Staff}},
+                         realm_table([{<<"staff">>, not_a_list}])),
+           ?_assertEqual({error, {invalid_realm, bogus}},
+                         realm_table([bogus])),
+           ?_assertEqual({error, {invalid_realms, bogus}},
+                         realm_table(bogus)),
+           ?_assertEqual({error, {invalid_ca_file, Missing, enoent}},
+                         realm_table([{<<"x">>, [Missing]}])),
+           ?_assertEqual({error, {invalid_ca_file, Text,
+                                  no_certificate_in_file}},
+                         realm_table([{<<"x">>, [CA, Text]}]))]
+      end).
+
+policy_realm_test_() ->
+    authorised_fixture(
+      fun(#{peer := Peer, peer_ca2 := PeerCA2, forged := Forged},
+          #{ca := CA, ca2 := CA2}) ->
+          Staff = {realm, <<"staff">>},
+          Ops = {realm, <<"ops">>},
+          None = {realm, <<"none">>},
+          {ok, T} = realm_table([{<<"staff">>, [CA]},
+                                 {<<"ops">>, [CA2]},
+                                 {<<"none">>, []}]),
+          V = fun(P) -> valid_authz_policy(P, T) end,
+          Auth = fun(P, Cert) ->
+                     {ok, Policy} = V(P),
+                     authorised(Policy, request({ok, Cert}))
+                 end,
+          [?_assertMatch({ok, {private, [Staff], [_]}},
+                         V({private, Staff})),
+           ?_assertMatch({ok, {private, [Staff, Ops], [_, _]}},
+                         V({private, [Staff, Ops]})),
+           ?_assertEqual({error, {unknown_realm, {realm, <<"x">>}}},
+                         V({private, {realm, <<"x">>}})),
+           ?_assertEqual({error, {unknown_realm, {realm, <<"Staff">>}}},
+                         V({private, [Staff, {realm, <<"Staff">>}]})),
+           ?_assertEqual({error, {empty_realm, None}},
+                         V({private, None})),
+           ?_assertEqual({error, {empty_realm, None}},
+                         V({private, [Staff, None]})),
+           ?_assertEqual({error, {invalid_realm_name, <<>>}},
+                         V({private, {realm, <<>>}})),
+           ?_assertEqual({error, {invalid_realm_name, nope}},
+                         V({private, [{realm, nope}]})),
+           ?_assertEqual({error, invalid_authz_policy},
+                         V({private, [Staff, "file.pem"]})),
+           % without a table a realm is unknown
+           ?_assertEqual({error, {unknown_realm, Staff}},
+                         valid_authz_policy({private, Staff})),
+           % the old file form still works beside realms
+           ?_assertMatch({ok, {private, [CA], [_]}}, V({private, [CA]})),
+           ?_assertMatch({ok, {private, [], []}}, V({private, []})),
+           % any one of the named realms authorises
+           ?_assertEqual(authorised, Auth({private, Staff}, Peer)),
+           ?_assertEqual({error_code, cert_not_authorised},
+                         Auth({private, Staff}, PeerCA2)),
+           ?_assertEqual(authorised, Auth({private, [Staff, Ops]}, Peer)),
+           ?_assertEqual(authorised,
+                         Auth({private, [Staff, Ops]}, PeerCA2)),
+           ?_assertEqual({error_code, cert_not_authorised},
+                         Auth({private, [Staff, Ops]}, Forged))]
       end).
