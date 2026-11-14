@@ -113,8 +113,7 @@ site(Hostname, CertFile, KeyFile) ->
         true  -> {ok, #site{hostname = erlang:list_to_binary(Hostname),
                             certfile = CertFile,
                             keyfile  = KeyFile,
-                            routing  = [],
-                            docroot  = undefined}}
+                            routing  = []}}
     end.
 
 
@@ -300,28 +299,27 @@ apply(Config = #config{global = #global{port = Port, servlets = Servlets},
 
 
 % Build one site from explicit values.
--spec make_site(Hostname, Cert, Key, Docroot, Routes) -> Result
+-spec make_site(Hostname, Cert, Key, Routes) -> Result
               when Hostname :: string(),
                    Cert     :: string(),
                    Key      :: string(),
-                   Docroot  :: string(),
                    Routes   :: [route_entry()],
                    Result   :: {'ok', site()}
                              | {'error', 'hostname_not_lowercase'}
                              | {'error', {'invalid_routing', term()}}.
-make_site(Hostname, Cert, Key, Docroot, Routes) ->
+make_site(Hostname, Cert, Key, Routes) ->
     case blizanci_router:prepare(Routes) of
         {ok, Routing} ->
             case site(Hostname, Cert, Key) of
                 {ok, Site} ->
-                    {ok, Site#site{routing = Routing, docroot = Docroot}};
+                    {ok, Site#site{routing = Routing}};
                 {error, _} = Error -> Error
             end;
         {error, Reason} -> {error, {invalid_routing, Reason}}
     end.
 
 
-% A one-line, human-readable account of an error from make_site/5 or
+% A one-line, human-readable account of an error from make_site/4 or
 % from_app_env/0, or from starting the supervision tree (a servlet that
 % will not start), for the log at start-up.
 -spec describe_error(Error) -> Result
@@ -573,7 +571,7 @@ from_app_env() ->
     % Today's sys.config only ever describes a single site, so this
     % is a one-element list; everything downstream looks sites up by
     % hostname and doesn't assume that.
-    case make_site(Hostname, Cert, Key, Docroot, Routes) of
+    case make_site(Hostname, Cert, Key, Routes) of
         {ok, Site} ->
             Port = application:get_env(App, port, ?PORT),
             Servlets = application:get_env(App, servlets,
@@ -704,10 +702,9 @@ make_site_test_() ->
     Good = {gemini, ?RX, blizanci_static, public, Opts},
     Bad = {gemini, "x", blizanci_static, public, Opts},
     Make = fun(Host, Routes) ->
-               make_site(Host, "c.pem", "k.pem", "docroot", Routes)
+               make_site(Host, "c.pem", "k.pem", Routes)
            end,
-    [?_assertMatch({ok, #site{docroot = "docroot",
-                              routing = [#route{}]}},
+    [?_assertMatch({ok, #site{routing = [#route{}]}},
                    Make("example.org", [Good])),
      % a route error is returned, not raised as a badmatch
      ?_assertEqual({error, {invalid_routing,
@@ -795,8 +792,7 @@ site_test() ->
     ?assertEqual(#site{hostname = <<"example.org">>,
                        certfile = "c.pem",
                        keyfile  = "k.pem",
-                       routing  = [],
-                       docroot  = undefined},
+                       routing  = []},
                  test_site("example.org", "c.pem", "k.pem")).
 
 site_rejects_uppercase_test_() ->

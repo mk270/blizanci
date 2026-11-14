@@ -191,8 +191,7 @@ stop() ->
 -spec test_config() -> Result
               when Result :: server_config().
 test_config() ->
-    #server_config{hostname = <<"h">>, port = 1965, routing = [],
-                   docroot = "docs"}.
+    #server_config{hostname = <<"h">>, port = 1965, routing = []}.
 
 
 %% A request path is a binary of UTF-8 bytes. A symbolic link out of the

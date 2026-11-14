@@ -870,7 +870,7 @@ failed_teardown({Base, Other}) ->
 failed_tests({Base, Other}) ->
     Root = filename:join(Base, "root"),
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
-                         routing = [], docroot = Root},
+                         routing = []},
     Serve = fun(Work, Fragment, Rest) ->
                 Opts = #{ docroot => Root, work_dir => list_to_binary(Work) },
                 serve(#{ <<"PATH">> => Fragment },
@@ -996,7 +996,7 @@ delete_tests(Base) ->
     Root = filename:join(Base, "root"),
     Opts = #{ docroot => Root, work_dir => list_to_binary(Base ++ "/work") },
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
-                         routing = [], docroot = Root},
+                         routing = []},
     Serve = fun(Fragment, Rest) ->
                 serve(#{ <<"PATH">> => Fragment },
                       test_request(#{ rest_of_input => Rest }), Cfg, Opts)
@@ -1058,7 +1058,7 @@ size_cap_test_() ->
          Work = filename:join(Base, "work"),
          Opts = #{ docroot => Root, work_dir => list_to_binary(Work) },
          Cfg = #server_config{hostname = <<"h">>, port = 1965,
-                              routing = [], docroot = Root},
+                              routing = []},
          Big = list_to_binary("big.txt;size=" ++
                               integer_to_list(?MAX_UPLOAD_BYTES + 1)),
          ?_test(begin
@@ -1087,7 +1087,7 @@ excess_tests(Base) ->
     Work = list_to_binary(filename:join(Base, "work")),
     Opts = #{ docroot => Root, work_dir => Work },
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
-                         routing = [], docroot = Root},
+                         routing = []},
     Serve = fun(Fragment, Rest) ->
                 serve(#{ <<"PATH">> => Fragment },
                       test_request(#{ rest_of_input => Rest }), Cfg, Opts)
@@ -1160,7 +1160,7 @@ hidden_tests(Base) ->
     Work = list_to_binary(filename:join(Base, "work")),
     Opts = #{ docroot => Root, work_dir => Work },
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
-                         routing = [], docroot = Root},
+                         routing = []},
     Serve = fun(Fragment, Rest) ->
                 serve(#{ <<"PATH">> => Fragment },
                       test_request(#{ rest_of_input => Rest }), Cfg, Opts)
