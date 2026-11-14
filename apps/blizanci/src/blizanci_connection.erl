@@ -110,8 +110,7 @@ init({Ref, Transport, Opts}) ->
     Config = #server_config{
                 hostname=Site#site.hostname,
                 port=Port,
-                routing=Site#site.routing,
-                docroot=Site#site.docroot},
+                routing=Site#site.routing},
     State = #state{
                transport=Transport,
                socket=Socket,

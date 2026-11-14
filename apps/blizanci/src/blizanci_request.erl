@@ -323,8 +323,7 @@ tests(_State) ->
     ServerConfig = #server_config{
                       hostname= <<"this.host.dev">>,
                       port= 1965,
-                      routing=Routing,
-                      docroot=Docroot
+                      routing=Routing
                      },
     Cert = {error, no_peercert},
 
@@ -348,8 +347,7 @@ url_handler() ->
     {ok, Routing} = blizanci_router:prepare(Routes),
     Config = #server_config{hostname = <<"this.host.dev">>,
                             port = 1965,
-                            routing = Routing,
-                            docroot = "test-docroot"},
+                            routing = Routing},
     fun(Url) ->
         handle_line(Url, Config, {error, no_peercert}, <<>>)
     end.
@@ -429,8 +427,7 @@ mixed_case_host_matches_site_test_() ->
     Routes = [{gemini, <<"(?<PATH>.*)">>, blizanci_static, public, Opts}],
     {ok, Routing} = blizanci_router:prepare(Routes),
     Config = #server_config{hostname = <<"example.org">>, port = 1965,
-                            routing = Routing,
-                            docroot = "test-docroot"},
+                            routing = Routing},
     H = fun(Url) ->
             handle_line(Url, Config, {error, no_peercert}, <<>>)
         end,
@@ -524,7 +521,7 @@ percent_tests(Base) ->
                   work_dir => list_to_binary(filename:join(Base, "work")) }}],
     {ok, Routing} = blizanci_router:prepare(Routes),
     Config = #server_config{hostname = <<"this.host.dev">>, port = 1965,
-                            routing = Routing, docroot = Docs},
+                            routing = Routing},
     H = fun(Path) ->
             handle_line(<<"gemini://this.host.dev/", Path/binary>>,
                         Config, {error, no_peercert}, <<>>)

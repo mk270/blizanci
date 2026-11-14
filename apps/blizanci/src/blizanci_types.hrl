@@ -32,8 +32,7 @@
         {hostname :: binary(),
          certfile :: string(),
          keyfile  :: string(),
-         routing  :: [route()],
-         docroot  :: string() | 'undefined'}).
+         routing  :: [route()]}).
 -type site() :: #site{}.
 
 %% The fields are not trusted to have the right types until validated (see
@@ -51,8 +50,7 @@
 -record(server_config,
         {hostname   :: binary(),
          port       :: integer(),
-         routing    :: [route()],
-         docroot    :: string() | 'undefined'}).
+         routing    :: [route()]}).
 -type server_config() :: #server_config{}.
 
 %% Raw result of asking TLS for the peer certificate (DER or error).

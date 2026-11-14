@@ -723,7 +723,7 @@ orphan_tests({Base, Up}) ->
 orphan_run(Base) ->
     Dir = filename:join(Base, "cgi"),
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
-                         routing = [], docroot = Dir},
+                         routing = []},
     Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
     Me = self(),
     Container = spawn(fun() ->
@@ -796,7 +796,7 @@ hidden_teardown(Base) ->
 hidden_tests(Base) ->
     Dir = filename:join(Base, "cgi"),
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
-                         routing = [], docroot = Dir},
+                         routing = []},
     Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
     Serve = fun(Path) ->
                 serve(#{ <<"PATH">> => Path }, test_request(#{}), Cfg, Opts)
@@ -967,7 +967,7 @@ run_cgi_tests({Base, _Started, true}) ->
 run_script(Base, Name, Matches, ReqExtra) ->
     Dir = filename:join(Base, "cgi"),
     Cfg = #server_config{hostname = <<"example.org">>, port = 1965,
-                         routing = [], docroot = Dir},
+                         routing = []},
     Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
     M = maps:merge(#{ <<"PATH">> => list_to_binary(Name) }, Matches),
     {gateway_started, Worker} =
