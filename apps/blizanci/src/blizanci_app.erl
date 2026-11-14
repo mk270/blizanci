@@ -192,8 +192,8 @@ new_format_routes_quiet_test() ->
           ?assertEqual([], routing_warnings(logged()))
       end).
 
-%% The project's own default table is still made of old tuples, but it
-%% is not the operator's doing, so it does not warn.
+%% The default table is in the new format, and it never warns about
+%% the old format.
 default_routing_quiet_test() ->
     with_app_env(
       [{servlets, [blizanci_static, blizanci_cgi]},

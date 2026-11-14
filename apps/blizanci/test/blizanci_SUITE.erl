@@ -23,7 +23,9 @@
          init_per_testcase/2, end_per_testcase/2]).
 -export([static/1, cgi/1, titan/1, sni_live_apply/1, restart/1,
          no_leaks/1, tls_versions/1, client_cert_request/1,
-         client_cert_live_apply/1]).
+         client_cert_live_apply/1, default_table/1,
+         default_table_titan/1, default_table_no_ca_certs/1,
+         default_table_titan_no_ca_certs/1]).
 -export([log/2]). % logger handler callback, see cert_requested/4
 
 -define(HOST, "first.test").
@@ -33,7 +35,9 @@
 
 all() ->
     [static, cgi, titan, sni_live_apply, restart, no_leaks,
-     tls_versions, client_cert_request, client_cert_live_apply].
+     tls_versions, client_cert_request, client_cert_live_apply,
+     default_table, default_table_titan, default_table_no_ca_certs,
+     default_table_titan_no_ca_certs].
 
 %%%===================================================================
 %%% Setup
@@ -118,7 +122,8 @@ init_per_testcase(Case, Config) ->
 end_per_testcase(_Case, _Config) ->
     _ = application:stop(blizanci),
     [ application:unset_env(blizanci, K)
-      || K <- [port, hostname, certfile, keyfile, docroot, routing] ],
+      || K <- [port, hostname, certfile, keyfile, docroot, routing,
+               cgiroot, ca_certs, titan_work_dir] ],
     ok.
 
 %%%===================================================================
@@ -182,6 +187,138 @@ titan(Config) ->
     <<"20 text/plain", _/binary>> = R,
     {_, Body} = split_header(R),
     ok.
+
+%% The default routing table (no routing key), from docroot, cgiroot,
+%% ca_certs and titan_work_dir, served end to end: /private and
+%% /restricted need a client certificate and serve their own
+%% directories, /cgi-bin runs the script in cgiroot, the rest is public;
+%% a directory is redirected to its index with the mount kept; "private"
+%% is matched as a whole segment only.
+default_table(Config) ->
+    use_default_table(Config, false),
+    Docroot = ?config(docroot, Config),
+    [ ok = filelib:ensure_path(filename:join(Docroot, D))
+      || D <- ["private/sub", "restricted", "privatefoo"] ],
+    [ ok = file:write_file(filename:join(Docroot, F), [<<"# ">>, F])
+      || F <- ["private/x.gmi", "restricted/x.gmi", "privatefoo/x.gmi",
+               "private/sub/index.gemini"] ],
+    CgiOk = exec_works() =:= ok,
+    CgiOk andalso write_cgi_script(Config),
+    {ok, _} = application:ensure_all_started(blizanci),
+    Port = ?config(port, Config),
+    Cert = ?config(client_opts, Config),
+    Get = fun(Extra, Path) ->
+              fetch(Port, ?HOST, 'tlsv1.3', Extra, Path)
+          end,
+    {ok, <<"20 text/gemini", _/binary>> = R1} = Get([], "/hello.gmi"),
+    {_, <<"# Hello\n">>} = split_header(R1),
+    %% a mount is whole segments: privatefoo is public
+    {ok, R2} = Get([], "/privatefoo/x.gmi"),
+    {_, <<"# privatefoo/x.gmi">>} = split_header(R2),
+    %% private and restricted ask for a certificate
+    [ {ok, <<"60 ", _/binary>>} = Get([], P)
+      || P <- ["/private/x.gmi", "/private", "/private/",
+               "/restricted/x.gmi"] ],
+    {ok, R3} = Get(Cert, "/private/x.gmi"),
+    {_, <<"# private/x.gmi">>} = split_header(R3),
+    {ok, R4} = Get(Cert, "/restricted/x.gmi"),
+    {_, <<"# restricted/x.gmi">>} = split_header(R4),
+    {ok, <<"51 ", _/binary>>} = Get(Cert, "/private/nothere.gmi"),
+    %% directories: the redirect keeps the mount
+    Redirect = fun(Rel) ->
+                   iolist_to_binary(["31 gemini://", ?HOST, ":",
+                                     integer_to_list(Port), Rel,
+                                     "\r\n"])
+               end,
+    [ {ok, Want} = Get(Cert, Path)
+      || {Path, Want} <-
+             [{"/private", Redirect("/private/index.gemini")},
+              {"/private/", Redirect("/private/index.gemini")},
+              {"/private/sub", Redirect("/private/sub/index.gemini")},
+              {"/private/sub/", Redirect("/private/sub/index.gemini")},
+              {"/restricted/", Redirect("/restricted/index.gemini")}] ],
+    {ok, R5} = Get(Cert, "/private/sub/index.gemini"),
+    {_, <<"# private/sub/index.gemini">>} = split_header(R5),
+    %% cgi-bin runs the script in cgiroot
+    case CgiOk of
+        true ->
+            {ok, <<"20 text/plain\r\n", "hi\n">>} =
+                Get([], "/cgi-bin/hi.sh");
+        false -> ok
+    end,
+    %% with no titan_work_dir there is no Titan route
+    {ok, <<"5", _/binary>>} =
+        converse(Port, ?HOST,
+                 ["titan://" ?HOST ":" ++ integer_to_list(Port)
+                  ++ "/up.txt;size=1;mime=text/plain\r\n", "x"]),
+    ok.
+
+%% With titan_work_dir set the default table gets a Titan route that
+%% needs the default realm's certificate and shares the docroot.
+default_table_titan(Config) ->
+    use_default_table(Config, true),
+    {ok, _} = application:ensure_all_started(blizanci),
+    Port = ?config(port, Config),
+    Cert = ?config(client_opts, Config),
+    Up = fun(Extra) ->
+             Line = "titan://" ?HOST ":" ++ integer_to_list(Port)
+                 ++ "/up.txt;size=2;mime=text/plain\r\n",
+             {ok, S} = connect(Port, ?HOST, 'tlsv1.3', Extra),
+             try
+                 ok = ssl:send(S, [Line, "hi"]),
+                 recv_all(S, <<>>)
+             after
+                 ssl:close(S)
+             end
+         end,
+    {ok, <<"60 ", _/binary>>} = Up([]),
+    {ok, <<"2", _/binary>>} = Up(Cert),
+    ok = wait_for_file(filename:join(?config(docroot, Config), "up.txt")),
+    {ok, R} = fetch(Port, ?HOST, ?HOST, "/up.txt"),
+    {_, <<"hi">>} = split_header(R),
+    ok.
+
+%% Without ca_certs the default table still starts: /private is there
+%% and authorises nobody, not even a certificate; nothing falls through
+%% to the public mount.
+default_table_no_ca_certs(Config) ->
+    use_default_table(Config, false),
+    ok = application:unset_env(blizanci, ca_certs),
+    Docroot = ?config(docroot, Config),
+    ok = filelib:ensure_path(filename:join(Docroot, "private")),
+    ok = file:write_file(filename:join([Docroot, "private", "x.gmi"]),
+                         <<"# secret\n">>),
+    {ok, _} = application:ensure_all_started(blizanci),
+    Port = ?config(port, Config),
+    {ok, <<"60 ", _/binary>>} =
+        fetch(Port, ?HOST, 'tlsv1.3', [], "/private/x.gmi"),
+    {ok, <<"61 ", _/binary>>} =
+        fetch(Port, ?HOST, 'tlsv1.3', ?config(client_opts, Config),
+              "/private/x.gmi"),
+    {ok, <<"20 ", _/binary>>} = fetch(Port, ?HOST, ?HOST, "/hello.gmi"),
+    ok.
+
+%% titan_work_dir without ca_certs: the Titan route would authorise
+%% nobody, so start-up is refused.
+default_table_titan_no_ca_certs(Config) ->
+    use_default_table(Config, true),
+    ok = application:unset_env(blizanci, ca_certs),
+    {error, _} = application:ensure_all_started(blizanci),
+    ok.
+
+%% Settings for the default table: no routing key; ca_certs is the CA
+%% that issued the client certificate.
+use_default_table(Config, WithTitan) ->
+    ok = application:unset_env(blizanci, routing),
+    ok = application:set_env(blizanci, cgiroot, ?config(cgiroot, Config)),
+    ok = application:set_env(blizanci, ca_certs,
+                             [?config(client_ca, Config)]),
+    case WithTitan of
+        true ->
+            Work = filename:join(?config(casedir, Config), "titan-temp"),
+            ok = application:set_env(blizanci, titan_work_dir, Work);
+        false -> ok
+    end.
 
 sni_live_apply(Config) ->
     {ok, _} = application:ensure_all_started(blizanci),

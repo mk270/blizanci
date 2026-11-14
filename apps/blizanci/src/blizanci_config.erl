@@ -653,37 +653,54 @@ routing_table(Docroot, CGIroot, CACerts) ->
                    RoutingTable :: [route_entry()].
 
 routing_table(Docroot, CGIroot, CACerts, WorkDir) ->
-    CGI_Opts = #{ cgiroot => CGIroot },
-    Static_Opts = #{ docroot => Docroot },
-    CAs = CACerts, % e.g., CAs = ["./ssl/cacert0.pem"]
-    Default_Route_Specs = [
-     {gemini, "cgi-bin/(?<PATH>.*)",   blizanci_cgi,
-      public,         CGI_Opts},
-
-     {gemini, "(?<PATH>private.*)",    blizanci_static,
-      {private, CAs}, Static_Opts},
-
-     {gemini, "(?<PATH>restricted.*)", blizanci_static,
-      restricted,     Static_Opts},
-
-     {gemini, "(?<PATH>.*)",           blizanci_static,
-      public,         Static_Opts}
-    ] ++ titan_route(Docroot, CAs, WorkDir),
-    % blizanci_router:make_route/1 merges each route's Opts with the
-    % module's own default_options/0; nothing to do here but pass
-    % the per-route overrides through.
-    Default_Route_Specs.
+    % Each mount names its own root, as a servlet's PATH is what follows
+    % the mount: /private/x.gmi serves <docroot>/private/x.gmi because
+    % the /private mount's docroot is <docroot>/private.
+    % With no ca_certs, /private still exists but authorises nobody (as
+    % it always did): leaving it out would let the "/" mount serve the
+    % files in it to everyone.
+    PrivateAuth = case CACerts of
+                      [] -> {private, []};
+                      _ -> {private, {realm, <<"default">>}}
+                  end,
+    [{mount, gemini, "/cgi-bin", blizanci_cgi, public,
+      #{ cgiroot => CGIroot }}]
+    ++ subdir_mount(Docroot, "private", PrivateAuth)
+    ++ subdir_mount(Docroot, "restricted", restricted)
+    ++ [{mount, gemini, "/", blizanci_static, public,
+         #{ docroot => Docroot }}]
+    ++ titan_route(Docroot, WorkDir).
 
 
--spec titan_route(Docroot, CAs, WorkDir) -> Routes
+% The mount of the directory Name under the docroot, at /Name; none if
+% the directory does not exist, as a static route's docroot must (and a
+% default install need not have it).
+-spec subdir_mount(Docroot, Name, Auth) -> Routes
               when Docroot :: string(),
-                   CAs     :: [string()],
+                   Name    :: string(),
+                   Auth    :: term(),
+                   Routes  :: [route_entry()].
+subdir_mount(Docroot, Name, Auth) ->
+    Dir = filename:join(Docroot, Name),
+    case filelib:is_dir(filename:absname(Dir)) of
+        true ->
+            [{mount, gemini, "/" ++ Name, blizanci_static, Auth,
+              #{ docroot => Dir }}];
+        false ->
+            logger:warning("default routes: no directory ~s, so /~s is not "
+                           "mounted", [Dir, Name]),
+            []
+    end.
+
+
+-spec titan_route(Docroot, WorkDir) -> Routes
+              when Docroot :: string(),
                    WorkDir :: string() | 'undefined',
                    Routes  :: [route_entry()].
-titan_route(_Docroot, _CAs, undefined) ->
+titan_route(_Docroot, undefined) ->
     [];
-titan_route(Docroot, CAs, WorkDir) ->
-    [{titan, "(?<PATH>.*)", blizanci_titan, {private, CAs},
+titan_route(Docroot, WorkDir) ->
+    [{mount, titan, "/", blizanci_titan, {private, {realm, <<"default">>}},
       #{ docroot => Docroot, work_dir => WorkDir }}].
 
 
@@ -747,15 +764,13 @@ from_app_env() ->
     CACerts = application:get_env(App, ca_certs, []),
     TitanWork = application:get_env(App, titan_work_dir, undefined),
     Default_Routing = routing_table(Docroot, CGIroot, CACerts, TitanWork),
-    % The project's own default table is still in the old tuple format
-    % (until it is rewritten with mounts), so it must not trigger the
-    % operator-facing warning about old-format routes; an operator's own
-    % routing key does.
-    {Routes, Prep} = case application:get_env(App, routing) of
-                         {ok, Own} -> {Own, #{}};
-                         undefined -> {Default_Routing,
-                                       #{ warn_old_format => false }}
-                     end,
+    % The default table is in the new format, so only an operator's own
+    % routing key can trigger the old-format warning.
+    Routes = case application:get_env(App, routing) of
+                 {ok, Own} -> Own;
+                 undefined -> Default_Routing
+             end,
+    Prep = #{},
     case realms_from_env(App, CACerts) of
         {ok, Realms} ->
             site_from_env(App, Hostname, Cert, Key, Routes, Realms, Prep);
@@ -1129,12 +1144,162 @@ test_tmp() ->
     filename:absname(?TEST_DOCROOT).
 
 default_titan_route_test_() ->
-    Titan = fun(L) -> [R || {titan, _, _, _, _} = R <- L] end,
+    Titan = fun(L) -> [R || {mount, titan, _, _, _, _} = R <- L] end,
+    Default = {private, {realm, <<"default">>}},
     [?_assertEqual([], Titan(routing_table("d", "c", []))),
      ?_assertEqual([], Titan(routing_table("d", "c", [], undefined))),
-     ?_assertMatch([{titan, _, blizanci_titan, {private, ["ca"]},
-                     #{ docroot := "d", work_dir := "/w" }}],
-                   Titan(routing_table("d", "c", ["ca"], "/w")))].
+     ?_assertEqual([], Titan(routing_table("d", "c", ["ca"]))),
+     ?_assertEqual([{mount, titan, "/", blizanci_titan, Default,
+                     #{ docroot => "d", work_dir => "/w" }}],
+                   Titan(routing_table("d", "c", ["ca"], "/w"))),
+     % opting in with no ca_certs is left to start-up to refuse
+     ?_assertEqual([{mount, titan, "/", blizanci_titan, Default,
+                     #{ docroot => "d", work_dir => "/w" }}],
+                   Titan(routing_table("d", "c", [], "/w")))].
+
+% The default table, over a docroot with private and restricted
+% directories (fixture: Base/docroot/{index.gemini, hello.gmi,
+% private/x.gmi, private/sub/index.gemini, restricted/x.gmi,
+% privatefoo/x.gmi}, Base/cgi).
+default_table_test_() ->
+    {setup,
+     fun default_table_setup/0,
+     fun default_table_teardown/1,
+     fun default_table_tests/1}.
+
+default_table_teardown({Mime, Base}) ->
+    file:del_dir_r(Base),
+    blizanci_test_support:mime_down(Mime).
+
+default_table_setup() ->
+    Mime = blizanci_test_support:mime_up(),
+    Base =blizanci_test_support:tmp_path("default_table_test"),
+    Docroot = filename:join(Base, "docroot"),
+    [ ok = filelib:ensure_path(filename:join(Docroot, D))
+      || D <- ["private/sub", "restricted", "privatefoo"] ],
+    ok = filelib:ensure_path(filename:join(Base, "cgi")),
+    [ ok = file:write_file(filename:join(Docroot, F), <<"x">>)
+      || F <- ["hello.gmi", "private/x.gmi", "private/sub/index.gemini",
+               "restricted/x.gmi", "privatefoo/x.gmi"] ],
+    {Mime, Base}.
+
+default_table_tests({_Mime, Base}) ->
+    Docroot = filename:join(Base, "docroot"),
+    Cgi = filename:join(Base, "cgi"),
+    Default = {private, {realm, <<"default">>}},
+    Full = fun(Rel) ->
+               {file, <<"text/gemini">>,
+                list_to_binary(filename:absname(filename:join(Docroot,
+                                                               Rel)))}
+           end,
+    Table = routing_table(Docroot, Cgi, ["ca"]),
+    Plain = routing_table(Docroot ++ "/", Cgi, ["ca"]),
+    [?_assertEqual(
+        [{mount, gemini, "/cgi-bin", blizanci_cgi, public,
+          #{ cgiroot => Cgi }},
+         {mount, gemini, "/private", blizanci_static, Default,
+          #{ docroot => filename:join(Docroot, "private") }},
+         {mount, gemini, "/restricted", blizanci_static, restricted,
+          #{ docroot => filename:join(Docroot, "restricted") }},
+         {mount, gemini, "/", blizanci_static, public,
+          #{ docroot => Docroot }}],
+        Table),
+     % a docroot with a trailing slash gives the same sub-roots
+     ?_assertEqual([Docroot ++ "/private", Docroot ++ "/restricted"],
+                   [ D || {mount, gemini, _, _, _, #{ docroot := D }}
+                              <- tl(lists:droplast(Plain)) ]),
+     % no ca_certs: /private stays, authorising nobody
+     ?_assertMatch([_, {mount, gemini, "/private", blizanci_static,
+                        {private, []}, _}, _, _],
+                   routing_table(Docroot, Cgi, [])),
+     % a missing private or restricted directory is not mounted
+     ?_assertMatch([{mount, gemini, "/cgi-bin", _, _, _},
+                    {mount, gemini, "/", _, _, _}],
+                   routing_table(Cgi, Cgi, ["ca"])),
+     ?_test(default_table_serves(Docroot, Full, Table)),
+     ?_test(default_table_serves(Docroot, Full, Plain)),
+     ?_test(default_table_with_cert(Docroot, Full)),
+     ?_test(default_table_no_ca_certs(Docroot, Cgi, Full))].
+
+% What the table does, through the request handler, with no client
+% certificate: private and restricted ask for one (status 60); the rest
+% is served, and a directory is redirected to its index, with the mount
+% in the path.
+default_table_serves(Docroot, Full, Table) ->
+    {ok, Routing} = blizanci_router:prepare(
+                      Table, default_realms(Docroot,
+                                            blizanci_x509:test_pki())),
+    H = fun(Path) -> default_table_get(Routing, Path) end,
+    NotFound = {error_code, file_not_found},
+    ?assertEqual(Full("hello.gmi"), H(<<"hello.gmi">>)),
+    % "private" is a whole segment
+    ?assertEqual(Full("privatefoo/x.gmi"), H(<<"privatefoo/x.gmi">>)),
+    ?assertEqual(NotFound, H(<<"privatefoo/nothere">>)),
+    ?assertEqual({redirect, <<"privatefoo/index.gemini">>},
+                 H(<<"privatefoo">>)),
+    Need = {error_code, cert_required},
+    [ ?assertEqual(Need, H(P))
+      || P <- [<<"private/x.gmi">>, <<"restricted/x.gmi">>,
+               <<"private">>, <<"private/">>, <<"private/nothere">>,
+               <<"restricted">>] ],
+    ?assertEqual(NotFound, H(<<"nothere.gmi">>)).
+
+% With the client certificate of the CA behind realm "default", private
+% serves <docroot>/private, and a certificate from any CA suffices for
+% restricted; redirects keep the mount.
+default_table_with_cert(Docroot, Full) ->
+    Pki = blizanci_x509:test_pki(),
+    {ok, Routing} = blizanci_router:prepare(
+                      routing_table(Docroot, ".", ["ca"]),
+                      default_realms(Docroot, Pki)),
+    #{ peer := Peer } = Pki,
+    H = fun(Path) -> default_table_get(Routing, {ok, Peer}, Path) end,
+    ?assertEqual(Full("private/x.gmi"), H(<<"private/x.gmi">>)),
+    ?assertEqual(Full("restricted/x.gmi"), H(<<"restricted/x.gmi">>)),
+    ?assertEqual({redirect, <<"private/index.gemini">>}, H(<<"private">>)),
+    ?assertEqual({redirect, <<"private/index.gemini">>},
+                 H(<<"private/">>)),
+    ?assertEqual({redirect, <<"private/sub/index.gemini">>},
+                 H(<<"private/sub">>)),
+    ?assertEqual({redirect, <<"private/sub/index.gemini">>},
+                 H(<<"private/sub/">>)),
+    ?assertEqual({redirect, <<"restricted/index.gemini">>},
+                 H(<<"restricted/">>)),
+    ?assertEqual({error_code, file_not_found}, H(<<"private/nothere">>)).
+
+% Without ca_certs the table still builds and prepares, and /private
+% authorises nobody, even a certificate (rather than /private falling
+% through to the public mount).
+default_table_no_ca_certs(Docroot, Cgi, _Full) ->
+    {ok, Routing} = blizanci_router:prepare(
+                      routing_table(Docroot, Cgi, []), #{}),
+    #{ peer := Peer } = blizanci_x509:test_pki(),
+    NotFound = {error_code, file_not_found},
+    ?assertEqual({error_code, cert_not_authorised},
+                 default_table_get(Routing, {ok, Peer},
+                                   <<"private/x.gmi">>)),
+    ?assertEqual({error_code, cert_required},
+                 default_table_get(Routing, {error, no_peercert},
+                                   <<"private/x.gmi">>)),
+    ?assertNotEqual(NotFound, default_table_get(
+                                Routing, {ok, Peer}, <<"private">>)).
+
+default_realms(Docroot, Pki) ->
+    CA = blizanci_x509:test_write_pem(
+           filename:dirname(Docroot), "default-ca.pem",
+           [{'Certificate', maps:get(ca, Pki),
+             not_encrypted}]),
+    {ok, T} = realms([{<<"default">>, [CA]}]),
+    T.
+
+default_table_get(Routing, Path) ->
+    default_table_get(Routing, {error, no_peercert}, Path).
+
+default_table_get(Routing, Cert, Path) ->
+    Config = #server_config{hostname = <<"h">>, port = 1965,
+                            routing = Routing},
+    blizanci_request:handle_line(<<"gemini://h/", Path/binary>>, Config,
+                                 Cert, <<>>).
 
 describe_error_test_() ->
     [?_assertEqual("invalid routing table: route \"x\" (servlet "
