@@ -1,5 +1,100 @@
 # Blizanci Changelog
 
+## 6.0.0
+
+- Multi-site support: several sites on one port, each with its own
+  certificate, key and routes, chosen by SNI
+- Multi-site necessitates a breaking change to the config system: a new
+  route format, authentication realms, a new default routing table,
+  and binary directory options (the details follow)
+- UPGRADING: the default routing table no longer has `/private` or
+  `/restricted` routes. Files under `docroot/private` and
+  `docroot/restricted`, which the old default table protected, are now
+  served publicly unless you write your own `routing` key; the README
+  gives an example with both routes
+- Add two route tuples, `{mount, Proto, Path, Module, Auth, Opts}` and
+  `{regex, Proto, Re, Module, Auth, Opts}`, kept in one ordered list
+  per site, first match wins, one protocol per route (see the README,
+  Routing)
+- A mount matches whole path segments only: `/docs` matches `/docs`,
+  `/docs/` and `/docs/a.gmi`, not `/docsx/a.gmi`. A mount path must
+  start with `/`, have no empty, `.` or `..` segment, and be printable
+  ASCII (codes 32 to 126); anything else is refused when the routes
+  are built
+- A regex route is anchored to the whole request path and must have a
+  named group `PATH` and none named `FULL_PATH`
+- For a mount, the servlet's `PATH` is the remainder after the mount,
+  so each mount names its own root directory; every kind of route also
+  passes `FULL_PATH`, the whole request path as the router sees it
+- Translate the old route tuple `{Proto, Regex, Module, Auth, Opts}`
+  with unchanged behaviour (its regex stays unanchored) and log one
+  warning at start-up, with the count, if any are present
+- Warn at start-up, once per route, about a route that an earlier route
+  of the same protocol always matches first; this never refuses a table
+- Add authentication realms: a named set of CA files, global to all
+  sites, defined by the new `realms` key, for example
+  `{realms, [{<<"staff">>, ["ca1.pem"]}]}`. A route's policy may be
+  `{private, {realm, Name}}` or a list of them, and an undefined realm
+  is an error naming the route
+- New-format routes accept only realm policies; `{private, Files}` in a
+  mount or regex route is an error naming the route. Old route tuples
+  still take a file list
+- `ca_certs` is now shorthand for the realm `<<"default">>`; setting it
+  as well as a realm of that name in `realms` is a start-up error
+- Allow a realm with no CA files; a private route on it authorises
+  nobody, and nothing is logged
+- The default routing table is now `/cgi-bin` (cgiroot) and `/`
+  (docroot), in the new format, plus a Titan route if the new
+  `titan_work_dir` key is set. The Titan route uses the configured
+  docroot and requires a client certificate from the realm `default`;
+  with `ca_certs` unset, nobody can upload
+- Titan's `work_dir` has no default. Start-up refuses a Titan route
+  whose `work_dir` is missing, not an absolute path, not an existing
+  directory, or on a different filesystem from the route's docroot
+- Library callers: remove the docroot field from the `#site` and
+  `#server_config` records and the Docroot argument of `make_site`.
+  `make_site/4` is `(Hostname, Cert, Key, Routes)` and `make_site/5`
+  now takes a realm table as its last argument, so a call written for
+  the old `make_site/5` will not do what it did. The single-site
+  `docroot` key of sys.config stays, as input to the default table
+- The static servlet's directory redirects use `FULL_PATH`, so they
+  are to the whole requested path
+- Routing table errors say which route they are about, by its position
+  and kind (mount, regex or old-format)
+- Add the `sites` key to sys.config: several sites on one port, each
+  `{Hostname, [{certfile, ...}, {keyfile, ...}, {routing, [...]}]}`.
+  A site takes those three keys only, all required, with no default
+  table and no shorthand keys; `port`, `servlets` and `realms` stay
+  global. SNI picks the site and its certificate. Hostnames are folded
+  to lower case, and the same hostname twice is an error (see the
+  README, Several sites)
+- Refuse the `sites` key together with any single-site key (`hostname`,
+  `certfile`, `keyfile`, `docroot`, `cgiroot`, `ca_certs`,
+  `titan_work_dir`, `routing`), with one line listing the keys found
+- Require a site's certificate and private key to be a matching pair:
+  a mismatch is refused when the site is built, also by the builder API
+  and `apply/1`, naming the site and both files. A pair whose key type
+  cannot be compared (for example DSA) is accepted with one warning
+- Report every configuration problem at start-up in one pass, one
+  `blizanci: ...` error line per problem naming the site or route,
+  instead of the first or a badmatch. `blizanci_config:from_app_env/0`
+  now returns `{error, [Reason]}`, a list
+- Refuse port 0 at start-up on the sys.config path (valid ports are
+  1 to 65535)
+- Name the site in the shadowed-route and old-format warnings of a
+  multi-site configuration: `routing: site b.example: ...`
+- Convert the route options `docroot`, `cgiroot` and `work_dir` to
+  binaries once, when a route is built (a string or a binary is
+  accepted), in every route format, the default table and the `sites`
+  key. Servlets and the path code see only binaries, and
+  `blizanci_path:confine/2,3` and `resolve_request/3` take a binary
+  root and refuse a string root
+- Refuse a `docroot`, `cgiroot` or `work_dir` that is not a string or
+  binary or has a character outside printable ASCII, with a one-line
+  error naming the route and the option; `docroot_not_a_directory` and
+  `cgiroot_not_a_directory` now carry binaries and have their own
+  messages
+
 ## 5.34.0
 
 - Accept TLS 1.2 as well as TLS 1.3
