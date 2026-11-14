@@ -29,6 +29,13 @@
 %%       (a bundle), all of which are trusted. The files are read when
 %%       the route is built; a change to one takes effect only on
 %%       apply/1 or a restart.</dd>
+%%   <dt><code>{realms, [{Name::binary(), [CACertPath::string()]}]}</code>
+%%   </dt>
+%%   <dd>authentication realms: named sets of CA certificates, global to
+%%       all sites. A route names them as <code>{private, {realm,
+%%       Name}}</code> or a list of those. <code>ca_certs</code> is
+%%       shorthand for a realm named <code>&lt;&lt;"default"&gt;&gt;</code>;
+%%       giving both it and a realm of that name is an error.</dd>
 %%   <dt><code>{certfile, CertPath::string()}</code></dt>
 %%   <dd>the path to the server's certificate</dd>
 %%   <dt><code>{cgiroot, CGIRootPath::string()}</code></dt>
@@ -58,7 +65,8 @@
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([from_app_env/0, make/3, find_site/2, route/5,
+-export([from_app_env/0, make/3, find_site/2, route/5, route/6,
+         realm/1, add_realm/3, realms/0, realms/1,
          global/2, site/3, add_route/2, insert_route/3, routes/1,
          new/2, validate/1, apply/1, ascii_lowercase/1,
          describe_error/1, tls_versions/0, site_wants_client_cert/1]).
@@ -82,6 +90,57 @@
                    Result     :: {'ok', route()} | {'error', term()}.
 route(Proto, Regex, Module, AuthPolicy, Opts) ->
     blizanci_router:build_route(Proto, Regex, Module, AuthPolicy, Opts).
+
+
+% As route/5, resolving realms against a table made with realms/1 or
+% add_realm/3, at build time.
+-spec route(Proto, Regex, Module, AuthPolicy, Opts, Realms) -> Result
+              when Proto      :: atom(),
+                   Regex      :: string() | binary(),
+                   Module     :: module(),
+                   AuthPolicy :: authorisation_config(),
+                   Opts       :: map(),
+                   Realms     :: realm_table(),
+                   Result     :: {'ok', route()} | {'error', term()}.
+route(Proto, Regex, Module, AuthPolicy, Opts, Realms) ->
+    blizanci_router:build_route(Proto, Regex, Module, AuthPolicy, Opts,
+                                Realms).
+
+
+% The smart constructor for a realm name.
+-spec realm(Name) -> Result
+              when Name   :: term(),
+                   Result :: {'ok', realm()} | {'error', term()}.
+realm(Name) ->
+    blizanci_auth:realm(Name).
+
+
+% The empty realm table.
+-spec realms() -> Result
+              when Result :: realm_table().
+realms() ->
+    #{}.
+
+
+% A realm table from a list of {Name, CAFiles}, the CA files read and
+% decoded now.
+-spec realms(Defs) -> Result
+              when Defs   :: term(),
+                   Result :: {'ok', realm_table()} | {'error', term()}.
+realms(Defs) ->
+    blizanci_auth:realm_table(Defs).
+
+
+% Define a realm: a name and the CA files whose certificates it trusts.
+% It takes effect for routes built with the returned table, and so at
+% apply/1 once they are in a site.
+-spec add_realm(Realms, Name, Files) -> Result
+              when Realms :: realm_table(),
+                   Name   :: term(),
+                   Files  :: term(),
+                   Result :: {'ok', realm_table()} | {'error', term()}.
+add_realm(Realms, Name, Files) ->
+    blizanci_auth:add_realm(Realms, Name, Files).
 
 
 % The global part of a configuration: one per blizanci instance,
@@ -310,7 +369,21 @@ apply(Config = #config{global = #global{port = Port, servlets = Servlets},
                              | {'error', 'hostname_not_lowercase'}
                              | {'error', {'invalid_routing', term()}}.
 make_site(Hostname, Cert, Key, Docroot, Routes) ->
-    case blizanci_router:prepare(Routes) of
+    make_site(Hostname, Cert, Key, Docroot, Routes, #{}).
+
+
+-spec make_site(Hostname, Cert, Key, Docroot, Routes, Realms) -> Result
+              when Hostname :: string(),
+                   Cert     :: string(),
+                   Key      :: string(),
+                   Docroot  :: string(),
+                   Routes   :: [route_entry()],
+                   Realms   :: realm_table(),
+                   Result   :: {'ok', site()}
+                             | {'error', 'hostname_not_lowercase'}
+                             | {'error', {'invalid_routing', term()}}.
+make_site(Hostname, Cert, Key, Docroot, Routes, Realms) ->
+    case blizanci_router:prepare(Routes, Realms) of
         {ok, Routing} ->
             case site(Hostname, Cert, Key) of
                 {ok, Site} ->
@@ -329,6 +402,9 @@ make_site(Hostname, Cert, Key, Docroot, Routes) ->
                    Result :: string().
 describe_error({invalid_routing, Reason}) ->
     "invalid routing table: " ++ describe_route_error(Reason);
+describe_error(ca_certs_and_default_realm) ->
+    "ca_certs is shorthand for the realm \"default\", so the realms key "
+    "must not also define one of that name";
 describe_error(hostname_not_lowercase) ->
     "hostname is not lower case";
 describe_error({shutdown, {failed_to_start_child, blizanci_servlets,
@@ -352,6 +428,13 @@ describe_route_error({invalid_route_options, blizanci_titan,
          "path is taken from the working directory, ~ts); create it, "
          "or set work_dir in the Titan route's options to an existing "
          "directory", [Dir, Cwd]);
+describe_route_error({unknown_realm, {realm, Name}, Regex, Module}) ->
+    flat("route ~0p (servlet ~0p) names realm ~0p, which is not "
+         "defined", [Regex, Module, Name]);
+describe_route_error({empty_realm, {realm, Name}, Regex, Module}) ->
+    flat("route ~0p (servlet ~0p) is private to realm ~0p, which has no "
+         "CA certificates and so authorises nobody",
+         [Regex, Module, Name]);
 describe_route_error({invalid_ca_file, File, Why}) ->
     flat("a private route's CA file ~ts cannot be used (~0p); check that "
          "it exists and holds a PEM certificate", [File, Why]);
@@ -476,7 +559,7 @@ proto_opts(Port) ->
     [{port, Port}].
 
 
--type route_entry() :: {atom(), string(), atom(), atom(), map()}.
+-type route_entry() :: {atom(), string(), atom(), term(), map()}.
 
 -spec routing_table(Docroot, CGIroot, CACerts) -> RoutingTable
               when Docroot      :: string(),
@@ -570,10 +653,49 @@ from_app_env() ->
     CACerts = application:get_env(App, ca_certs, []),
     Default_Routing = routing_table(Docroot, CGIroot, CACerts),
     Routes = application:get_env(App, routing, Default_Routing),
+    case realms_from_env(App, CACerts) of
+        {ok, Realms} ->
+            site_from_env(App, Hostname, Cert, Key, Docroot, Routes,
+                          Realms);
+        {error, _} = Error -> Error
+    end.
+
+
+% The global realms key, plus ca_certs as the realm "default" when that
+% key is set; both defining "default" is an error.
+-spec realms_from_env(App, CACerts) -> Result
+              when App     :: atom(),
+                   CACerts :: term(),
+                   Result  :: {'ok', realm_table()} | {'error', term()}.
+realms_from_env(App, CACerts) ->
+    Defs = application:get_env(App, realms, []),
+    Default = <<"default">>,
+    case application:get_env(App, ca_certs) of
+        {ok, _} when is_list(Defs) ->
+            case lists:keymember(Default, 1, Defs) of
+                true -> {error, ca_certs_and_default_realm};
+                false -> realms(Defs ++ [{Default, CACerts}])
+            end;
+        _ ->
+            realms(Defs)
+    end.
+
+
+-spec site_from_env(App, Hostname, Cert, Key, Docroot, Routes, Realms) ->
+              Result
+              when App      :: atom(),
+                   Hostname :: string(),
+                   Cert     :: string(),
+                   Key      :: string(),
+                   Docroot  :: string(),
+                   Routes   :: [route_entry()],
+                   Realms   :: realm_table(),
+                   Result   :: {'ok', map()} | {'error', term()}.
+site_from_env(App, Hostname, Cert, Key, Docroot, Routes, Realms) ->
     % Today's sys.config only ever describes a single site, so this
     % is a one-element list; everything downstream looks sites up by
     % hostname and doesn't assume that.
-    case make_site(Hostname, Cert, Key, Docroot, Routes) of
+    case make_site(Hostname, Cert, Key, Docroot, Routes, Realms) of
         {ok, Site} ->
             Port = application:get_env(App, port, ?PORT),
             Servlets = application:get_env(App, servlets,
@@ -630,6 +752,127 @@ route_private_ca_test_() ->
                         Static([CA])),
           ?_assertEqual({error, {invalid_ca_file, Missing, enoent}},
                         Static([CA, Missing]))]
+     end}.
+
+% A route's realms are resolved when it is built, against the realm table.
+route_realm_test_() ->
+    {setup,
+     fun() -> blizanci_x509:test_tmp_dir() end,
+     fun(Dir) -> file:del_dir_r(Dir) end,
+     fun(Dir) ->
+         Opts = #{ docroot => ?TEST_DOCROOT },
+         CA = blizanci_x509:test_write_pem(
+                Dir, "ca.pem",
+                [{'Certificate',
+                  maps:get(ca, blizanci_x509:test_pki()),
+                  not_encrypted}]),
+         {ok, T0} = add_realm(realms(), <<"staff">>, [CA]),
+         {ok, T} = add_realm(T0, <<"none">>, []),
+         Staff = {realm, <<"staff">>},
+         R = fun(Auth) ->
+                 route(gemini, ?RX, blizanci_static, Auth, Opts, T)
+             end,
+         [?_assertMatch({ok, #route{auth_policy = {private, [Staff], [_]}}},
+                        R({private, Staff})),
+          ?_assertMatch({ok, #route{auth_policy = {private, [Staff], [_]}}},
+                        R({private, [Staff]})),
+          ?_assertEqual({error, {unknown_realm, {realm, <<"x">>}, ?RX,
+                                 blizanci_static}},
+                        R({private, {realm, <<"x">>}})),
+          ?_assertEqual({error, {empty_realm, {realm, <<"none">>}, ?RX,
+                                 blizanci_static}},
+                        R({private, {realm, <<"none">>}})),
+          ?_assertEqual({error, {unknown_realm, Staff, ?RX,
+                                 blizanci_static}},
+                        route(gemini, ?RX, blizanci_static,
+                              {private, Staff}, Opts)),
+          ?_assertMatch({ok, #route{auth_policy = {private, [CA], [_]}}},
+                        R({private, [CA]})),
+          ?_assertEqual({error, {duplicate_realm, Staff}},
+                        add_realm(T, <<"staff">>, [CA])),
+          ?_assertEqual({error, {invalid_realm_name, <<>>}},
+                        add_realm(T, <<>>, [CA])),
+          ?_assertEqual({ok, Staff}, realm(<<"staff">>)),
+          ?_assertEqual(
+             "route \"(?<PATH>x)\" (servlet blizanci_static) names realm "
+             "<<\"x\">>, which is not defined",
+             describe_route_error({unknown_realm, {realm, <<"x">>}, ?RX,
+                                   blizanci_static})),
+          ?_assertMatch({ok, [#route{auth_policy = {private, [Staff], _}}]},
+                        blizanci_router:prepare(
+                          [{gemini, ?RX, blizanci_static,
+                            {private, Staff}, Opts}], T))]
+     end}.
+
+% The sys.config key realms, and ca_certs as the realm "default".
+realms_from_env_test_() ->
+    {setup,
+     fun() -> blizanci_x509:test_tmp_dir() end,
+     fun(Dir) ->
+         application:unset_env(blizanci_realms_test, realms),
+         application:unset_env(blizanci_realms_test, ca_certs),
+         file:del_dir_r(Dir)
+     end,
+     fun(Dir) ->
+         CA = blizanci_x509:test_write_pem(
+                Dir, "ca.pem",
+                [{'Certificate',
+                  maps:get(ca, blizanci_x509:test_pki()),
+                  not_encrypted}]),
+         App = blizanci_realms_test,
+         Set = fun(Key, Val) -> application:set_env(App, Key, Val) end,
+         Unset = fun(Key) -> application:unset_env(App, Key) end,
+         Reset = fun() -> Unset(realms), Unset(ca_certs) end,
+         Staff = {realm, <<"staff">>},
+         Default = {realm, <<"default">>},
+         [?_test(begin
+                     Reset(),
+                     ?assertEqual({ok, #{}}, realms_from_env(App, []))
+                 end),
+          ?_test(begin
+                     Reset(),
+                     Set(realms, [{<<"staff">>, [CA]}]),
+                     {ok, T} = realms_from_env(App, []),
+                     ?assertEqual([Staff], maps:keys(T))
+                 end),
+          ?_test(begin
+                     Reset(),
+                     Set(ca_certs, [CA]),
+                     {ok, T} = realms_from_env(App, [CA]),
+                     ?assertEqual([Default], maps:keys(T))
+                 end),
+          ?_test(begin
+                     Reset(),
+                     Set(ca_certs, [CA]),
+                     Set(realms, [{<<"staff">>, [CA]}]),
+                     {ok, T} = realms_from_env(App, [CA]),
+                     ?assertEqual([Default, Staff], lists:sort(maps:keys(T)))
+                 end),
+          ?_test(begin
+                     Reset(),
+                     Set(ca_certs, [CA]),
+                     Set(realms, [{<<"default">>, [CA]}]),
+                     ?assertEqual({error, ca_certs_and_default_realm},
+                                  realms_from_env(App, [CA]))
+                 end),
+          % a realm "default" is fine when ca_certs is not set
+          ?_test(begin
+                     Reset(),
+                     Set(realms, [{<<"default">>, [CA]}]),
+                     ?assertMatch({ok, _}, realms_from_env(App, []))
+                 end),
+          ?_test(begin
+                     Reset(),
+                     Set(realms, [{<<"staff">>, ["/nonexistent.pem"]}]),
+                     ?assertMatch({error, {invalid_ca_file, _, _}},
+                                  realms_from_env(App, []))
+                 end),
+          ?_test(begin
+                     Reset(),
+                     Set(realms, [{staff, [CA]}]),
+                     ?assertEqual({error, {invalid_realm_name, staff}},
+                                  realms_from_env(App, []))
+                 end)]
      end}.
 
 route_merges_default_options_test() ->

@@ -4,7 +4,7 @@
 
 -module(blizanci_router).
 
--export([prepare/1, build_route/5, check_servlet/1,
+-export([prepare/1, prepare/2, build_route/5, build_route/6, check_servlet/1,
          check_upload_dirs/1]).
 -export([route/4]).
 
@@ -28,7 +28,19 @@
                                 {'error', term()}.
 
 prepare(RouteInfo) ->
-    try make_routes(RouteInfo) of
+    prepare(RouteInfo, #{}).
+
+
+%% @doc
+%% As prepare/1, resolving realms against a realm table.
+%% @end
+-spec prepare(RouteInfo, Realms) -> Result
+              when RouteInfo :: [route_info()],
+                   Realms    :: realm_table(),
+                   Result    :: {'ok', [route()]} |
+                                {'error', term()}.
+prepare(RouteInfo, Realms) ->
+    try make_routes(RouteInfo, Realms) of
         Routes ->
             case check_upload_dirs(Routes) of
                 ok -> {ok, Routes};
@@ -92,11 +104,12 @@ canonical_dir(Dir) when is_list(Dir) ->
     blizanci_path:fix_path(filename:absname(Dir)).
 
 
--spec make_routes(RouteInfo) -> Routes
+-spec make_routes(RouteInfo, Realms) -> Routes
               when RouteInfo :: [route_info()],
+                   Realms    :: realm_table(),
                    Routes    :: [route()].
-make_routes(RouteInfo) ->
-    [ make_route(R) || R <- RouteInfo ].
+make_routes(RouteInfo, Realms) ->
+    [ make_route(R, Realms) || R <- RouteInfo ].
 
 
 %% @doc
@@ -111,18 +124,35 @@ make_routes(RouteInfo) ->
                    Opts       :: map(),
                    Result     :: {'ok', route()} | {'error', term()}.
 build_route(Proto, Regex, Module, AuthPolicy, Opts) ->
-    try make_route({Proto, Regex, Module, AuthPolicy, Opts}) of
+    build_route(Proto, Regex, Module, AuthPolicy, Opts, #{}).
+
+
+%% @doc
+%% As build_route/5, resolving realms against a realm table.
+%% @end
+-spec build_route(Proto, Regex, Module, AuthPolicy, Opts, Realms) ->
+              Result
+              when Proto      :: atom(),
+                   Regex      :: string() | binary(),
+                   Module     :: module(),
+                   AuthPolicy :: authorisation_config(),
+                   Opts       :: map(),
+                   Realms     :: realm_table(),
+                   Result     :: {'ok', route()} | {'error', term()}.
+build_route(Proto, Regex, Module, AuthPolicy, Opts, Realms) ->
+    try make_route({Proto, Regex, Module, AuthPolicy, Opts}, Realms) of
         Route -> {ok, Route}
     catch
         throw:Reason -> {error, Reason}
     end.
 
 
--spec make_route(RouteInfo) -> Route
+-spec make_route(RouteInfo, Realms) -> Route
               when RouteInfo :: route_info(),
+                   Realms    :: realm_table(),
                    Route     :: route().
 
-make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
+make_route({Proto, Regex, Module, AuthPolicy, Opts}, Realms) ->
     ok = valid_proto(Proto),
     RE = compile_regex(Regex),
     ok = valid_servlet(Module),
@@ -133,25 +163,32 @@ make_route({Proto, Regex, Module, AuthPolicy, Opts}) ->
     % are not responsible for remembering to merge before calling in.
     FullOpts = maps:merge(Module:default_options(), Opts),
     ok = valid_module_opts(Module, FullOpts),
-    {ok, Authz} = valid_authz(AuthPolicy),
+    {ok, Authz} = valid_authz(AuthPolicy, Realms, Regex, Module),
     ok = valid_path_group(Regex, RE, Module),
     #route{proto=Proto,
            pattern=RE,
            module=Module,
            auth_policy=Authz,
            options=FullOpts};
-make_route(_) ->
+make_route(_, _) ->
     throw(invalid_route).
 
 
--spec valid_authz(AuthPolicy) -> Result
+-spec valid_authz(AuthPolicy, Realms, Regex, Module) -> Result
               when AuthPolicy :: term(),
+                   Realms     :: realm_table(),
+                   Regex      :: string() | binary(),
+                   Module     :: module(),
                    Result     :: {'ok', authorisation()}.
-valid_authz(AuthPolicy) ->
-    case blizanci_auth:valid_authz_policy(AuthPolicy) of
+valid_authz(AuthPolicy, Realms, Regex, Module) ->
+    case blizanci_auth:valid_authz_policy(AuthPolicy, Realms) of
         {ok, _} = Ok -> Ok;
         {error, invalid_authz_policy} ->
             throw({invalid_authz_policy, AuthPolicy});
+        {error, {unknown_realm, Realm}} ->
+            throw({unknown_realm, Realm, Regex, Module});
+        {error, {empty_realm, Realm}} ->
+            throw({empty_realm, Realm, Regex, Module});
         {error, Reason} -> throw(Reason)
     end.
 
