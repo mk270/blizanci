@@ -614,10 +614,13 @@ describe_route_error(invalid_route) ->
     flat("not a route; expected {mount, Proto, Path, Module, Auth, Opts}, "
          "{regex, Proto, Re, Module, Auth, Opts} or the old "
          "{Proto, Regex, Module, Auth, Opts}", []);
+describe_route_error({invalid_mount, Path, non_ascii}) ->
+    flat("mount path ~w is invalid (not plain ASCII); a mount must "
+         "consist of printable ASCII characters only", [Path]);
 describe_route_error({invalid_mount, Path, Why}) ->
     flat("mount path ~0p is invalid (~s); it must be a non-empty string "
          "starting with \"/\", with no empty, \".\" or \"..\" segments "
-         "and no control characters",
+         "and no control characters or non-ASCII",
          [Path, mount_problem(Why)]);
 describe_route_error({reserved_group, Re, Name}) ->
     flat("regex ~0p has a group named ~s, which is reserved for the "
@@ -1496,6 +1499,11 @@ new_format_file_list_tests(CA, T, Opts) ->
         "and name it, e.g. {private, {realm, <<\"staff\">>}}",
         describe_route_error({bad_route, 2, regex,
                               file_list_in_new_route})),
+     ?_assertEqual(
+        "route 2 (mount route): mount path [47,233] is invalid (not plain "
+        "ASCII); a mount must consist of printable ASCII characters only",
+        describe_route_error({bad_route, 2, mount,
+                              {invalid_mount, [$/, 233], non_ascii}})),
      % realm policies are still fine in new-format routes
      ?_assertMatch({ok, #route{auth_policy = {private, [Staff], [_]}}},
                    route(Mount({private, Staff}), T)),

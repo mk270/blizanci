@@ -586,7 +586,11 @@ plain_bytes(_) ->
 
 
 % Check a mount path (see route_info()) and return it as a prefix of
-% whole segments: no leading or trailing slash, <<>> for "/".
+% whole segments: no leading or trailing slash, <<>> for "/".  The
+% path must be printable ASCII.  Checks run in this order: not a
+% string, not UTF-8 (so invalid UTF-8 keeps not_utf8), empty, not
+% absolute, then per segment empty, dot, control_character (below 32
+% or DEL) and last non_ascii (anything above 127).
 -spec parse_mount(Path) -> Prefix
               when Path   :: term(),
                    Prefix :: binary().
@@ -622,6 +626,10 @@ valid_segment(Path, S) ->
     case [ C || <<C>> <= S, C < 32 orelse C =:= 127 ] of
         [] -> ok;
         _ -> throw({invalid_mount, Path, control_character})
+    end,
+    case [ C || <<C>> <= S, C > 127 ] of
+        [] -> ok;
+        _ -> throw({invalid_mount, Path, non_ascii})
     end.
 
 
@@ -1089,9 +1097,8 @@ mount_matching_test_() ->
      ?_assertEqual(Hit(<<"x/y.gmi">>, <<"x/y.gmi">>),
                    M("/", <<"x/y.gmi">>)),
      ?_assertEqual(Hit(<<>>, <<>>), M("/", <<>>)),
-     % unicode mount
-     ?_assertEqual(Hit(<<"caf\303\251/a">>, <<"a">>),
-                   M([$/, $c, $a, $f, 233], <<"caf\303\251/a">>))].
+     % a mount with a space matches the decoded path
+     ?_assertEqual(Hit(<<"a b/c">>, <<"c">>), M("/a b", <<"a b/c">>))].
 
 regex_anchoring_test_() ->
     R = fun(Re, Path) -> matches(regex(Re), Path) end,
@@ -1241,7 +1248,20 @@ mount_validation_test_() ->
      ?_assertEqual({error, {invalid_mount, docs, not_a_string}},
                    Bad(docs)),
      ?_assertEqual({error, {invalid_mount, <<"/a", 255>>, not_utf8}},
-                   Bad(<<"/a", 255>>))].
+                   Bad(<<"/a", 255>>)),
+     ?_assertMatch({ok, _}, Bad("/a-b_c~d!$&'()*+,;=:@")),
+     ?_assertMatch({ok, _}, Bad(<<"/a b">>)),
+     ?_assertEqual({error, {invalid_mount, [$/, 233], non_ascii}},
+                   Bad([$/, 233])),
+     ?_assertEqual({error, {invalid_mount, [$/, 8364], non_ascii}},
+                   Bad([$/, 8364])),
+     ?_assertEqual({error, {invalid_mount, <<"/", 195, 169>>,
+                            non_ascii}},
+                   Bad(<<"/", 195, 169>>)),
+     ?_assertEqual({error, {invalid_mount, "/a\t", control_character}},
+                   Bad("/a\t")),
+     ?_assertEqual({error, {invalid_mount, [$/, 127], control_character}},
+                   Bad([$/, 127]))].
 
 route_error_position_test_() ->
     Good = mount("/ok"),
@@ -1254,6 +1274,9 @@ route_error_position_test_() ->
      ?_assertMatch({error, {bad_route, 3, mount,
                             {invalid_mount, "/a//b", empty_segment}}},
                    P([Good, Good, mount("/a//b")])),
+     ?_assertMatch({error, {bad_route, 2, mount,
+                            {invalid_mount, [$/, 233], non_ascii}}},
+                   P([Good, mount([$/, 233])])),
      ?_assertMatch({error, {bad_route, 2, regex,
                             {route_without_path_group, "x", _}}},
                    P([Good, regex("x")])),
