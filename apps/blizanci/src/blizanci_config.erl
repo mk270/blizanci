@@ -81,7 +81,7 @@
 -export([from_app_env/0, make/3, find_site/2, route/2, route/5, route/6,
          realm/1, add_realm/3, realms/0, realms/1,
          global/2, site/3, add_route/2, insert_route/3, routes/1,
-         new/2, validate/1, apply/1, ascii_lowercase/1,
+         new/2, validate/1, validate_all/1, apply/1, ascii_lowercase/1,
          describe_error/1, tls_versions/0, site_wants_client_cert/1]).
 
 % A site record with no check on its files, for tests of everything but
@@ -305,98 +305,101 @@ new(Global = #global{}, Sites) when is_list(Sites) ->
     #config{global = Global, sites = Sites}.
 
 
-% Check a whole configuration, reporting the first problem found.
+% Check a whole configuration, reporting the first problem found. See
+% validate_all/1 for every problem.
 -spec validate(Config) -> Result
               when Config :: config(),
                    Result :: 'ok' | {'error', term()}.
-validate(#config{global = Global, sites = Sites}) ->
-    first_error([fun() -> validate_global(Global) end,
-                 fun() -> validate_sites(Sites) end,
-                 fun() -> validate_routes_use_servlets(Global, Sites) end]).
-
-
--spec first_error(Checks) -> Result
-              when Checks :: [fun(() -> 'ok' | {'error', term()})],
-                   Result :: 'ok' | {'error', term()}.
-first_error([]) ->
-    ok;
-first_error([Check | Rest]) ->
-    case Check() of
-        ok -> first_error(Rest);
-        {error, _} = Error -> Error
+validate(Config) ->
+    case validate_all(Config) of
+        ok -> ok;
+        {error, [First | _]} -> {error, First}
     end.
 
 
--spec validate_global(Global) -> Result
-              when Global :: global_config(),
-                   Result :: 'ok' | {'error', term()}.
-validate_global(#global{port = Port, servlets = Servlets}) ->
-    case is_integer(Port) andalso Port >= 1 andalso Port =< ?MAX_PORT of
-        true  -> validate_servlets(Servlets);
-        false -> {error, {invalid_port, Port}}
+% Check a whole configuration, reporting every problem found, in a
+% stable order: the global part (port, then each servlet), then the sites
+% (no sites, duplicate hostnames, then for each site in turn its
+% certificate, key and the upload directories of its routes), then
+% routes naming a servlet that is not declared. The errors are the
+% reasons validate/1 returns; describe_error/1 gives each one a line.
+-spec validate_all(Config) -> Result
+              when Config :: config(),
+                   Result :: 'ok' | {'error', [term()]}.
+validate_all(#config{global = Global, sites = Sites}) ->
+    case problems_global(Global) ++ problems_sites(Sites)
+         ++ problems_servlet_use(Global, Sites) of
+        [] -> ok;
+        Problems -> {error, Problems}
     end.
 
 
--spec validate_servlets(Servlets) -> Result
-              when Servlets :: term(),
-                   Result   :: 'ok' | {'error', term()}.
-validate_servlets(Servlets) when is_list(Servlets) ->
-    first_error([fun() -> blizanci_router:check_servlet(S) end
-                 || S <- Servlets]);
-validate_servlets(Servlets) ->
-    {error, {invalid_servlets, Servlets}}.
+-spec problems_global(Global) -> Problems
+              when Global   :: global_config(),
+                   Problems :: [term()].
+problems_global(#global{port = Port, servlets = Servlets}) ->
+    PortProblems = case is_integer(Port) andalso Port >= 1
+                        andalso Port =< ?MAX_PORT of
+                       true  -> [];
+                       false -> [{invalid_port, Port}]
+                   end,
+    PortProblems ++ problems_servlets(Servlets).
 
 
--spec validate_sites(Sites) -> Result
-              when Sites  :: [site()],
-                   Result :: 'ok' | {'error', term()}.
-validate_sites([]) ->
-    {error, no_sites};
-validate_sites(Sites) ->
+-spec problems_servlets(Servlets) -> Problems
+              when Servlets  :: term(),
+                   Problems  :: [term()].
+problems_servlets(Servlets) when is_list(Servlets) ->
+    [ Reason || S <- Servlets,
+                {error, Reason} <- [blizanci_router:check_servlet(S)] ];
+problems_servlets(Servlets) ->
+    [{invalid_servlets, Servlets}].
+
+
+-spec problems_sites(Sites) -> Problems
+              when Sites    :: [site()],
+                   Problems :: [term()].
+problems_sites([]) ->
+    [no_sites];
+problems_sites(Sites) ->
     Hostnames = [ S#site.hostname || S <- Sites ],
-    case Hostnames -- lists:usort(Hostnames) of
-        [] -> first_error([fun() -> validate_site(S) end || S <- Sites]);
-        [Duplicate | _] -> {error, {duplicate_site, Duplicate}}
-    end.
+    Duplicates = lists:usort(Hostnames -- lists:usort(Hostnames)),
+    [ {duplicate_site, H} || H <- Duplicates ]
+    ++ lists:append([ problems_site(S) || S <- Sites ]).
 
 
--spec validate_site(Site) -> Result
-              when Site   :: site(),
-                   Result :: 'ok' | {'error', term()}.
-validate_site(#site{hostname = Hostname, certfile = Cert,
+-spec problems_site(Site) -> Problems
+              when Site     :: site(),
+                   Problems :: [term()].
+problems_site(#site{hostname = Hostname, certfile = Cert,
                     keyfile = Key, routing = Routing}) ->
-    case {blizanci_x509:validate_pem_file(Cert),
-          blizanci_x509:validate_pem_file(Key)} of
-        {{fail, Why}, _} -> {error, {bad_certfile, Hostname, Why}};
-        {_, {fail, Why}} -> {error, {bad_keyfile, Hostname, Why}};
-        _ ->
-            case check_pair(Hostname, Cert, Key) of
-                ok ->
-                    case blizanci_router:check_upload_dirs(Routing) of
-                        ok -> ok;
-                        {error, Why} ->
-                            {error, {bad_routes, Hostname, Why}}
-                    end;
-                {error, _} = Error -> Error
-            end
-    end.
+    FileProblems = file_problems(Hostname, Cert, Key),
+    % the pair is only testable when both files are readable PEM
+    PairProblems = case FileProblems of
+                       [] ->
+                           [ Reason
+                             || {error, Reason}
+                                    <- [check_pair(Hostname, Cert, Key)] ];
+                       _ -> []
+                   end,
+    FileProblems ++ PairProblems
+    ++ [ {bad_routes, Hostname, Why}
+         || {error, Why} <- [blizanci_router:check_upload_dirs(Routing)] ].
 
 
 % A route may only name a servlet the global config declares, since only
 % declared servlets have their pools started.
--spec validate_routes_use_servlets(Global, Sites) -> Result
-              when Global :: global_config(),
-                   Sites  :: [site()],
-                   Result :: 'ok' | {'error', term()}.
-validate_routes_use_servlets(#global{servlets = Servlets}, Sites) ->
-    Undeclared = [ {S#site.hostname, R#route.module}
-                   || S <- Sites, R <- S#site.routing,
-                      not lists:member(R#route.module, Servlets) ],
-    case Undeclared of
-        [] -> ok;
-        [{Hostname, Module} | _] ->
-            {error, {undeclared_servlet, Hostname, Module}}
-    end.
+-spec problems_servlet_use(Global, Sites) -> Problems
+              when Global   :: global_config(),
+                   Sites    :: [site()],
+                   Problems :: [term()].
+problems_servlet_use(#global{servlets = Servlets}, Sites)
+  when is_list(Servlets) ->
+    lists:uniq([ {undeclared_servlet, S#site.hostname, R#route.module}
+                 || S <- Sites, R <- S#site.routing,
+                    not lists:member(R#route.module, Servlets) ]);
+problems_servlet_use(_, _) ->
+    [].
 
 
 % Apply a configuration to the running instance, without restarting its
@@ -498,6 +501,47 @@ describe_error({shutdown, {failed_to_start_child, blizanci_servlets,
     describe_error(Reason);
 describe_error({servlet_start_failed, Servlet, Reason}) ->
     flat("servlet ~0p could not start: ~0p", [Servlet, Reason]);
+describe_error({invalid_configuration, Errors}) when is_list(Errors) ->
+    lists:flatten(lists:join("; ", [ describe_error(E) || E <- Errors ]));
+% a reason that already names the site is not given the prefix twice
+describe_error({site, _Hostname, Reason})
+  when element(1, Reason) =:= cert_key_mismatch;
+       element(1, Reason) =:= bad_certfile;
+       element(1, Reason) =:= bad_keyfile ->
+    describe_error(Reason);
+describe_error({site, Hostname, Reason}) ->
+    flat("site ~s: ~s", [host_text(Hostname), describe_error(Reason)]);
+describe_error({invalid_hostname, Value}) ->
+    flat("hostname ~0p is not a non-empty string", [Value]);
+describe_error({bad_realm, Name, Reason}) ->
+    flat("realm ~0p: ~s", [Name, describe_realm_error(Reason)]);
+describe_error({realms, Reason}) ->
+    flat("realms: ~s", [describe_realm_error(Reason)]);
+describe_error({bad_certfile, Hostname, Why}) ->
+    flat("site ~s: the certificate file is not a readable PEM file (~0p)",
+         [host_text(Hostname), Why]);
+describe_error({bad_keyfile, Hostname, Why}) ->
+    flat("site ~s: the key file is not a readable PEM file (~0p)",
+         [host_text(Hostname), Why]);
+describe_error({bad_routes, Hostname, Reason}) ->
+    flat("site ~s: ~s",
+         [host_text(Hostname), describe_route_error(Reason)]);
+describe_error({undeclared_servlet, Hostname, Module}) ->
+    flat("site ~s: a route uses servlet ~0p, which is not in the "
+         "servlets list", [host_text(Hostname), Module]);
+describe_error({duplicate_site, Hostname}) ->
+    flat("site ~s is configured more than once", [host_text(Hostname)]);
+describe_error(no_sites) ->
+    "no sites are configured";
+describe_error({invalid_port, Port}) ->
+    flat("port ~0p is not a TCP port number (1 to ~b)", [Port, ?MAX_PORT]);
+describe_error({invalid_servlets, Servlets}) ->
+    flat("servlets must be a list of modules, not ~0p", [Servlets]);
+describe_error({Why, _} = Reason)
+  when Why =:= unknown_servlet; Why =:= not_a_servlet ->
+    describe_route_error(Reason);
+describe_error({servlet_missing_callbacks, _, _} = Reason) ->
+    describe_route_error(Reason);
 describe_error(Other) ->
     flat("configuration error: ~0p", [Other]).
 
@@ -545,6 +589,20 @@ describe_route_error({invalid_route_options, blizanci_titan,
 describe_route_error({unknown_realm, {realm, Name}, Regex, Module}) ->
     flat("route ~0p (servlet ~0p) names realm ~0p, which is not "
          "defined", [Regex, Module, Name]);
+describe_route_error({unknown_servlet, Module}) ->
+    flat("servlet ~0p cannot be loaded; check the module name and that it "
+         "is installed", [Module]);
+describe_route_error({not_a_servlet, Module}) ->
+    flat("~0p is not a servlet module name", [Module]);
+describe_route_error({servlet_missing_callbacks, Module, Missing}) ->
+    flat("servlet ~0p lacks callbacks ~0p", [Module, Missing]);
+describe_route_error({routing_not_a_list, Value}) ->
+    flat("the routing key must be a list of routes, not ~0p", [Value]);
+describe_route_error({upload_dir_overlaps_cgiroot, Kind, Dir, Root}) ->
+    flat("the Titan ~s ~ts overlaps the CGI root ~ts; uploads must not "
+         "land where scripts run", [Kind, Dir, Root]);
+describe_route_error({cannot_resolve_dir, Dir, Reason}) ->
+    flat("directory ~ts cannot be resolved (~0p)", [Dir, Reason]);
 describe_route_error(file_list_in_new_route) ->
     flat("a mount or regex route cannot take a list of CA files in "
          "{private, Files}; define a realm in the realms key and name "
@@ -556,6 +614,44 @@ describe_route_error({invalid_route_options, Module, Reason}) ->
     flat("route for servlet ~p has invalid options: ~0p", [Module, Reason]);
 describe_route_error(Reason) ->
     flat("~0p", [Reason]).
+
+% An error from building the realm table, in the context "realm X: " or
+% "realms: ".
+-spec describe_realm_error(Reason) -> Result
+              when Reason :: term(),
+                   Result :: string().
+describe_realm_error({invalid_ca_file, File, Why}) ->
+    flat("CA file ~ts cannot be used (~0p); check that it exists and "
+         "holds a PEM certificate", [File, Why]);
+describe_realm_error({invalid_realm_name, Name}) ->
+    flat("~0p is not a valid realm name; it must be a binary of 1 to 64 "
+         "printable ASCII characters", [Name]);
+describe_realm_error({duplicate_realm, {realm, Name}}) ->
+    flat("realm ~0p is defined more than once", [Name]);
+describe_realm_error({invalid_realm_files, _}) ->
+    "the CA files must be a list of file names";
+describe_realm_error({invalid_realm, Def}) ->
+    flat("~0p is not a {Name, CAFiles} pair", [Def]);
+describe_realm_error({invalid_realms, Value}) ->
+    flat("the realms key must be a list of {Name, CAFiles} pairs, not "
+         "~0p", [Value]);
+describe_realm_error(ca_certs_and_default_realm) ->
+    describe_error(ca_certs_and_default_realm);
+describe_realm_error(Reason) ->
+    flat("~0p", [Reason]).
+
+% A hostname as it appears in a line: the stored binary, or whatever the
+% operator wrote if that is not a string.
+-spec host_text(Hostname) -> Result
+              when Hostname :: term(),
+                   Result   :: string().
+host_text(Hostname) when is_binary(Hostname) ->
+    binary_to_list(Hostname);
+host_text(Hostname) ->
+    case io_lib:printable_unicode_list(Hostname) of
+        true -> Hostname;
+        false -> flat("~0p", [Hostname])
+    end.
 
 -spec route_kind_name(Kind) -> Result
               when Kind   :: term(),
@@ -736,18 +832,6 @@ titan_route(Docroot, WorkDir) ->
       #{ docroot => Docroot, work_dir => WorkDir }}].
 
 
--spec get_pem_file_from_environment(App, Key, Default_Filename) -> Result
-              when App              :: atom(),
-                   Key              :: atom(),
-                   Default_Filename :: string(),
-                   Result           :: {ok, string()} |
-                                       {fail, atom()}.
-
-get_pem_file_from_environment(App, Key, Default_Filename) ->
-    Value = application:get_env(App, Key, Default_Filename),
-    blizanci_x509:validate_pem_file(Value).
-
-
 % Which servlets this instance may ever route to -- a static,
 % deploy-time decision (analogous to {applications, [...]} in
 % blizanci.app.src), not something inferred from the routing table.
@@ -778,19 +862,37 @@ make(Port, Servlets, Sites) ->
 % the explicit values make/3 takes. Must be called from within
 % blizanci's own application context (application:get_application/0
 % resolves via the calling process), i.e. from blizanci_app:start/2.
+%
+% Every problem is reported in one pass, as a list of errors, each of
+% which describe_error/1 turns into one line. The configuration is built
+% without stopping at the first error, and then validate_all/1 is run on
+% what was built, so that a bad realm, a bad route, an unreadable
+% certificate and an undeclared servlet are all found together. The
+% order of the list is stable: first the problems of the realms key, then
+% those found building the site (its hostname, then its routes in
+% order), each as {site, Hostname, Reason}, then those of
+% validate_all/1.
+%
+% Where one error makes a later check meaningless, it is not allowed to
+% cause a second, misleading one:
+%  - a route that names a realm whose definition failed to build gets no
+%    unknown_realm error (the realm's own error is already listed); if
+%    the realms key is so malformed that no name can be said to have
+%    failed, no unknown_realm error is reported at all;
+%  - a route that failed to build is left out of the site, and the
+%    checks that need the routes (upload directories, declared servlets)
+%    run on those that did build;
+%  - if the site itself cannot be built (a bad hostname, or an error
+%    from site/3), it is left out of the configuration, so that the
+%    sites are not validated and "no sites" is not reported; only the
+%    global checks and the servlets its routes name are.
 -spec from_app_env() -> Result
-              when Result :: {'ok', map()} | {'error', term()}.
+              when Result :: {'ok', map()} | {'error', [term()]}.
 from_app_env() ->
     {ok, App} = application:get_application(),
     {ok, Default_Hostname} = inet:gethostname(),
-    % The operator's name, or the machine's own, may have capitals: fold
-    % it here, at the edge, so that site/3 can insist on lower case.
-    Hostname = ascii_lowercase(application:get_env(App, hostname,
-                                                   Default_Hostname)),
-    {ok, Cert} = get_pem_file_from_environment(App, certfile,
-                                               "./ssl/certificate.pem"),
-    {ok, Key} = get_pem_file_from_environment(App, keyfile,
-                                              "./ssl/key.pem"),
+    Cert = application:get_env(App, certfile, "./ssl/certificate.pem"),
+    Key = application:get_env(App, keyfile, "./ssl/key.pem"),
     Docroot = application:get_env(App, docroot, "./public_gemini"),
     CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
     CACerts = application:get_env(App, ca_certs, []),
@@ -798,16 +900,172 @@ from_app_env() ->
     Default_Routing = routing_table(Docroot, CGIroot, CACerts, TitanWork),
     % The default table is in the new format, so only an operator's own
     % routing key can trigger the old-format warning.
-    Routes = case application:get_env(App, routing) of
-                 {ok, Own} -> Own;
-                 undefined -> Default_Routing
-             end,
-    Prep = #{},
-    case realms_from_env(App, CACerts) of
-        {ok, Realms} ->
-            site_from_env(App, Hostname, Cert, Key, Routes, Realms, Prep);
-        {error, _} = Error -> Error
+    RouteList = case application:get_env(App, routing) of
+                    {ok, Own} -> Own;
+                    undefined -> Default_Routing
+                end,
+    Port = application:get_env(App, port, ?PORT),
+    Servlets = application:get_env(App, servlets, ?DEFAULT_SERVLETS),
+    Global = global(Port, Servlets),
+    {Realms, Failed, RealmErrors} = realms_from_env(App, CACerts),
+    HostResult = hostname_from_env(
+                   application:get_env(App, hostname, Default_Hostname)),
+    {Routes, RouteErrors} = routes_from_env(RouteList, Realms, Failed),
+    case HostResult of
+        {ok, Hostname} ->
+            case site(Hostname, Cert, Key) of
+                {ok, Site} ->
+                    Built = Site#site{routing = Routes},
+                    finish(Global, {Hostname, Built}, RealmErrors,
+                           RouteErrors);
+                {error, Why} ->
+                    unbuilt_site(Global, Hostname, Routes, RealmErrors,
+                                 RouteErrors
+                                 ++ site_build_errors(Why, Hostname, Cert,
+                                                      Key))
+            end;
+        {error, {invalid_hostname, Bad} = Why} ->
+            unbuilt_site(Global, Bad, Routes, RealmErrors,
+                         [Why | RouteErrors])
     end.
+
+
+% What site/3 refused, as errors. site/3 stops at the first unreadable
+% file, but the certificate and the key are independent problems, so
+% when it was a file the operator is told about both in one pass.
+-spec site_build_errors(Why, Hostname, Cert, Key) -> Errors
+              when Why      :: term(),
+                   Hostname :: string(),
+                   Cert     :: string(),
+                   Key      :: string(),
+                   Errors   :: [term()].
+site_build_errors(Why, Hostname, Cert, Key)
+  when element(1, Why) =:= bad_certfile;
+       element(1, Why) =:= bad_keyfile ->
+    case file_problems(erlang:list_to_binary(Hostname), Cert, Key) of
+        [] -> [Why];    % not readable-PEM trouble, e.g. no certificate in it
+        Problems -> Problems
+    end;
+site_build_errors(Why, _Hostname, _Cert, _Key) ->
+    [Why].
+
+
+% The certificate and the key file, each checked for being readable PEM.
+-spec file_problems(Hostname, Cert, Key) -> Problems
+              when Hostname :: binary(),
+                   Cert     :: string(),
+                   Key      :: string(),
+                   Problems :: [term()].
+file_problems(Hostname, Cert, Key) ->
+    [ {bad_certfile, Hostname, Why}
+      || {fail, Why} <- [blizanci_x509:validate_pem_file(Cert)] ]
+    ++ [ {bad_keyfile, Hostname, Why}
+         || {fail, Why} <- [blizanci_x509:validate_pem_file(Key)] ].
+
+
+% The site was built; whatever else went wrong, validate what there is.
+-spec finish(Global, Site, RealmErrors, RouteErrors) -> Result
+              when Global      :: global_config(),
+                   Site        :: {string(), site()},
+                   RealmErrors :: [term()],
+                   RouteErrors :: [term()],
+                   Result      :: {'ok', map()} | {'error', [term()]}.
+finish(Global = #global{port = Port, servlets = Servlets},
+       {Hostname, Site}, RealmErrors, RouteErrors) ->
+    Problems = case validate_all(new(Global, [Site])) of
+                   ok -> [];
+                   {error, P} -> P
+               end,
+    case RealmErrors ++ RouteErrors ++ Problems of
+        [] ->
+            {ok, make(Port, Servlets, [Site])};
+        _ ->
+            {error, RealmErrors
+                    ++ [ {site, Hostname, E} || E <- RouteErrors ]
+                    ++ Problems}
+    end.
+
+
+% The site could not be built, so it is not in the configuration: only
+% the global checks, and the servlets its routes name, are made.
+-spec unbuilt_site(Global, Label, Routes, RealmErrors, SiteErrors) ->
+              Result
+              when Global      :: global_config(),
+                   Label       :: term(),
+                   Routes      :: [route()],
+                   RealmErrors :: [term()],
+                   SiteErrors  :: [term()],
+                   Result      :: {'error', [term()]}.
+unbuilt_site(Global, Label, Routes, RealmErrors, SiteErrors) ->
+    Name = case is_list(Label) of
+               true -> try erlang:list_to_binary(Label)
+                       catch error:badarg -> <<>> end;
+               false -> <<>>
+           end,
+    Stand = #site{hostname = Name, certfile = "", keyfile = "",
+                  routing = Routes},
+    {error, RealmErrors
+            ++ [ site_error(Label, E) || E <- SiteErrors ]
+            ++ problems_global(Global)
+            ++ problems_servlet_use(Global, [Stand])}.
+
+
+% An error found building the site, named by the site, unless it is that
+% the site has no name.
+-spec site_error(Label, Error) -> Result
+              when Label  :: term(),
+                   Error  :: term(),
+                   Result :: term().
+site_error(_, {invalid_hostname, _} = Error) -> Error;
+% these already name the site
+site_error(_, Error) when element(1, Error) =:= bad_certfile;
+                          element(1, Error) =:= bad_keyfile;
+                          element(1, Error) =:= cert_key_mismatch ->
+    Error;
+site_error(Label, Error) -> {site, Label, Error}.
+
+
+% The hostname, folded to lower case: the operator's name, or the
+% machine's own, may have capitals, so it is folded here, at the edge,
+% so that site/3 can insist on lower case.
+-spec hostname_from_env(Value) -> Result
+              when Value  :: term(),
+                   Result :: {'ok', string()}
+                           | {'error', {'invalid_hostname', term()}}.
+hostname_from_env(Value) ->
+    IsByte = fun(C) -> is_integer(C) andalso C >= 0 andalso C =< 255 end,
+    case is_list(Value) andalso Value =/= []
+         andalso lists:all(IsByte, Value) of
+        true  -> {ok, ascii_lowercase(Value)};
+        false -> {error, {invalid_hostname, Value}}
+    end.
+
+
+% The site's routes: those that build, and an error for each that does
+% not, less any unknown_realm error for a realm already reported as
+% failed.
+-spec routes_from_env(RouteList, Realms, Failed) -> Result
+              when RouteList :: term(),
+                   Realms    :: realm_table(),
+                   Failed    :: 'all' | [term()],
+                   Result    :: {[route()], [term()]}.
+routes_from_env(RouteList, Realms, Failed) when is_list(RouteList) ->
+    {Routes, Errors} = blizanci_router:prepare_all(RouteList, Realms, #{}),
+    Relevant = [ E || E <- Errors, not realm_failed(E, Failed) ],
+    {Routes, [ {invalid_routing, E} || E <- Relevant ]};
+routes_from_env(RouteList, _, _) ->
+    {[], [{invalid_routing, {routing_not_a_list, RouteList}}]}.
+
+
+-spec realm_failed(Error, Failed) -> Result
+              when Error  :: term(),
+                   Failed :: 'all' | [term()],
+                   Result :: boolean().
+realm_failed({bad_route, _, _, {unknown_realm, {realm, Name}, _, _}},
+             Failed) ->
+    Failed =:= all orelse lists:member(Name, Failed);
+realm_failed(_, _) ->
+    false.
 
 
 % The global realms key, plus ca_certs as the realm "default" when that
@@ -815,56 +1073,63 @@ from_app_env() ->
 % Titan route (no routing key, titan_work_dir set) names the realm
 % "default", so it is also defined, empty (authorising nobody until CAs
 % are configured), when ca_certs is unset and realms does not have it.
+%
+% Every definition is tried, so every bad one is reported: the result is
+% the table of those that built, the names of those that did not (or
+% 'all' if some definition is not even a {Name, Files} pair, or the key
+% is not a list, so no name can be blamed), and the errors, each
+% {bad_realm, Name, Reason} or {realms, Reason}. Routes naming a failed
+% realm are not also reported (see from_app_env/0).
 -spec realms_from_env(App, CACerts) -> Result
               when App     :: atom(),
                    CACerts :: term(),
-                   Result  :: {'ok', realm_table()} | {'error', term()}.
+                   Result  :: {realm_table(), 'all' | [term()], [term()]}.
 realms_from_env(App, CACerts) ->
     Defs = application:get_env(App, realms, []),
-    Default = <<"default">>,
-    case application:get_env(App, ca_certs) of
-        {ok, _} when is_list(Defs) ->
-            case lists:keymember(Default, 1, Defs) of
-                true -> {error, ca_certs_and_default_realm};
-                false -> realms(Defs ++ [{Default, CACerts}])
-            end;
-        _ when is_list(Defs) ->
-            NeedsDefault =
-                application:get_env(App, routing) =:= undefined
+    case is_list(Defs) of
+        false ->
+            {realms(), all, [{realms, {invalid_realms, Defs}}]};
+        true ->
+            Default = <<"default">>,
+            HasCA = application:get_env(App, ca_certs) =/= undefined,
+            Has = lists:keymember(Default, 1, Defs),
+            Titan = application:get_env(App, routing) =:= undefined
                 andalso application:get_env(App, titan_work_dir,
-                                            undefined) =/= undefined
-                andalso not lists:keymember(Default, 1, Defs),
-            case NeedsDefault of
-                true -> realms(Defs ++ [{Default, []}]);
-                false -> realms(Defs)
-            end;
-        _ ->
-            realms(Defs)
+                                            undefined) =/= undefined,
+            {Extra, Start} =
+                case {HasCA, Has, Titan} of
+                    {true, true, _} ->
+                        {[], [{realms, ca_certs_and_default_realm}]};
+                    {true, false, _} -> {[{Default, CACerts}], []};
+                    {false, false, true} -> {[{Default, []}], []};
+                    {false, _, _} -> {[], []}
+                end,
+            realm_defs(Defs ++ Extra, realms(), [], Start)
     end.
 
 
--spec site_from_env(App, Hostname, Cert, Key, Routes, Realms, Prep) ->
-              Result
-              when App      :: atom(),
-                   Hostname :: string(),
-                   Cert     :: string(),
-                   Key      :: string(),
-                   Routes   :: [route_entry()],
-                   Realms   :: realm_table(),
-                   Prep     :: map(),
-                   Result   :: {'ok', map()} | {'error', term()}.
-site_from_env(App, Hostname, Cert, Key, Routes, Realms, Prep) ->
-    % Today's sys.config only ever describes a single site, so this
-    % is a one-element list; everything downstream looks sites up by
-    % hostname and doesn't assume that.
-    case build_site(Hostname, Cert, Key, Routes, Realms, Prep) of
-        {ok, Site} ->
-            Port = application:get_env(App, port, ?PORT),
-            Servlets = application:get_env(App, servlets,
-                                           ?DEFAULT_SERVLETS),
-            {ok, make(Port, Servlets, [Site])};
-        {error, _} = Error -> Error
-    end.
+-spec realm_defs(Defs, Table, Failed, Errors) -> Result
+              when Defs   :: [term()],
+                   Table  :: realm_table(),
+                   Failed :: [term()],
+                   Errors :: [term()],
+                   Result :: {realm_table(), 'all' | [term()], [term()]}.
+realm_defs([], Table, Failed, Errors) ->
+    case lists:member(all, Failed) of
+        true -> {Table, all, Errors};
+        false -> {Table, Failed, Errors}
+    end;
+realm_defs([{Name, Files} | Rest], Table, Failed, Errors) ->
+    case add_realm(Table, Name, Files) of
+        {ok, Table2} ->
+            realm_defs(Rest, Table2, Failed, Errors);
+        {error, Why} ->
+            Error = {bad_realm, Name, Why},
+            realm_defs(Rest, Table, Failed ++ [Name], Errors ++ [Error])
+    end;
+realm_defs([Other | Rest], Table, Failed, Errors) ->
+    realm_defs(Rest, Table, Failed ++ [all],
+               Errors ++ [{realms, {invalid_realm, Other}}]).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1010,6 +1275,65 @@ new_format_file_list_tests(CA, T, Opts) ->
                          #route{auth_policy = {private, [], []}}]},
                    Prep([Old({private, [CA]}), Old({private, []})]))].
 
+% realms_from_env/2 in the shape of blizanci_auth:realm_table/1: the
+% table, or the first error.
+realms_env(App, CACerts) ->
+    case realms_from_env(App, CACerts) of
+        {Table, _, []} -> {ok, Table};
+        {_, _, [{_, _, Why} | _]} -> {error, Why};
+        {_, _, [{_, Why} | _]} -> {error, Why}
+    end.
+
+% Every bad realm is reported, and the good ones still build.
+realms_from_env_collects_test_() ->
+    {setup,
+     fun() -> blizanci_x509:test_tmp_dir() end,
+     fun(Dir) ->
+         application:unset_env(blizanci_realms_test, realms),
+         application:unset_env(blizanci_realms_test, ca_certs),
+         file:del_dir_r(Dir)
+     end,
+     fun(Dir) ->
+         CA = blizanci_x509:test_write_pem(
+                Dir, "ca.pem",
+                [{'Certificate',
+                  maps:get(ca, blizanci_x509:test_pki()),
+                  not_encrypted}]),
+         App = blizanci_realms_test,
+         Set = fun(Key, Val) -> application:set_env(App, Key, Val) end,
+         Missing = filename:join(Dir, "missing.pem"),
+         [?_test(begin
+                     application:unset_env(App, ca_certs),
+                     Set(realms, [{<<"a">>, [Missing]},
+                                  {<<"b">>, [CA]},
+                                  {<<"c">>, [Missing]}]),
+                     {T, Failed, Errors} = realms_from_env(App, []),
+                     ?assertEqual([{realm, <<"b">>}], maps:keys(T)),
+                     ?assertEqual([<<"a">>, <<"c">>], Failed),
+                     ?assertEqual(
+                        [{bad_realm, <<"a">>,
+                          {invalid_ca_file, Missing, enoent}},
+                         {bad_realm, <<"c">>,
+                          {invalid_ca_file, Missing, enoent}}],
+                        Errors)
+                 end),
+          % a definition that is not a pair: no name can be blamed
+          ?_test(begin
+                     application:unset_env(App, ca_certs),
+                     Set(realms, [{<<"b">>, [CA]}, oops]),
+                     ?assertMatch(
+                        {_, all, [{realms, {invalid_realm, oops}}]},
+                        realms_from_env(App, []))
+                 end),
+          ?_test(begin
+                     application:unset_env(App, ca_certs),
+                     Set(realms, nonsense),
+                     ?assertMatch(
+                        {_, all, [{realms, {invalid_realms, nonsense}}]},
+                        realms_from_env(App, []))
+                 end)]
+     end}.
+
 % The sys.config key realms, and ca_certs as the realm "default".
 realms_from_env_test_() ->
     {setup,
@@ -1036,25 +1360,25 @@ realms_from_env_test_() ->
          Default = {realm, <<"default">>},
          [?_test(begin
                      Reset(),
-                     ?assertEqual({ok, #{}}, realms_from_env(App, []))
+                     ?assertEqual({ok, #{}}, realms_env(App, []))
                  end),
           ?_test(begin
                      Reset(),
                      Set(realms, [{<<"staff">>, [CA]}]),
-                     {ok, T} = realms_from_env(App, []),
+                     {ok, T} = realms_env(App, []),
                      ?assertEqual([Staff], maps:keys(T))
                  end),
           ?_test(begin
                      Reset(),
                      Set(ca_certs, [CA]),
-                     {ok, T} = realms_from_env(App, [CA]),
+                     {ok, T} = realms_env(App, [CA]),
                      ?assertEqual([Default], maps:keys(T))
                  end),
           ?_test(begin
                      Reset(),
                      Set(ca_certs, [CA]),
                      Set(realms, [{<<"staff">>, [CA]}]),
-                     {ok, T} = realms_from_env(App, [CA]),
+                     {ok, T} = realms_env(App, [CA]),
                      ?assertEqual([Default, Staff], lists:sort(maps:keys(T)))
                  end),
           ?_test(begin
@@ -1062,20 +1386,20 @@ realms_from_env_test_() ->
                      Set(ca_certs, [CA]),
                      Set(realms, [{<<"default">>, [CA]}]),
                      ?assertEqual({error, ca_certs_and_default_realm},
-                                  realms_from_env(App, [CA]))
+                                  realms_env(App, [CA]))
                  end),
           % a realm "default" is fine when ca_certs is not set
           ?_test(begin
                      Reset(),
                      Set(realms, [{<<"default">>, [CA]}]),
-                     ?assertMatch({ok, _}, realms_from_env(App, []))
+                     ?assertMatch({ok, _}, realms_env(App, []))
                  end),
           % the default table's Titan route needs the realm "default",
           % empty if ca_certs is not set
           ?_test(begin
                      Reset(),
                      Set(titan_work_dir, "/w"),
-                     {ok, T} = realms_from_env(App, []),
+                     {ok, T} = realms_env(App, []),
                      ?assertEqual([Default], maps:keys(T)),
                      ?assertEqual({ok, {private, [Default], []}},
                                   blizanci_auth:valid_authz_policy(
@@ -1085,21 +1409,21 @@ realms_from_env_test_() ->
                      Reset(),
                      Set(titan_work_dir, "/w"),
                      Set(ca_certs, []),
-                     {ok, T} = realms_from_env(App, []),
+                     {ok, T} = realms_env(App, []),
                      ?assertEqual([Default], maps:keys(T))
                  end),
           ?_test(begin
                      Reset(),
                      Set(titan_work_dir, "/w"),
                      Set(realms, [{<<"default">>, [CA]}]),
-                     {ok, T} = realms_from_env(App, []),
+                     {ok, T} = realms_env(App, []),
                      ?assertMatch({_, [_]}, maps:get(Default, T))
                  end),
           ?_test(begin
                      Reset(),
                      Set(titan_work_dir, "/w"),
                      Set(routing, []),
-                     {ok, T} = realms_from_env(App, []),
+                     {ok, T} = realms_env(App, []),
                      ?assertEqual([], maps:keys(T))
                  end),
           ?_test(begin
@@ -1108,19 +1432,19 @@ realms_from_env_test_() ->
                      Set(ca_certs, [CA]),
                      Set(realms, [{<<"default">>, [CA]}]),
                      ?assertEqual({error, ca_certs_and_default_realm},
-                                  realms_from_env(App, [CA]))
+                                  realms_env(App, [CA]))
                  end),
           ?_test(begin
                      Reset(),
                      Set(realms, [{<<"staff">>, ["/nonexistent.pem"]}]),
                      ?assertMatch({error, {invalid_ca_file, _, _}},
-                                  realms_from_env(App, []))
+                                  realms_env(App, []))
                  end),
           ?_test(begin
                      Reset(),
                      Set(realms, [{staff, [CA]}]),
                      ?assertEqual({error, {invalid_realm_name, staff}},
-                                  realms_from_env(App, []))
+                                  realms_env(App, []))
                  end)]
      end}.
 
@@ -1845,6 +2169,51 @@ validate_tests(Pem) ->
                    V(G, [add_route(test_site("a", Pem, "/no/such.pem"), R)])),
      ?_assertEqual({error, {undeclared_servlet, <<"a">>, blizanci_static}},
                    V(global(1965, []), [Good("a")]))].
+
+% validate_all/1 reports every problem, in a stable order, and
+% validate/1 the first of them.
+validate_all_test_() ->
+    {setup, fun write_test_pem/0, fun file:delete/1,
+     fun validate_all_tests/1}.
+
+validate_all_tests(Pem) ->
+    {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static, public,
+                    #{ docroot => ?TEST_DOCROOT }),
+    Bad = add_route(test_site("a", "/no/such.pem", "/no/such.key"), R),
+    Good = add_route(test_site("b", Pem, Pem), R),
+    G = global(0, [nope]),
+    Config = new(G, [Bad, Good]),
+    All = [{invalid_port, 0},
+           {unknown_servlet, nope},
+           {bad_certfile, <<"a">>, couldnt_open_pem_file},
+           {bad_keyfile, <<"a">>, couldnt_open_pem_file},
+           {undeclared_servlet, <<"a">>, blizanci_static},
+           {undeclared_servlet, <<"b">>, blizanci_static}],
+    [?_assertEqual({error, All}, validate_all(Config)),
+     ?_assertEqual({error, hd(All)}, validate(Config)),
+     ?_assertEqual(ok, validate_all(new(global(1965, [blizanci_static]),
+                                        [Good]))),
+     ?_assertEqual({error, [no_sites]},
+                   validate_all(new(global(1965, []), []))),
+     ?_assertEqual({error, [{duplicate_site, <<"b">>}]},
+                   validate_all(new(global(1965, [blizanci_static]),
+                                    [Good, Good]))),
+     ?_assertEqual(
+        ["site a: the certificate file is not a readable PEM file "
+         "(couldnt_open_pem_file)",
+         "site a: a route uses servlet blizanci_static, which is not in "
+         "the servlets list",
+         "port 0 is not a TCP port number (1 to 65535)"],
+        [ describe_error(E)
+          || E <- [lists:nth(3, All), lists:nth(5, All), hd(All)] ]),
+     ?_assertEqual(
+        "site a.example: hostname is not lower case; realm <<\"r\">>: "
+        "CA file /x cannot be used (enoent); check that it exists and "
+        "holds a PEM certificate",
+        describe_error(
+          {invalid_configuration,
+           [{site, "a.example", hostname_not_lowercase},
+            {bad_realm, <<"r">>, {invalid_ca_file, "/x", enoent}}]}))].
 
 write_test_pem() ->
     Path = blizanci_test_support:tmp_path("validate_test") ++ ".pem",

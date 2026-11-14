@@ -25,7 +25,7 @@
          no_leaks/1, tls_versions/1, client_cert_request/1,
          client_cert_live_apply/1, default_table/1,
          default_table_titan/1, mounts_table/1, mounts_table_empty_realm/1,
-         default_table_titan_no_ca_certs/1]).
+         default_table_titan_no_ca_certs/1, bad_config_refused/1]).
 -export([log/2]). % logger handler callback, see cert_requested/4
 
 -define(HOST, "first.test").
@@ -38,7 +38,7 @@ all() ->
      tls_versions, client_cert_request, client_cert_live_apply,
      default_table, default_table_titan, mounts_table,
      mounts_table_empty_realm,
-     default_table_titan_no_ca_certs].
+     default_table_titan_no_ca_certs, bad_config_refused].
 
 %%%===================================================================
 %%% Setup
@@ -442,6 +442,21 @@ restart(Config) ->
     true = is_pid(whereis(blizanci_titan)),
     {ok, R2} = fetch(Port, ?HOST, ?HOST, "/hello.gmi"),
     <<"20 ", _/binary>> = R2,
+    ok.
+
+%% A configuration with several things wrong is refused in one pass:
+%% the start-up failure carries every problem, and nothing is left
+%% running.
+bad_config_refused(_Config) ->
+    ok = application:set_env(blizanci, certfile, "/no/such/cert.pem"),
+    ok = application:set_env(blizanci, routing,
+                             [{gemini, "x", blizanci_static, public, #{}}]),
+    {error, {blizanci, {{invalid_configuration, Errors}, _}}} =
+        application:ensure_all_started(blizanci),
+    [{site, ?HOST, {invalid_routing, {bad_route, 1, tuple, _}}},
+     {bad_certfile, _, couldnt_open_pem_file}] = Errors,
+    undefined = whereis(blizanci_sup),
+    undefined = whereis(blizanci_conf_serv),
     ok.
 
 %% Both TLS versions are served: a client limited to 1.2 and one limited
