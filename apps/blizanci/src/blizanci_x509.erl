@@ -374,18 +374,33 @@ validate_pem_file(Filename) ->
 %% Ed448 likewise. Nothing is trusted from the file's own idea of the
 %% public key. PKCS#1, PKCS#8 and SEC1 containers are all handled.
 %%
-%% Failure is distinct for each cause and says which file was at fault:
-%% `{certfile, Why}' (`{unreadable, Posix}', `no_certificate_in_file',
-%% `certificate_not_decodable' or `{unsupported_key_type, Alg}') or
-%% `{keyfile, Why}' (`{unreadable, Posix}', `no_private_key',
-%% `encrypted_private_key', `private_key_not_decodable' or
-%% `{unsupported_key_type, Alg}'), or `mismatch' for a well-formed pair
-%% that does not match. An unsupported key is never a pass.
+%% Result is `ok' for a verified match; `{ok, unverified, Reason}' for a
+%% pair the check cannot compare, where Reason is
+%% `{unsupported_key_type, Name}' (Name a string such as "DSA" or
+%% "EC secp224r1"), which is NOT a failure and the caller should warn;
+%% `{error, mismatch}' for a pair that provably does not match; or
+%% `{error, {certfile, Why}}' / `{error, {keyfile, Why}}' for a file
+%% problem, which names the file at fault: `{unreadable, Posix}',
+%% `no_certificate_in_file' or `certificate_not_decodable' (certfile),
+%% `{unreadable, Posix}', `no_private_key', `encrypted_private_key' or
+%% `private_key_not_decodable' (keyfile).
+%%
+%% The rule: each side's family is RSA, EC (any curve, Ed25519 and
+%% Ed448 included) or DSA when we can tell. Two different families are a
+%% mismatch, even if one is a family we cannot compare, so an RSA
+%% certificate with a DSA key is refused. Within RSA, and within EC on
+%% the supported curves, the keys are compared. Two EC keys on
+%% different named curves are a mismatch. Otherwise (DSA with DSA, the
+%% same unsupported EC curve, RSA-PSS or any other algorithm we do not
+%% know, on either side) the pair is unverified.
 %% @end
 -spec cert_key_match(CertFile, KeyFile) -> Result
               when CertFile :: string(),
                    KeyFile  :: string(),
-                   Result   :: 'ok' | {'error', term()}.
+                   Result   :: 'ok'
+                             | {'ok', 'unverified', Reason}
+                             | {'error', term()},
+                   Reason   :: {'unsupported_key_type', string()}.
 
 cert_key_match(CertFile, KeyFile) ->
     try
@@ -475,17 +490,93 @@ private_key_from_file(File) ->
 -spec key_matches(CertKey, PrivKey) -> Result
               when CertKey :: {term(), term(), term()},
                    PrivKey :: term(),
-                   Result  :: 'ok' | {'error', term()}.
-key_matches({?rsaEncryption, _, #'RSAPublicKey'{modulus = N,
-                                                  publicExponent = E}},
+                   Result  :: 'ok' | {'ok', 'unverified', term()}
+                            | {'error', 'mismatch'}.
+key_matches({Alg, Params, Pub} = CertKey, Priv) ->
+    CertFamily = cert_family(CertKey),
+    case {CertFamily, key_family(Priv)} of
+        {rsa, rsa} -> rsa_matches(Pub, Priv);
+        {ec, ec} -> ec_matches(Alg, Params, Pub, Priv);
+        {dsa, dsa} -> {ok, unverified, {unsupported_key_type, "DSA"}};
+        {F, F} -> {ok, unverified, unsupported(CertKey, Priv)};
+        {F1, F2} when is_atom(F1), is_atom(F2) -> {error, mismatch};
+        _ -> {ok, unverified, unsupported(CertKey, Priv)}
+    end.
+
+
+% The family of a key we can name: rsa, ec (including the Edwards
+% curves) or dsa; anything else is {other, _}, which we cannot compare.
+-spec cert_family(CertKey) -> Result
+              when CertKey :: {term(), term(), term()},
+                   Result  :: atom() | {'other', term()}.
+cert_family({?rsaEncryption, _, #'RSAPublicKey'{}}) -> rsa;
+cert_family({?'id-dsa', _, _}) -> dsa;
+cert_family({_, _, #'ECPoint'{}}) -> ec;
+cert_family({Alg, _, _}) -> {other, Alg}.
+
+
+-spec key_family(PrivKey) -> Result
+              when PrivKey :: term(),
+                   Result  :: atom() | {'other', term()}.
+key_family(#'RSAPrivateKey'{}) -> rsa;
+key_family(#'ECPrivateKey'{privateKey = S}) when is_binary(S) -> ec;
+key_family(#'DSAPrivateKey'{}) -> dsa;
+key_family(Other) -> {other, key_kind(Other)}.
+
+
+% The reason a pair cannot be compared: the certificate's key type if
+% that is the one we do not know, else the private key's.
+-spec unsupported(CertKey, PrivKey) -> Reason
+              when CertKey :: {term(), term(), term()},
+                   PrivKey :: term(),
+                   Reason  :: {'unsupported_key_type', string()}.
+unsupported({Alg, _, _} = CertKey, Priv) ->
+    case cert_family(CertKey) of
+        {other, _} -> {unsupported_key_type, oid_label(Alg)};
+        _ ->
+            {other, Kind} = key_family(Priv),
+            {unsupported_key_type, oid_label(Kind)}
+    end.
+
+
+-spec oid_label(Alg) -> Label
+              when Alg   :: term(),
+                   Label :: string().
+oid_label(?'id-dsa') -> "DSA";
+oid_label({1,2,840,113549,1,1,10}) -> "RSA-PSS";
+oid_label(Oid) when is_tuple(Oid), tuple_size(Oid) > 1 ->
+    Dotted = lists:join(".", [ integer_to_list(N)
+                               || N <- tuple_to_list(Oid),
+                                  is_integer(N) ]),
+    lists:flatten(Dotted);
+oid_label(Other) when is_atom(Other) -> atom_to_list(Other);
+oid_label(Other) -> lists:flatten(io_lib:format("~p", [Other])).
+
+
+-spec rsa_matches(CertKey, PrivKey) -> Result
+              when CertKey :: term(),
+                   PrivKey :: term(),
+                   Result  :: 'ok' | {'error', 'mismatch'}.
+rsa_matches(#'RSAPublicKey'{modulus = N, publicExponent = E},
             #'RSAPrivateKey'{modulus = N, publicExponent = E}) ->
     ok;
-key_matches({?rsaEncryption, _, #'RSAPublicKey'{}},
-            #'RSAPrivateKey'{}) ->
-    {error, mismatch};
-key_matches({Alg, Params, #'ECPoint'{point = Point}},
-            #'ECPrivateKey'{privateKey = Scalar, parameters = KeyCurve})
-  when is_binary(Scalar) ->
+rsa_matches(_, _) ->
+    {error, mismatch}.
+
+
+% Both are elliptic curve keys. Named curves we support are compared by
+% deriving the public point. Two different named curves are a mismatch
+% whether we support them or not; the same named curve we do not
+% support, or curves not given by name, cannot be verified.
+-spec ec_matches(Alg, Params, CertKey, PrivKey) -> Result
+              when Alg     :: term(),
+                   Params  :: term(),
+                   CertKey :: term(),
+                   PrivKey :: term(),
+                   Result  :: 'ok' | {'ok', 'unverified', term()}
+                            | {'error', 'mismatch'}.
+ec_matches(Alg, Params, #'ECPoint'{point = Point},
+           #'ECPrivateKey'{privateKey = Scalar, parameters = KeyCurve}) ->
     CertCurve = case Alg of
                     ?'id-ecPublicKey' -> Params;
                     _ -> {namedCurve, Alg}
@@ -500,19 +591,33 @@ key_matches({Alg, Params, #'ECPoint'{point = Point}},
             end;
         {{ok, _}, {ok, _}} ->
             {error, mismatch};
-        {{error, Why}, _} -> {error, {certfile, Why}};
-        {_, {error, Why}} -> {error, {keyfile, Why}}
-    end;
-key_matches({?rsaEncryption, _, _}, #'ECPrivateKey'{}) ->
-    {error, mismatch};
-key_matches({_, _, #'ECPoint'{}}, #'RSAPrivateKey'{}) ->
-    {error, mismatch};
-key_matches({Alg, _, _}, #'RSAPrivateKey'{}) ->
-    {error, {certfile, {unsupported_key_type, Alg}}};
-key_matches({Alg, _, _}, #'ECPrivateKey'{}) ->
-    {error, {certfile, {unsupported_key_type, Alg}}};
-key_matches(_, Other) ->
-    {error, {keyfile, {unsupported_key_type, key_kind(Other)}}}.
+        _ ->
+            case {CertCurve, KeyCurve} of
+                {{namedCurve, Same}, {namedCurve, Same}} ->
+                    {ok, unverified, {unsupported_key_type,
+                                      curve_label(Same)}};
+                {{namedCurve, _}, {namedCurve, _}} ->
+                    {error, mismatch};
+                {{namedCurve, Oid}, _} ->
+                    {ok, unverified, {unsupported_key_type,
+                                      curve_label(Oid)}};
+                _ ->
+                    {ok, unverified, {unsupported_key_type,
+                                      "EC (explicit parameters)"}}
+            end
+    end.
+
+
+-spec curve_label(Oid) -> Label
+              when Oid   :: term(),
+                   Label :: string().
+curve_label(Oid) ->
+    try pubkey_cert_records:namedCurves(Oid) of
+        Name when is_atom(Name) -> "EC " ++ atom_to_list(Name);
+        _ -> "EC " ++ oid_label(Oid)
+    catch
+        _:_ -> "EC " ++ oid_label(Oid)
+    end.
 
 
 -spec key_kind(Key) -> Result
@@ -524,14 +629,13 @@ key_kind(_) -> unknown.
 
 -spec curve_name(Params) -> Result
               when Params :: term(),
-                   Result :: {'ok', atom()}
-                           | {'error', {'unsupported_key_type', term()}}.
+                   Result :: {'ok', atom()} | 'error'.
 curve_name({namedCurve, ?'secp256r1'}) -> {ok, secp256r1};
 curve_name({namedCurve, ?'secp384r1'}) -> {ok, secp384r1};
 curve_name({namedCurve, ?'secp521r1'}) -> {ok, secp521r1};
 curve_name({namedCurve, {1,3,101,112}}) -> {ok, ed25519};
 curve_name({namedCurve, {1,3,101,113}}) -> {ok, ed448};
-curve_name(Other) -> {error, {unsupported_key_type, Other}}.
+curve_name(_) -> error.
 
 
 -spec curve_kind(Curve) -> Result
@@ -617,7 +721,8 @@ test_cert(Subject, Issuer, SubjectKey, SignKey, {NotBefore, NotAfter}) ->
 
 % A certificate and key for a site, written as Name.crt and Name.key in
 % Dir; returns their paths. Kind is the key's type: rsa, p256, p384,
-% ed25519 or ed448. The certificate is self-signed in form only: it is
+% ed25519, ed448, or p224 or dsa (which the pair check cannot verify).
+% The certificate is self-signed in form only: it is
 % signed by a throwaway RSA key, which is all that matching needs.
 test_pair_files(Dir, Name, Kind) ->
     {KeyEntry, SPKI} = test_pair_key(Kind),
@@ -651,6 +756,21 @@ test_pair_key(Curve) when Curve =:= p256; Curve =:= p384 ->
     {public_key:pem_entry_encode('ECPrivateKey', Key),
      test_spki(?'id-ecPublicKey', {namedCurve, Oid},
                #'ECPoint'{point = Key#'ECPrivateKey'.publicKey})};
+test_pair_key(p224) ->
+    Oid = ?'secp224r1',
+    Key = public_key:generate_key({namedCurve, Oid}),
+    {public_key:pem_entry_encode('ECPrivateKey', Key),
+     test_spki(?'id-ecPublicKey', {namedCurve, Oid},
+               #'ECPoint'{point = Key#'ECPrivateKey'.publicKey})};
+% not a usable DSA key, but a well-formed one, which is enough here
+test_pair_key(dsa) ->
+    {P, Q, G, X} = {23, 11, 4, 3},
+    Y = 18,
+    Key = #'DSAPrivateKey'{version = 0, p = P, q = Q, g = G, y = Y,
+                           x = X},
+    {public_key:pem_entry_encode('DSAPrivateKey', Key),
+     test_spki(?'id-dsa', {params, #'Dss-Parms'{p = P, q = Q, g = G}},
+               Y)};
 test_pair_key(Kind) when Kind =:= ed25519; Kind =:= ed448 ->
     Oid = case Kind of
               ed25519 -> {1,3,101,112};
@@ -947,6 +1067,8 @@ pem_files_test_() ->
 
 % The key-pair check, on keys of every supported type.
 -define(KINDS, [rsa, p256, p384, ed25519, ed448]).
+% kinds the check cannot compare
+-define(ODD_KINDS, [dsa, p224]).
 -define(ENC_PKCS8,
         "-----BEGIN ENCRYPTED PRIVATE KEY-----\n"
         "MIH0MF8GCSqGSIb3DQEFDTBSMDEGCSqGSIb3DQEFDDAkBBAd8ooWkLz04GZ/awNS\n"
@@ -964,7 +1086,7 @@ cert_key_match_test_() ->
          Pairs = maps:from_list(
                    [ {{K, N}, test_pair_files(Dir, atom_to_list(K) ++ N,
                                               K)}
-                     || K <- ?KINDS, N <- ["1", "2"] ]),
+                     || K <- ?KINDS ++ ?ODD_KINDS, N <- ["1", "2"] ]),
          {Dir, Pairs}
      end,
      fun({Dir, _}) -> file:del_dir_r(Dir) end,
@@ -1065,15 +1187,40 @@ cert_key_match_test_() ->
                           Write("junkkey",
                                 [{'RSAPrivateKey', <<1, 2, 3>>,
                                   not_encrypted}]))),
-          % a key type that is not supported is not a pass
-          ?_assertMatch({error, {keyfile, {unsupported_key_type, _}}},
+          % a key type we cannot compare is neither a pass nor a failure
+          ?_assertEqual({ok, unverified, {unsupported_key_type, "DSA"}},
+                        cert_key_match(Cert(dsa, "1"), Key(dsa, "1"))),
+          ?_assertEqual({ok, unverified,
+                         {unsupported_key_type, "EC secp224r1"}},
+                        cert_key_match(Cert(p224, "1"), Key(p224, "1"))),
+          % the same unsupported curve, with a different key, likewise
+          ?_assertEqual({ok, unverified,
+                         {unsupported_key_type, "EC secp224r1"}},
+                        cert_key_match(Cert(p224, "1"), Key(p224, "2"))),
+          % different families are a mismatch, whatever they are
+          ?_assertEqual({error, mismatch},
+                        cert_key_match(Cert(rsa, "1"), Key(dsa, "1"))),
+          ?_assertEqual({error, mismatch},
+                        cert_key_match(Cert(dsa, "1"), Key(rsa, "1"))),
+          ?_assertEqual({error, mismatch},
+                        cert_key_match(Cert(p256, "1"), Key(dsa, "1"))),
+          ?_assertEqual({error, mismatch},
+                        cert_key_match(Cert(p224, "1"), Key(rsa, "1"))),
+          ?_assertEqual({error, mismatch},
+                        cert_key_match(Cert(rsa, "1"), Key(p224, "1"))),
+          % different named curves are a mismatch, supported or not
+          ?_assertEqual({error, mismatch},
+                        cert_key_match(Cert(p224, "1"), Key(p256, "1"))),
+          ?_assertEqual({error, mismatch},
+                        cert_key_match(Cert(p256, "1"), Key(p224, "1"))),
+          % a file that is not a key is still an error
+          ?_assertEqual({error, {keyfile, private_key_not_decodable}},
                         cert_key_match(
-                          Cert(rsa, "1"),
-                          Write("dsa.pem",
-                                [public_key:pem_entry_encode(
-                                   'DSAPrivateKey',
-                                   #'DSAPrivateKey'{
-                                      version = 0, p = 1, q = 1, g = 1,
-                                      y = 1, x = 1})])))
+                          Cert(dsa, "1"),
+                          Write("junkdsa",
+                                [{'DSAPrivateKey', <<1, 2, 3>>,
+                                  not_encrypted}]))),
+          ?_assertEqual({error, {keyfile, no_private_key}},
+                        cert_key_match(Cert(dsa, "1"), Cert(dsa, "1")))
          ]
      end}.

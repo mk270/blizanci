@@ -205,10 +205,13 @@ site(Hostname, CertFile, KeyFile) ->
         true  ->
             Host = erlang:list_to_binary(Hostname),
             case check_pair(Host, CertFile, KeyFile) of
-                ok -> {ok, #site{hostname = Host,
-                                 certfile = CertFile,
-                                 keyfile  = KeyFile,
-                                 routing  = []}};
+                {ok, Verified} ->
+                    warn_unverified(Verified, Hostname, CertFile,
+                                    KeyFile),
+                    {ok, #site{hostname = Host,
+                               certfile = CertFile,
+                               keyfile  = KeyFile,
+                               routing  = []}};
                 {error, _} = Error -> Error
             end
     end.
@@ -225,10 +228,13 @@ site(Hostname, CertFile, KeyFile) ->
               when Hostname :: binary(),
                    CertFile :: term(),
                    KeyFile  :: term(),
-                   Result   :: 'ok' | {'error', pair_error()}.
+                   Result   :: {'ok', 'verified'}
+                             | {'ok', {'unverified', term()}}
+                             | {'error', pair_error()}.
 check_pair(Hostname, CertFile, KeyFile) ->
     case blizanci_x509:cert_key_match(CertFile, KeyFile) of
-        ok -> ok;
+        ok -> {ok, verified};
+        {ok, unverified, Why} -> {ok, {unverified, Why}};
         {error, mismatch} ->
             {error, {cert_key_mismatch, Hostname, CertFile, KeyFile}};
         {error, {certfile, Why}} ->
@@ -236,6 +242,23 @@ check_pair(Hostname, CertFile, KeyFile) ->
         {error, {keyfile, Why}} ->
             {error, {bad_keyfile, Hostname, Why}}
     end.
+
+
+% A pair of a kind the check cannot compare is accepted, with a warning.
+% This is the one place that warns, once per site built by site/3;
+% validation of a built site (problems_site/1) is silent about it.
+-spec warn_unverified(Verified, Hostname, CertFile, KeyFile) -> ok
+              when Verified :: 'verified' | {'unverified', term()},
+                   Hostname :: string(),
+                   CertFile :: string(),
+                   KeyFile  :: string().
+warn_unverified({unverified, {unsupported_key_type, Type}}, Hostname,
+                CertFile, KeyFile) ->
+    logger:warning("site ~s: cannot verify that certificate ~s and "
+                   "private key ~s are a pair (unsupported key type ~s)",
+                   [Hostname, CertFile, KeyFile, Type]);
+warn_unverified(verified, _, _, _) ->
+    ok.
 
 
 % Lower-case A-Z only. Not string:lowercase/1, which folds Unicode
@@ -1931,6 +1954,83 @@ site_cert_key_pair_test_() ->
                          {cert_key_mismatch, <<"a.example">>,
                           Cert, OtherKey}))]
     end).
+
+% A pair the check cannot compare (DSA, a curve it does not know) is
+% accepted with exactly one warning, from site/3; validating the built
+% site and applying an unchanged configuration say nothing more.
+site_unverified_pair_test_() ->
+    {setup,
+     fun() ->
+         Dir = blizanci_x509:test_tmp_dir(),
+         {Dir, [ {K, blizanci_x509:test_pair_files(Dir, atom_to_list(K),
+                                                   K)}
+                 || K <- [dsa, p224, rsa] ]}
+     end,
+     fun({Dir, _}) -> file:del_dir_r(Dir) end,
+     fun({_, Pairs}) ->
+         {DsaCert, DsaKey} = proplists:get_value(dsa, Pairs),
+         {EcCert, EcKey} = proplists:get_value(p224, Pairs),
+         {RsaCert, _} = proplists:get_value(rsa, Pairs),
+         Warnings =
+             fun(Fun) ->
+                 Id = unverified_pair_log_handler,
+                 ok = logger:add_handler(Id, blizanci_test_log_handler,
+                                         #{config =>
+                                           #{notify => self()}}),
+                 try Fun(), drain_warnings()
+                 after ok = logger:remove_handler(Id)
+                 end
+             end,
+         Text = fun(Cert, Key, Type) ->
+                    "site a.example: cannot verify that certificate "
+                    ++ Cert ++ " and private key " ++ Key
+                    ++ " are a pair (unsupported key type " ++ Type ++ ")"
+                end,
+         [?_assertEqual([Text(DsaCert, DsaKey, "DSA")],
+                        Warnings(fun() ->
+                            {ok, #site{}} = site("a.example", DsaCert,
+                                                 DsaKey)
+                        end)),
+          ?_assertEqual([Text(EcCert, EcKey, "EC secp224r1")],
+                        Warnings(fun() ->
+                            {ok, #site{}} = site("a.example", EcCert,
+                                                 EcKey)
+                        end)),
+          % an RSA certificate with a DSA key is a mismatch, not a warning
+          ?_assertEqual({[], {error, {cert_key_mismatch, <<"a.example">>,
+                                      RsaCert, DsaKey}}},
+                        begin
+                            Ref = make_ref(),
+                            W = Warnings(fun() ->
+                                put(Ref, site("a.example", RsaCert,
+                                              DsaKey))
+                            end),
+                            {W, erase(Ref)}
+                        end),
+          % the start-up path builds the site once, so warns once
+          ?_assertEqual([Text(DsaCert, DsaKey, "DSA")],
+                        Warnings(fun() ->
+                            {ok, _} = make_site("a.example", DsaCert,
+                                                DsaKey, [])
+                        end)),
+          % validating a site built without site/3, silent
+          ?_assertEqual({[], []},
+                        begin
+                            Ref = make_ref(),
+                            W = Warnings(fun() ->
+                                put(Ref, problems_site(
+                                           test_site("a.example",
+                                                     DsaCert, DsaKey)))
+                            end),
+                            {W, erase(Ref)}
+                        end)]
+     end}.
+
+drain_warnings() ->
+    receive {logged, warning, T} -> [T | drain_warnings()];
+            {logged, _, _} -> drain_warnings()
+    after 0 -> []
+    end.
 
 ascii_lowercase_test_() ->
     [?_assertEqual("example.org", ascii_lowercase("Example.ORG")),
