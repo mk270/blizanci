@@ -111,9 +111,11 @@ The `Auth` element of a route is one of:
 Realm names are binaries, e.g. `{realm, <<"staff">>}`; see Realms.
 A realm is looked up when the route is built, at start-up (or at
 `blizanci_config:apply/1`), not per request. A realm that is not
-defined is an error naming the route and the realm. The older
-`{private, CAFiles}`, with the CA file names written into the route,
-is still accepted.
+defined is an error naming the route and the realm. Mounts and
+regex routes accept only these realm policies; a `{private, CAFiles}`
+(a list of file names, even an empty one) in them is an error that says
+to define a realm. Old 5-tuple routes (below) may still use
+`{private, CAFiles}`.
 
 ### Old-format routes
 
@@ -167,8 +169,9 @@ The single-site key `ca_certs` is shorthand for a realm named
 `<<"default">>` in `realms` is a start-up error.
 
 A realm may have an empty file list. A private route on it then
-authorises nobody (clients get status 61 or 62), and no warning is
-logged.
+authorises nobody: a client sending no certificate gets status 60
+(certificate required), and one sending a valid certificate gets 61
+(certificate unauthorised). No warning is logged.
 
 ### The default routing table
 

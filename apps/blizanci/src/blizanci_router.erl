@@ -55,8 +55,7 @@
 -define(IS_QUANT(Q), (Q =:= $* orelse Q =:= $+ orelse Q =:= $? orelse
                       Q =:= ${)).
 
--type prepare_opts() :: #{ warn_old_format => boolean(),
-                           warn_shadowed => boolean() }.
+-type prepare_opts() :: #{ warn_shadowed => boolean() }.
 
 %% @doc
 %% Check that a routing table entry is valid.
@@ -89,8 +88,7 @@ prepare(RouteInfo, Realms) ->
 %% tuple (the old format) or unknown, and Reason says what is wrong.
 %%
 %% Old-format routes are translated, not refused.  If there are any,
-%% one warning is logged saying how many, unless the option
-%% warn_old_format is false (default true).  The default routing table
+%% one warning is logged saying how many.  The default routing table
 %% is in the new format and never triggers it.
 %%
 %% A table that validated is also checked for shadowed routes, which
@@ -132,7 +130,7 @@ prepare(RouteInfo, Realms, Opts) ->
         Routes ->
             case check_upload_dirs(Routes) of
                 ok ->
-                    warn_old_format(RouteInfo, Opts),
+                    warn_old_format(RouteInfo),
                     warn_shadowed(RouteInfo, Routes, Opts),
                     {ok, Routes};
                 {error, _} = Error -> Error
@@ -142,20 +140,15 @@ prepare(RouteInfo, Realms, Opts) ->
     end.
 
 
--spec warn_old_format(RouteInfo, Opts) -> ok
-              when RouteInfo :: [route_info()],
-                   Opts      :: prepare_opts().
-warn_old_format(RouteInfo, Opts) ->
-    case maps:get(warn_old_format, Opts, true) of
-        false -> ok;
-        true ->
-            case length([ R || R <- RouteInfo, route_kind(R) =:= tuple ]) of
-                0 -> ok;
-                N -> logger:warning(
-                       "routing: ~b routes use the old tuple format "
-                       "{Proto, Regex, Module, Auth, Opts}; translated, "
-                       "behaviour unchanged (see README, Routing)", [N])
-            end
+-spec warn_old_format(RouteInfo) -> ok
+              when RouteInfo :: [route_info()].
+warn_old_format(RouteInfo) ->
+    case length([ R || R <- RouteInfo, route_kind(R) =:= tuple ]) of
+        0 -> ok;
+        N -> logger:warning(
+               "routing: ~b routes use the old tuple format "
+               "{Proto, Regex, Module, Auth, Opts}; translated, "
+               "behaviour unchanged (see README, Routing)", [N])
     end.
 
 
@@ -481,6 +474,7 @@ finish_route(Proto, Selector, Pattern, Module, AuthPolicy, Opts, Realms) ->
     % are not responsible for remembering to merge before calling in.
     FullOpts = maps:merge(Module:default_options(), Opts),
     ok = valid_module_opts(Module, FullOpts),
+    ok = valid_new_format_authz(Selector, AuthPolicy),
     {ok, Authz} = valid_authz(AuthPolicy, Realms, Pattern, Module),
     case Selector of
         {mount, _} -> ok;
@@ -553,6 +547,19 @@ no_full_path_group(Re, RE) ->
         false -> ok;
         true -> throw({reserved_group, Re, <<"FULL_PATH">>})
     end.
+
+
+% New-format routes (mount, regex) take realm policies only: a file
+% list, {private, Files} or {private, []}, is for old tuples alone.
+-spec valid_new_format_authz(Selector, AuthPolicy) -> Result
+              when Selector   :: selector(),
+                   AuthPolicy :: term(),
+                   Result     :: 'ok'.
+valid_new_format_authz({legacy, _}, _) -> ok;
+valid_new_format_authz(_, {private, [{realm, _} | _]}) -> ok;
+valid_new_format_authz(_, {private, Files}) when is_list(Files) ->
+    throw(file_list_in_new_route);
+valid_new_format_authz(_, _) -> ok.
 
 
 -spec valid_authz(AuthPolicy, Realms, Regex, Module) -> Result
@@ -1214,10 +1221,8 @@ titan_regex(Re) ->
 % The warnings logged for preparing a table
 shadow_logs(Routes) ->
     [ T || {warning, T} <- with_log(
-                             fun() ->
-                                 {ok, _} = prepare(Routes, #{},
-                                           #{ warn_old_format => false })
-                             end) ].
+                             fun() -> {ok, _} = prepare(Routes) end),
+           string:find(T, "old tuple format") =:= nomatch ].
 
 shadow_mounts_test_() ->
     S = fun shadow_logs/1,
@@ -1322,12 +1327,10 @@ old_format_warning_test_() ->
                    Warn(Mounts ++ Olds, #{})),
      ?_assertMatch([{warning, "routing: 1 routes use" ++ _}],
                    Warn(Mounts ++ [hd(Olds)], #{})),
-     % nothing to say if there are none, or if the caller is the project
+     % nothing to say if there are none
      ?_assertEqual([], Warn(Mounts, #{})),
      ?_assertEqual([], Warn([], #{})),
-     ?_assertEqual([], Warn(Olds, #{ warn_old_format => false })),
-     ?_assertMatch([{warning, _}],
-                   Warn(Olds, #{ warn_old_format => true })),
+     ?_assertMatch([{warning, _}], Warn(Olds, #{})),
      % not logged for a table that is refused, nor by building one route
      ?_assertEqual([], with_log(fun() ->
                                     {error, _} = prepare(Olds ++ [old("(")])

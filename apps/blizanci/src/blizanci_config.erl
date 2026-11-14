@@ -69,8 +69,8 @@
 %%       <code>&lt;&lt;"default"&gt;&gt;</code>.</dd>
 %% </dl>
 %%
-%% Relative paths are allowed in all configuration items other than
-%% <code>routing</code>
+%% Relative paths are allowed in all configuration items, including the
+%% docroot and cgiroot options of routing entries.
 %%
 %% @end
 
@@ -497,6 +497,10 @@ describe_route_error({invalid_route_options, blizanci_titan,
 describe_route_error({unknown_realm, {realm, Name}, Regex, Module}) ->
     flat("route ~0p (servlet ~0p) names realm ~0p, which is not "
          "defined", [Regex, Module, Name]);
+describe_route_error(file_list_in_new_route) ->
+    flat("a mount or regex route cannot take a list of CA files in "
+         "{private, Files}; define a realm in the realms key and name "
+         "it, e.g. {private, {realm, <<\"staff\">>}}", []);
 describe_route_error({invalid_ca_file, File, Why}) ->
     flat("a private route's CA file ~ts cannot be used (~0p); check that "
          "it exists and holds a PEM certificate", [File, Why]);
@@ -912,7 +916,51 @@ route_realm_test_() ->
                         blizanci_router:prepare(
                           [{gemini, ?RX, blizanci_static,
                             {private, Staff}, Opts}], T))]
+         ++ new_format_file_list_tests(CA, T, Opts)
      end}.
+
+% New-format routes take realm policies only; old tuples keep the file
+% list
+new_format_file_list_tests(CA, T, Opts) ->
+    Staff = {realm, <<"staff">>},
+    Mount = fun(Auth) ->
+                {mount, gemini, "/x", blizanci_static, Auth, Opts}
+            end,
+    Regex = fun(Auth) ->
+                {regex, gemini, ?RX, blizanci_static, Auth, Opts}
+            end,
+    Old = fun(Auth) ->
+              {gemini, ?RX, blizanci_static, Auth, Opts}
+          end,
+    Err = {error, file_list_in_new_route},
+    Prep = fun(Routes) -> blizanci_router:prepare(Routes, T) end,
+    [?_assertEqual(Err, route(Mount({private, [CA]}), T)),
+     ?_assertEqual(Err, route(Mount({private, []}), T)),
+     ?_assertEqual(Err, route(Regex({private, [CA]}), T)),
+     ?_assertEqual(Err, route(Regex({private, []}), T)),
+     ?_assertEqual({error, {bad_route, 2, regex, file_list_in_new_route}},
+                   Prep([Mount(public), Regex({private, [CA]})])),
+     ?_assertEqual({error, {bad_route, 1, mount, file_list_in_new_route}},
+                   Prep([Mount({private, []})])),
+     ?_assertEqual(
+        "route 2 (regex route): a mount or regex route cannot take a list of "
+        "CA files in {private, Files}; define a realm in the realms key "
+        "and name it, e.g. {private, {realm, <<\"staff\">>}}",
+        describe_route_error({bad_route, 2, regex,
+                              file_list_in_new_route})),
+     % realm policies are still fine in new-format routes
+     ?_assertMatch({ok, #route{auth_policy = {private, [Staff], [_]}}},
+                   route(Mount({private, Staff}), T)),
+     ?_assertMatch({ok, #route{auth_policy = {private, [Staff], [_]}}},
+                   route(Regex({private, [Staff]}), T)),
+     % old tuples are unchanged
+     ?_assertMatch({ok, #route{auth_policy = {private, [CA], [_]}}},
+                   route(Old({private, [CA]}), T)),
+     ?_assertMatch({ok, #route{auth_policy = {private, [], []}}},
+                   route(Old({private, []}), T)),
+     ?_assertMatch({ok, [#route{auth_policy = {private, [CA], [_]}},
+                         #route{auth_policy = {private, [], []}}]},
+                   Prep([Old({private, [CA]}), Old({private, []})]))].
 
 % The sys.config key realms, and ca_certs as the realm "default".
 realms_from_env_test_() ->
@@ -1197,9 +1245,7 @@ default_table_no_shadow_warning_test_() ->
                  ok = logger:add_handler(Id, blizanci_test_log_handler,
                                          #{config =>
                                            #{notify => self()}}),
-                 try {ok, _} = blizanci_router:prepare(
-                                 Table, Realms,
-                                 #{ warn_old_format => false }),
+                 try {ok, _} = blizanci_router:prepare(Table, Realms),
                      drain()
                  after ok = logger:remove_handler(Id)
                  end
