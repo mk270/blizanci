@@ -65,7 +65,7 @@
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([from_app_env/0, make/3, find_site/2, route/5, route/6,
+-export([from_app_env/0, make/3, find_site/2, route/2, route/5, route/6,
          realm/1, add_realm/3, realms/0, realms/1,
          global/2, site/3, add_route/2, insert_route/3, routes/1,
          new/2, validate/1, apply/1, ascii_lowercase/1,
@@ -90,6 +90,18 @@
                    Result     :: {'ok', route()} | {'error', term()}.
 route(Proto, Regex, Module, AuthPolicy, Opts) ->
     blizanci_router:build_route(Proto, Regex, Module, AuthPolicy, Opts).
+
+
+% Build and validate one route given as a tuple in either format: {mount,
+% Proto, Path, Module, Auth, Opts}, {regex, Proto, Re, Module, Auth,
+% Opts} or the old {Proto, Regex, Module, Auth, Opts} (see
+% blizanci_router:prepare/3 for the rules). No warning for the old one.
+-spec route(RouteInfo, Realms) -> Result
+              when RouteInfo :: tuple(),
+                   Realms    :: realm_table(),
+                   Result    :: {'ok', route()} | {'error', term()}.
+route(RouteInfo, Realms) ->
+    blizanci_router:build_route(RouteInfo, Realms).
 
 
 % As route/5, resolving realms against a table made with realms/1 or
@@ -380,7 +392,23 @@ make_site(Hostname, Cert, Key, Routes) ->
                              | {'error', 'hostname_not_lowercase'}
                              | {'error', {'invalid_routing', term()}}.
 make_site(Hostname, Cert, Key, Routes, Realms) ->
-    case blizanci_router:prepare(Routes, Realms) of
+    build_site(Hostname, Cert, Key, Routes, Realms, #{}).
+
+
+% As make_site/5, with options for blizanci_router:prepare/3.
+-spec build_site(Hostname, Cert, Key, Routes, Realms, PrepareOpts) ->
+              Result
+              when Hostname    :: string(),
+                   Cert        :: string(),
+                   Key         :: string(),
+                   Routes      :: [route_entry()],
+                   Realms      :: realm_table(),
+                   PrepareOpts :: map(),
+                   Result      :: {'ok', site()}
+                                | {'error', 'hostname_not_lowercase'}
+                                | {'error', {'invalid_routing', term()}}.
+build_site(Hostname, Cert, Key, Routes, Realms, PrepareOpts) ->
+    case blizanci_router:prepare(Routes, Realms, PrepareOpts) of
         {ok, Routing} ->
             case site(Hostname, Cert, Key) of
                 {ok, Site} ->
@@ -415,6 +443,21 @@ describe_error(Other) ->
 -spec describe_route_error(Reason) -> Result
               when Reason :: term(),
                    Result :: string().
+describe_route_error({bad_route, Index, Kind, Reason}) ->
+    flat("route ~b (~s): ~s",
+         [Index, route_kind_name(Kind), describe_route_error(Reason)]);
+describe_route_error(invalid_route) ->
+    flat("not a route; expected {mount, Proto, Path, Module, Auth, Opts}, "
+         "{regex, Proto, Re, Module, Auth, Opts} or the old "
+         "{Proto, Regex, Module, Auth, Opts}", []);
+describe_route_error({invalid_mount, Path, Why}) ->
+    flat("mount path ~0p is invalid (~s); it must be a non-empty string "
+         "starting with \"/\", with no empty, \".\" or \"..\" segments "
+         "and no control characters",
+         [Path, mount_problem(Why)]);
+describe_route_error({reserved_group, Re, Name}) ->
+    flat("regex ~0p has a group named ~s, which is reserved for the "
+         "full request path", [Re, Name]);
 describe_route_error({route_without_path_group, Regex, Module}) ->
     flat("route ~0p (servlet ~0p) has no named group PATH in its regex; "
          "add one, e.g. (?<PATH>.*)", [Regex, Module]);
@@ -452,6 +495,26 @@ describe_route_error({invalid_route_options, Module, Reason}) ->
     flat("route for servlet ~p has invalid options: ~0p", [Module, Reason]);
 describe_route_error(Reason) ->
     flat("~0p", [Reason]).
+
+-spec route_kind_name(Kind) -> Result
+              when Kind   :: term(),
+                   Result :: string().
+route_kind_name(mount) -> "mount route";
+route_kind_name(regex) -> "regex route";
+route_kind_name(tuple) -> "old-format route";
+route_kind_name(_) -> "unknown kind of route".
+
+-spec mount_problem(Why) -> Result
+              when Why    :: term(),
+                   Result :: string().
+mount_problem(not_a_string) -> "not a string";
+mount_problem(not_utf8) -> "not valid UTF-8";
+mount_problem(empty) -> "empty";
+mount_problem(not_absolute) -> "does not start with \"/\"";
+mount_problem(empty_segment) -> "empty segment";
+mount_problem(dot_segment) -> "\".\" or \"..\" segment";
+mount_problem(control_character) -> "control character";
+mount_problem(Why) -> flat("~0p", [Why]).
 
 -spec flat(Format, Args) -> Result
               when Format :: string(),
@@ -569,7 +632,7 @@ proto_opts(Port) ->
     [{port, Port}].
 
 
--type route_entry() :: {atom(), string(), atom(), term(), map()}.
+-type route_entry() :: tuple().  % see blizanci_router:route_info()
 
 -spec routing_table(Docroot, CGIroot, CACerts) -> RoutingTable
               when Docroot      :: string(),
@@ -684,10 +747,18 @@ from_app_env() ->
     CACerts = application:get_env(App, ca_certs, []),
     TitanWork = application:get_env(App, titan_work_dir, undefined),
     Default_Routing = routing_table(Docroot, CGIroot, CACerts, TitanWork),
-    Routes = application:get_env(App, routing, Default_Routing),
+    % The project's own default table is still in the old tuple format
+    % (until it is rewritten with mounts), so it must not trigger the
+    % operator-facing warning about old-format routes; an operator's own
+    % routing key does.
+    {Routes, Prep} = case application:get_env(App, routing) of
+                         {ok, Own} -> {Own, #{}};
+                         undefined -> {Default_Routing,
+                                       #{ warn_old_format => false }}
+                     end,
     case realms_from_env(App, CACerts) of
         {ok, Realms} ->
-            site_from_env(App, Hostname, Cert, Key, Routes, Realms);
+            site_from_env(App, Hostname, Cert, Key, Routes, Realms, Prep);
         {error, _} = Error -> Error
     end.
 
@@ -712,7 +783,7 @@ realms_from_env(App, CACerts) ->
     end.
 
 
--spec site_from_env(App, Hostname, Cert, Key, Routes, Realms) ->
+-spec site_from_env(App, Hostname, Cert, Key, Routes, Realms, Prep) ->
               Result
               when App      :: atom(),
                    Hostname :: string(),
@@ -720,12 +791,13 @@ realms_from_env(App, CACerts) ->
                    Key      :: string(),
                    Routes   :: [route_entry()],
                    Realms   :: realm_table(),
+                   Prep     :: map(),
                    Result   :: {'ok', map()} | {'error', term()}.
-site_from_env(App, Hostname, Cert, Key, Routes, Realms) ->
+site_from_env(App, Hostname, Cert, Key, Routes, Realms, Prep) ->
     % Today's sys.config only ever describes a single site, so this
     % is a one-element list; everything downstream looks sites up by
     % hostname and doesn't assume that.
-    case make_site(Hostname, Cert, Key, Routes, Realms) of
+    case build_site(Hostname, Cert, Key, Routes, Realms, Prep) of
         {ok, Site} ->
             Port = application:get_env(App, port, ?PORT),
             Servlets = application:get_env(App, servlets,
@@ -983,10 +1055,13 @@ make_site_test_() ->
                    Make("example.org", [Good])),
      % a route error is returned, not raised as a badmatch
      ?_assertEqual({error, {invalid_routing,
-                            {route_without_path_group, "x",
-                             blizanci_static}}},
+                            {bad_route, 2, tuple,
+                             {route_without_path_group, "x",
+                              blizanci_static}}}},
                    Make("example.org", [Good, Bad])),
-     ?_assertMatch({error, {invalid_routing, {invalid_proto, gopher}}},
+     ?_assertMatch({error, {invalid_routing,
+                            {bad_route, 1, tuple,
+                             {invalid_proto, gopher}}}},
                    Make("example.org",
                         [{gopher, ?RX, blizanci_static, public, Opts}])),
      ?_assertEqual({error, hostname_not_lowercase},
@@ -998,10 +1073,12 @@ describe_titan_work_dir_test() ->
         blizanci_router:prepare([{titan, ?RX, blizanci_titan, public,
                                   #{ docroot => ?TEST_DOCROOT,
                                      work_dir => list_to_binary(Work) }}]),
-    ?assertEqual({invalid_route_options, blizanci_titan,
-                  {work_dir_not_a_directory, list_to_binary(Work)}},
+    ?assertEqual({bad_route, 1, tuple,
+                  {invalid_route_options, blizanci_titan,
+                   {work_dir_not_a_directory, list_to_binary(Work)}}},
                  Reason),
-    ?assertEqual("invalid routing table: the Titan route's work_dir "
+    ?assertEqual("invalid routing table: route 1 (old-format route): "
+                 "the Titan route's work_dir "
                  ++ Work ++ " is not a directory; create it, "
                  "or set work_dir in the Titan route's "
                  "options to an existing directory",
@@ -1013,12 +1090,14 @@ titan_work_dir_refusals_test_() ->
                  [{titan, ?RX, blizanci_titan, public,
                    maps:merge(#{ docroot => ?TEST_DOCROOT }, Opts)}])
            end,
-    Bad = fun(Why) -> {error, {invalid_route_options, blizanci_titan,
-                               Why}} end,
+    Bad = fun(Why) -> {error, {bad_route, 1, tuple,
+                               {invalid_route_options, blizanci_titan,
+                                Why}}} end,
     Msg = fun(Why) ->
               describe_error({invalid_routing,
-                              {invalid_route_options, blizanci_titan,
-                               Why}})
+                              {bad_route, 1, tuple,
+                               {invalid_route_options, blizanci_titan,
+                                Why}}})
           end,
     [?_assertEqual(Bad(work_dir_missing), Prep(#{})),
      ?_assertEqual(Bad({work_dir_not_absolute, "rel"}),
@@ -1028,16 +1107,18 @@ titan_work_dir_refusals_test_() ->
      ?_assertEqual(Bad({work_dir_other_filesystem, "/proc"}),
                    Prep(#{ work_dir => "/proc" })),
      ?_assertMatch({ok, _}, Prep(#{ work_dir => test_tmp() })),
-     ?_assertEqual("invalid routing table: the Titan route has no "
-                   "work_dir; set work_dir in its options to an "
-                   "existing absolute directory on the docroot's "
+     ?_assertEqual("invalid routing table: route 1 (old-format route): "
+                   "the Titan route has no work_dir; set work_dir in "
+                   "its options to an existing absolute directory on the docroot's "
                    "filesystem", Msg(work_dir_missing)),
-     ?_assertEqual("invalid routing table: the Titan route's work_dir "
-                   "rel is not an absolute path; set it to an existing "
+     ?_assertEqual("invalid routing table: route 1 (old-format route): "
+                   "the Titan route's work_dir rel is not an absolute "
+                   "path; set it to an existing "
                    "absolute directory",
                    Msg({work_dir_not_absolute, "rel"})),
-     ?_assertEqual("invalid routing table: the Titan route's work_dir "
-                   "/proc is on a different filesystem from its "
+     ?_assertEqual("invalid routing table: route 1 (old-format route): "
+                   "the Titan route's work_dir /proc is on a different "
+                   "filesystem from its "
                    "docroot; uploads are installed by hard link and "
                    "rename, so use a directory on the docroot's "
                    "filesystem",

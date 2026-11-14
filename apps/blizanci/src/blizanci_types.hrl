@@ -32,9 +32,17 @@
 
 -type route_option() :: {atom(), any()}.
 
+% How a route selects requests (see blizanci_router): a mount, by whole
+% path segments, holding the mount path without leading or trailing
+% slash (<<>> for "/"); an anchored regex; or an old-format tuple's
+% regex, which is searched for, unanchored, as it always was.
+-type selector() :: {'mount', binary()}
+                  | {'regex', mp()}
+                  | {'legacy', mp()}.
+
 -record(route,
         {proto       :: atom(),
-         pattern     :: mp(),
+         selector    :: selector(),
          module      :: module(),
          auth_policy :: authorisation(),
          options     :: map()}). % [route_option()]}).
