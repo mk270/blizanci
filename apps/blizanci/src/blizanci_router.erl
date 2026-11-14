@@ -4,8 +4,9 @@
 
 -module(blizanci_router).
 
--export([prepare/1, prepare/2, prepare/3, build_route/2, build_route/5,
-         build_route/6, check_servlet/1, check_upload_dirs/1]).
+-export([prepare/1, prepare/2, prepare/3, prepare_all/3, build_route/2,
+         build_route/5, build_route/6, check_servlet/1,
+         check_upload_dirs/1]).
 -export([route/4]).
 
 -include("blizanci_types.hrl").
@@ -138,6 +139,34 @@ prepare(RouteInfo, Realms, Opts) ->
     catch
         Err -> {error, Err}
     end.
+
+
+%% @doc
+%% As prepare/3, but for start-up validation, which reports every
+%% problem at once: every route is built, and the routes that built are
+%% returned along with an error, {bad_route, Index, Kind, Reason}, for
+%% each one that did not, in order. Warnings are logged only when every
+%% route built. The upload directory check of prepare/3 is not made;
+%% see check_upload_dirs/1, which the caller runs on the routes.
+%% @end
+-spec prepare_all(RouteInfo, Realms, Opts) -> Result
+              when RouteInfo :: [route_info()],
+                   Realms    :: realm_table(),
+                   Opts      :: prepare_opts(),
+                   Result    :: {[route()], [term()]}.
+prepare_all(RouteInfo, Realms, Opts) ->
+    Results = [ {I, R, build_route(R, Realms)}
+                || {I, R} <- lists:enumerate(RouteInfo) ],
+    Routes = [ Route || {_, _, {ok, Route}} <- Results ],
+    Errors = [ {bad_route, I, route_kind(R), Why}
+               || {I, R, {error, Why}} <- Results ],
+    case Errors of
+        [] ->
+            warn_old_format(RouteInfo),
+            warn_shadowed(RouteInfo, Routes, Opts);
+        _ -> ok
+    end,
+    {Routes, Errors}.
 
 
 -spec warn_old_format(RouteInfo) -> ok
