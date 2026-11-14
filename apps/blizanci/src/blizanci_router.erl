@@ -48,7 +48,15 @@
                        Opts       :: map()
                       }.
 
--type prepare_opts() :: #{ warn_old_format => boolean() }.
+-define(IS_LIT(C), ((C >= $a andalso C =< $z) orelse
+                    (C >= $A andalso C =< $Z) orelse
+                    (C >= $0 andalso C =< $9) orelse
+                    C =:= $/ orelse C =:= $- orelse C =:= $_)).
+-define(IS_QUANT(Q), (Q =:= $* orelse Q =:= $+ orelse Q =:= $? orelse
+                      Q =:= ${)).
+
+-type prepare_opts() :: #{ warn_old_format => boolean(),
+                           warn_shadowed => boolean() }.
 
 %% @doc
 %% Check that a routing table entry is valid.
@@ -84,6 +92,34 @@ prepare(RouteInfo, Realms) ->
 %% one warning is logged saying how many, unless the option
 %% warn_old_format is false (the default routing table, which is the
 %% project's own, uses that; default true).
+%%
+%% A table that validated is also checked for shadowed routes, which
+%% can never be reached because an earlier route of the same protocol
+%% (gemini routes are compared only with gemini routes, titan with
+%% titan) matches every request they could.  One warning is logged for
+%% each shadowed route, naming it and the first route shadowing it by
+%% position and kind, and by mount path or regex.  This only warns: it
+%% never refuses a table or changes routing, and it can be turned off
+%% with the option warn_shadowed (default true).  Auth is not
+%% considered.  The rules are:
+%%
+%% Mount against mount is exact: the earlier mount shadows the later
+%% if its segments are a prefix of the later one's segments, so "/"
+%% shadows every later mount, and so does an equal mount, but "/docs"
+%% does not shadow "/docsx".
+%%
+%% Whenever a regex is involved (as either route, old-format or not)
+%% overlap cannot be decided, so it is probed, and a false negative is
+%% preferred to a false positive.  Sample paths are derived from the
+%% later route: for a mount M, M itself, M/x and M/a/b; for a regex,
+%% the literal text its source starts with (a leading ^ skipped, the
+%% text cut short before a quantifier, and none at all if the source
+%% has a vertical bar), L, plus L followed by x, a/b and x.gmi.  Only
+%% samples that the later route itself matches are kept, and with
+%% fewer than two of them nothing is reported.  The earlier route is
+%% then run on every sample with the router's own selector, and the
+%% later route is reported only if the earlier one matches all of them.
+%% A partial overlap is never reported.
 %% @end
 -spec prepare(RouteInfo, Realms, Opts) -> Result
               when RouteInfo :: [route_info()],
@@ -97,6 +133,7 @@ prepare(RouteInfo, Realms, Opts) ->
             case check_upload_dirs(Routes) of
                 ok ->
                     warn_old_format(RouteInfo, Opts),
+                    warn_shadowed(RouteInfo, Routes, Opts),
                     {ok, Routes};
                 {error, _} = Error -> Error
             end
@@ -120,6 +157,157 @@ warn_old_format(RouteInfo, Opts) ->
                        "behaviour unchanged (see README, Routing)", [N])
             end
     end.
+
+
+% Log a warning for each shadowed route; see prepare/3.
+-spec warn_shadowed(RouteInfo, Routes, Opts) -> ok
+              when RouteInfo :: [route_info()],
+                   Routes    :: [route()],
+                   Opts      :: prepare_opts().
+warn_shadowed(RouteInfo, Routes, Opts) ->
+    case maps:get(warn_shadowed, Opts, true) of
+        false -> ok;
+        true ->
+            Items = lists:zip3(lists:seq(1, length(Routes)), RouteInfo,
+                               Routes),
+            lists:foreach(fun log_shadowed/1, shadowed(Items, []))
+    end.
+
+
+-type item() :: {pos_integer(), route_info(), route()}.
+
+% The shadowed routes, each with the first earlier route of its
+% protocol that shadows it.  Earlier is the routes seen so far, latest
+% first.
+-spec shadowed(Items, Earlier) -> Found
+              when Items   :: [item()],
+                   Earlier :: [item()],
+                   Found   :: [{item(), item()}].
+shadowed([], _) ->
+    [];
+shadowed([{_, _, #route{proto = Proto}} = Item | Rest], Earlier) ->
+    Same = [ E || {_, _, #route{proto = P}} = E <- lists:reverse(Earlier),
+                  P =:= Proto ],
+    case [ E || E <- Same, shadows(E, Item) ] of
+        [First | _] -> [{Item, First} | shadowed(Rest, [Item | Earlier])];
+        [] -> shadowed(Rest, [Item | Earlier])
+    end.
+
+
+% Does the earlier route match every request the later one could?
+-spec shadows(Earlier, Later) -> boolean()
+              when Earlier :: item(),
+                   Later   :: item().
+shadows({_, _, #route{selector = {mount, EP}}},
+        {_, _, #route{selector = {mount, LP}}}) ->
+    segments_prefix(segments(EP), segments(LP));
+shadows({_, _, #route{selector = ESel}},
+        {_, Info, #route{selector = LSel}}) ->
+    case probes(LSel, pattern_of(Info)) of
+        [] -> false;
+        Samples -> lists:all(fun(S) -> select(ESel, S) =/= nomatch end,
+                             Samples)
+    end.
+
+
+-spec segments(Prefix) -> Segments
+              when Prefix   :: binary(),
+                   Segments :: [binary()].
+segments(<<>>) -> [];
+segments(Prefix) -> binary:split(Prefix, <<"/">>, [global]).
+
+
+-spec segments_prefix(A, B) -> boolean()
+              when A :: [binary()],
+                   B :: [binary()].
+segments_prefix([], _) -> true;
+segments_prefix([S | A], [S | B]) -> segments_prefix(A, B);
+segments_prefix(_, _) -> false.
+
+
+% Sample request paths that the route matches (see prepare/3); none if
+% fewer than two can be had.
+-spec probes(Selector, Pattern) -> Samples
+              when Selector :: selector(),
+                   Pattern  :: string() | binary(),
+                   Samples  :: [binary()].
+probes({mount, <<>>}, _) ->
+    [<<>>, <<"x">>, <<"a/b">>];
+probes({mount, Prefix}, _) ->
+    [Prefix, <<Prefix/binary, "/x">>, <<Prefix/binary, "/a/b">>];
+probes(Selector, Pattern) ->
+    case literal_prefix(Pattern) of
+        none -> [];
+        Lit ->
+            Cands = [ <<Lit/binary, T/binary>>
+                      || T <- [<<>>, <<"x">>, <<"a/b">>, <<"x.gmi">>] ],
+            Samples = lists:usort([ S || S <- Cands,
+                                         select(Selector, S) =/= nomatch ]),
+            case Samples of
+                [_, _ | _] -> Samples;
+                _ -> []
+            end
+    end.
+
+
+% The literal text a regex source starts with, or 'none' if it has an
+% alternation or is not text.
+-spec literal_prefix(Pattern) -> Result
+              when Pattern :: string() | binary(),
+                   Result  :: binary() | 'none'.
+literal_prefix(Pattern) ->
+    Bin = try unicode:characters_to_binary(Pattern)
+          catch error:badarg -> none end,
+    case is_binary(Bin) andalso binary:match(Bin, <<"|">>) =:= nomatch of
+        false -> none;
+        true ->
+            case Bin of
+                <<"^", R/binary>> -> take_literal(R, <<>>);
+                _ -> take_literal(Bin, <<>>)
+            end
+    end.
+
+
+-spec take_literal(Src, Acc) -> Literal
+              when Src     :: binary(),
+                   Acc     :: binary(),
+                   Literal :: binary().
+take_literal(<<C, Q, _/binary>>, Acc) when ?IS_LIT(C), ?IS_QUANT(Q) ->
+    Acc;
+take_literal(<<C, Rest/binary>>, Acc) when ?IS_LIT(C) ->
+    take_literal(Rest, <<Acc/binary, C>>);
+take_literal(_, Acc) ->
+    Acc.
+
+
+-spec log_shadowed(Pair) -> ok
+              when Pair :: {item(), item()}.
+log_shadowed({{I, Info, #route{proto = P}},
+              {J, EInfo, #route{proto = EP}}}) ->
+    logger:warning("routing: route ~b (~s ~s ~ts) is shadowed by "
+                   "route ~b (~s ~s ~ts) and is never used",
+                   [I, P, route_kind(Info), pattern_text(Info),
+                    J, EP, route_kind(EInfo), pattern_text(EInfo)]).
+
+
+% The mount path or regex a configured route is selected by.
+-spec pattern_of(Info) -> Pattern
+              when Info    :: route_info(),
+                   Pattern :: string() | binary().
+pattern_of(Info) when tuple_size(Info) =:= 6 -> element(3, Info);
+pattern_of(Info) -> element(2, Info).
+
+
+-spec pattern_text(Info) -> Text
+              when Info :: route_info(),
+                   Text :: string().
+pattern_text(Info) ->
+    Pattern = pattern_of(Info),
+    Q = try unicode:characters_to_list(Pattern) of
+            L when is_list(L) -> L;
+            _ -> io_lib:format("~w", [Pattern])
+        catch error:badarg -> io_lib:format("~w", [Pattern]) end,
+    [$" | Q] ++ "\"".
 
 
 % What kind of route a configured entry is, going by its shape.
@@ -1019,6 +1207,109 @@ logged_routing() ->
             {logged, _, _} -> logged_routing()
     after 0 -> []
     end.
+
+titan_mount(Path) ->
+    {mount, titan, Path, blizanci_static, public, ?SOPTS}.
+titan_regex(Re) ->
+    {regex, titan, Re, blizanci_static, public, ?SOPTS}.
+
+% The warnings logged for preparing a table
+shadow_logs(Routes) ->
+    [ T || {warning, T} <- with_log(
+                             fun() ->
+                                 {ok, _} = prepare(Routes, #{},
+                                           #{ warn_old_format => false })
+                             end) ].
+
+shadow_mounts_test_() ->
+    S = fun shadow_logs/1,
+    [% equal mounts, and a prefix of whole segments
+     ?_assertEqual(["routing: route 2 (gemini mount \"/docs/\") is "
+                    "shadowed by route 1 (gemini mount \"/docs\") and "
+                    "is never used"],
+                   S([mount("/docs"), mount("/docs/")])),
+     ?_assertEqual(["routing: route 2 (gemini mount \"/docs/a/b\") is "
+                    "shadowed by route 1 (gemini mount \"/docs\") and "
+                    "is never used"],
+                   S([mount("/docs"), mount("/docs/a/b")])),
+     % "/" first shadows everything after it, one line each
+     ?_assertEqual(["routing: route 2 (gemini mount \"/a\") is shadowed "
+                    "by route 1 (gemini mount \"/\") and is never used",
+                    "routing: route 3 (gemini mount \"/b/c\") is "
+                    "shadowed by route 1 (gemini mount \"/\") and is "
+                    "never used"],
+                   S([mount("/"), mount("/a"), mount("/b/c")])),
+     ?_assertMatch([_], S([mount("/"), mount("/")])),
+     % the first route that shadows is the one named
+     ?_assertMatch(["routing: route 3 (gemini mount \"/a/b\") is "
+                    "shadowed by route 1 (gemini mount \"/a\")" ++ _],
+                   S([mount("/a"), mount("/x"), mount("/a/b")])),
+     % not shadowed: siblings, a later prefix, a longer name
+     ?_assertEqual([], S([mount("/a"), mount("/b")])),
+     ?_assertEqual([], S([mount("/docs"), mount("/docsx")])),
+     ?_assertEqual([], S([mount("/docsx"), mount("/docs")])),
+     ?_assertEqual([], S([mount("/docs/a"), mount("/docs")])),
+     ?_assertEqual([], S([mount("/docs/a"), mount("/docs/b"),
+                          mount("/")])),
+     ?_assertEqual([], S([]))].
+
+shadow_protocol_test_() ->
+    S = fun shadow_logs/1,
+    [% routes of different protocols never shadow each other
+     ?_assertEqual([], S([mount("/"), titan_mount("/up")])),
+     ?_assertEqual([], S([titan_mount("/"), mount("/up"),
+                          regex("(?<PATH>.*)")])),
+     % within a protocol they do, and positions count the whole list
+     ?_assertEqual(["routing: route 4 (titan mount \"/up\") is shadowed "
+                    "by route 2 (titan mount \"/\") and is never used"],
+                   S([mount("/x"), titan_mount("/"), mount("/y"),
+                      titan_mount("/up")])),
+     ?_assertEqual(["routing: route 3 (titan regex \"(?<PATH>.*)\") is "
+                    "shadowed by route 1 (titan mount \"/\") and is "
+                    "never used"],
+                   S([titan_mount("/"), mount("/"),
+                      titan_regex("(?<PATH>.*)")]))].
+
+shadow_regex_test_() ->
+    S = fun shadow_logs/1,
+    All = "(?<PATH>.*)",
+    [% an earlier catch-all, of any kind, shadows later regexes
+     ?_assertEqual(["routing: route 2 (gemini regex "
+                    "\"cgi-bin/(?<PATH>.*)\") is shadowed by route 1 "
+                    "(gemini regex \"(?<PATH>.*)\") and is never used"],
+                   S([regex(All), regex("cgi-bin/(?<PATH>.*)")])),
+     ?_assertEqual(["routing: route 2 (gemini tuple "
+                    "\"cgi-bin/(?<PATH>.*)\") is shadowed by route 1 "
+                    "(gemini tuple \"(?<PATH>.*)\") and is never used"],
+                   S([old(All), old("cgi-bin/(?<PATH>.*)")])),
+     ?_assertMatch([_], S([old(All), regex("docs/(?<PATH>.*)")])),
+     ?_assertMatch([_], S([mount("/"), regex("docs/(?<PATH>.*)")])),
+     ?_assertMatch([_], S([mount("/docs"), regex("docs/(?<PATH>.*)")])),
+     ?_assertMatch([_], S([mount("/"), regex(All)])),
+     ?_assertMatch([_], S([regex(All), mount("/docs")])),
+     ?_assertMatch([_], S([old("(?<PATH>docs.*)"), mount("/docs")])),
+     ?_assertMatch([_, _], S([regex(All), mount("/a"), old(All)])),
+     % partial overlaps are not reported
+     ?_assertEqual([], S([mount("/docs"), regex(All)])),
+     ?_assertEqual([], S([regex("docs/(?<PATH>.*)"), mount("/docs")])),
+     ?_assertEqual([], S([regex("(?<PATH>.*\\.gmi)"), regex(All)])),
+     ?_assertEqual([], S([regex("(?<PATH>x)"), regex("(?<PATH>.)")])),
+     ?_assertEqual([], S([old("(?<PATH>a.*)"), old("(?<PATH>.*a)")])),
+     % no samples can be derived: not reported, even if it is shadowed
+     ?_assertEqual([], S([regex(All), regex("(?<PATH>a|b)")])),
+     ?_assertEqual([], S([regex(All), regex("(?<PATH>x)")])),
+     ?_assertMatch([_], S([regex(All), regex("(a)?(?<PATH>.*)")]))].
+
+shadow_option_test_() ->
+    Routes = [mount("/"), mount("/a")],
+    [?_assertMatch([{warning, _}],
+                   with_log(fun() -> {ok, _} = prepare(Routes) end)),
+     ?_assertEqual([], with_log(fun() ->
+                                    {ok, _} = prepare(Routes, #{},
+                                              #{ warn_shadowed => false })
+                                end)),
+     % start-up is not refused, and the routes are all there
+     ?_assertMatch({ok, [_, _]}, prepare(Routes))].
 
 old_format_warning_test_() ->
     Mounts = [mount("/a"), regex("(?<PATH>x)")],
