@@ -56,7 +56,8 @@
 -define(IS_QUANT(Q), (Q =:= $* orelse Q =:= $+ orelse Q =:= $? orelse
                       Q =:= ${)).
 
--type prepare_opts() :: #{ warn_shadowed => boolean() }.
+-type prepare_opts() :: #{ warn_shadowed => boolean(),
+                          site => string() }.
 
 %% @doc
 %% Check that a routing table entry is valid.
@@ -131,7 +132,7 @@ prepare(RouteInfo, Realms, Opts) ->
         Routes ->
             case check_upload_dirs(Routes) of
                 ok ->
-                    warn_old_format(RouteInfo),
+                    warn_old_format(RouteInfo, Opts),
                     warn_shadowed(RouteInfo, Routes, Opts),
                     {ok, Routes};
                 {error, _} = Error -> Error
@@ -162,22 +163,24 @@ prepare_all(RouteInfo, Realms, Opts) ->
                || {I, R, {error, Why}} <- Results ],
     case Errors of
         [] ->
-            warn_old_format(RouteInfo),
+            warn_old_format(RouteInfo, Opts),
             warn_shadowed(RouteInfo, Routes, Opts);
         _ -> ok
     end,
     {Routes, Errors}.
 
 
--spec warn_old_format(RouteInfo) -> ok
-              when RouteInfo :: [route_info()].
-warn_old_format(RouteInfo) ->
+-spec warn_old_format(RouteInfo, Opts) -> ok
+              when RouteInfo :: [route_info()],
+                   Opts      :: prepare_opts().
+warn_old_format(RouteInfo, Opts) ->
     case length([ R || R <- RouteInfo, route_kind(R) =:= tuple ]) of
         0 -> ok;
         N -> logger:warning(
-               "routing: ~b routes use the old tuple format "
+               "routing: ~s~b routes use the old tuple format "
                "{Proto, Regex, Module, Auth, Opts}; translated, "
-               "behaviour unchanged (see README, Routing)", [N])
+               "behaviour unchanged (see README, Routing)",
+               [site_prefix(Opts), N])
     end.
 
 
@@ -192,7 +195,8 @@ warn_shadowed(RouteInfo, Routes, Opts) ->
         true ->
             Items = lists:zip3(lists:seq(1, length(Routes)), RouteInfo,
                                Routes),
-            lists:foreach(fun log_shadowed/1, shadowed(Items, []))
+            lists:foreach(fun(Pair) -> log_shadowed(Pair, Opts) end,
+                          shadowed(Items, []))
     end.
 
 
@@ -302,14 +306,25 @@ take_literal(_, Acc) ->
     Acc.
 
 
--spec log_shadowed(Pair) -> ok
-              when Pair :: {item(), item()}.
+-spec log_shadowed(Pair, Opts) -> ok
+              when Pair :: {item(), item()},
+                   Opts :: prepare_opts().
 log_shadowed({{I, Info, #route{proto = P}},
-              {J, EInfo, #route{proto = EP}}}) ->
-    logger:warning("routing: route ~b (~s ~s ~ts) is shadowed by "
+              {J, EInfo, #route{proto = EP}}}, Opts) ->
+    logger:warning("routing: ~sroute ~b (~s ~s ~ts) is shadowed by "
                    "route ~b (~s ~s ~ts) and is never used",
-                   [I, P, route_kind(Info), pattern_text(Info),
+                   [site_prefix(Opts), I, P, route_kind(Info),
+                    pattern_text(Info),
                     J, EP, route_kind(EInfo), pattern_text(EInfo)]).
+
+
+% The site a table belongs to, if the caller says (the sites key), as
+% the start of a warning's text.
+-spec site_prefix(Opts) -> Result
+              when Opts   :: prepare_opts(),
+                   Result :: string().
+site_prefix(#{site := Site}) -> "site " ++ Site ++ ": ";
+site_prefix(_) -> "".
 
 
 % The mount path or regex a configured route is selected by.

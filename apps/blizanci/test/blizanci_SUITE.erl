@@ -25,7 +25,8 @@
          no_leaks/1, tls_versions/1, client_cert_request/1,
          client_cert_live_apply/1, default_table/1,
          default_table_titan/1, mounts_table/1, mounts_table_empty_realm/1,
-         default_table_titan_no_ca_certs/1, bad_config_refused/1]).
+         default_table_titan_no_ca_certs/1, bad_config_refused/1,
+         sites_from_env/1]).
 -export([log/2]). % logger handler callback, see cert_requested/4
 
 -define(HOST, "first.test").
@@ -38,7 +39,8 @@ all() ->
      tls_versions, client_cert_request, client_cert_live_apply,
      default_table, default_table_titan, mounts_table,
      mounts_table_empty_realm,
-     default_table_titan_no_ca_certs, bad_config_refused].
+     default_table_titan_no_ca_certs, bad_config_refused,
+     sites_from_env].
 
 %%%===================================================================
 %%% Setup
@@ -124,7 +126,7 @@ end_per_testcase(_Case, _Config) ->
     _ = application:stop(blizanci),
     [ application:unset_env(blizanci, K)
       || K <- [port, hostname, certfile, keyfile, docroot, routing,
-               cgiroot, ca_certs, titan_work_dir, realms] ],
+               cgiroot, ca_certs, titan_work_dir, realms, sites] ],
     ok.
 
 %%%===================================================================
@@ -458,6 +460,75 @@ bad_config_refused(_Config) ->
     undefined = whereis(blizanci_sup),
     undefined = whereis(blizanci_conf_serv),
     ok.
+
+%% Two sites from the sites key of the application environment, each
+%% with its own certificate, key and docroot: SNI selects the site (the
+%% certificate the client sees, and the file it is served), a URL whose
+%% host is not the SNI name is refused with 53, and an unknown SNI name is
+%% refused at the TLS layer.
+sites_from_env(Config) ->
+    Dir = ?config(casedir, Config),
+    Port = ?config(port, Config),
+    [ application:unset_env(blizanci, K)
+      || K <- [hostname, certfile, keyfile, docroot, routing] ],
+    Sites = [ begin
+                  SDir = filename:join(Dir, Name),
+                  Root = filename:join(SDir, "docroot"),
+                  ok = filelib:ensure_path(Root),
+                  ok = file:write_file(filename:join(Root, "who.gmi"),
+                                       ["# ", Name, "\n"]),
+                  {Cert, Key, Der} = write_pair(SDir),
+                  {Name, Der,
+                   {Name, [{certfile, Cert}, {keyfile, Key},
+                           {routing,
+                            [{mount, gemini, "/", blizanci_static, public,
+                              #{docroot => Root}}]}]}}
+              end || Name <- [?HOST, ?SECOND] ],
+    ok = application:set_env(blizanci, sites, [ S || {_, _, S} <- Sites ]),
+    {ok, _} = application:ensure_all_started(blizanci),
+    [ begin
+          {ok, S} = connect(Port, Name),
+          {ok, Der} = ssl:peercert(S),
+          ok = ssl:send(S, request(Name, Port, "/who.gmi")),
+          {ok, R} = recv_all(S, <<>>),
+          ssl:close(S),
+          {_, Body} = split_header(R),
+          Body = list_to_binary(["# ", Name, "\n"]),
+          %% the host of the URL must be the SNI name
+          {ok, <<"53 ", _/binary>>} =
+              fetch(Port, Name, other_name(Name), "/who.gmi")
+      end || {Name, Der, _} <- Sites ],
+    [{_, Der1, _}, {_, Der2, _}] = Sites,
+    true = Der1 =/= Der2,
+    {error, _} = connect(Port, "unknown.test"),
+    ok.
+
+other_name(?HOST) -> ?SECOND;
+other_name(?SECOND) -> ?HOST.
+
+%% A certificate and key, made as in init_per_suite, written into Dir;
+%% returns their paths and the certificate's DER.
+write_pair(Dir) ->
+    ok = filelib:ensure_path(Dir),
+    Opts = fun() ->
+               [{key, public_key:generate_key({namedCurve, secp256r1})},
+                {digest, sha256}]
+           end,
+    #{server_config := SC} =
+        public_key:pkix_test_data(#{server_chain => #{root => Opts(),
+                                                      peer => Opts()},
+                                    client_chain => #{root => [],
+                                                      peer => []}}),
+    Der = proplists:get_value(cert, SC),
+    {KeyType, KeyDer} = proplists:get_value(key, SC),
+    Cert = filename:join(Dir, "cert.pem"),
+    Key = filename:join(Dir, "key.pem"),
+    ok = file:write_file(Cert, public_key:pem_encode(
+                                 [{'Certificate', Der, not_encrypted}])),
+    ok = file:write_file(Key, public_key:pem_encode(
+                                [{KeyType, KeyDer, not_encrypted}])),
+    ok = file:change_mode(Key, 8#600),
+    {Cert, Key, Der}.
 
 %% Both TLS versions are served: a client limited to 1.2 and one limited
 %% to 1.3 each complete a request, and each negotiated what it asked for.

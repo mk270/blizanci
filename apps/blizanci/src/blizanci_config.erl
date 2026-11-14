@@ -556,6 +556,26 @@ describe_error({duplicate_site, Hostname}) ->
     flat("site ~s is configured more than once", [host_text(Hostname)]);
 describe_error(no_sites) ->
     "no sites are configured";
+describe_error({sites_and_single_site_keys, Keys}) ->
+    flat("the sites key cannot be combined with the single-site keys "
+         "~s; use one or the other",
+         [lists:join(", ", [ atom_to_list(K) || K <- Keys ])]);
+describe_error({invalid_sites, Value}) ->
+    flat("sites must be a list of {Hostname, Options}, not ~0p", [Value]);
+describe_error({invalid_site_entry, Entry}) ->
+    flat("sites entry ~0p is not a {Hostname, Options} pair", [Entry]);
+describe_error({site_options_not_a_list, Value}) ->
+    flat("the site's options must be a list, not ~0p", [Value]);
+describe_error({unknown_site_key, Key}) ->
+    flat("~0p is not a key of a site (a site takes only certfile, "
+         "keyfile and routing)", [Key]);
+describe_error({duplicate_site_key, Key}) ->
+    flat("the key ~0p is given more than once", [Key]);
+describe_error({missing_site_key, Key}) ->
+    flat("the required key ~0p is missing", [Key]);
+describe_error({invalid_site_value, Key, Value}) ->
+    flat("~0p must be a non-empty file name string, not ~0p",
+         [Key, Value]);
 describe_error({invalid_port, Port}) ->
     flat("port ~0p is not a TCP port number (1 to ~b)", [Port, ?MAX_PORT]);
 describe_error({invalid_servlets, Servlets}) ->
@@ -913,6 +933,16 @@ make(Port, Servlets, Sites) ->
               when Result :: {'ok', map()} | {'error', [term()]}.
 from_app_env() ->
     {ok, App} = application:get_application(),
+    case application:get_env(App, sites) of
+        {ok, Sites} -> sites_from_env(App, Sites);
+        undefined -> single_site_from_env(App)
+    end.
+
+
+-spec single_site_from_env(App) -> Result
+              when App    :: atom(),
+                   Result :: {'ok', map()} | {'error', [term()]}.
+single_site_from_env(App) ->
     {ok, Default_Hostname} = inet:gethostname(),
     Cert = application:get_env(App, certfile, "./ssl/certificate.pem"),
     Key = application:get_env(App, keyfile, "./ssl/key.pem"),
@@ -931,26 +961,226 @@ from_app_env() ->
     Servlets = application:get_env(App, servlets, ?DEFAULT_SERVLETS),
     Global = global(Port, Servlets),
     {Realms, Failed, RealmErrors} = realms_from_env(App, CACerts),
-    HostResult = hostname_from_env(
-                   application:get_env(App, hostname, Default_Hostname)),
-    {Routes, RouteErrors} = routes_from_env(RouteList, Realms, Failed),
+    Outcome = site_from_env(
+                application:get_env(App, hostname, Default_Hostname),
+                Cert, Key, RouteList, Realms, Failed, #{}),
+    assemble(Global, RealmErrors, [Outcome]).
+
+
+% The keys of the single-site configuration, which the sites key
+% replaces: giving both is refused.
+-define(SINGLE_SITE_KEYS, [hostname, certfile, keyfile, docroot, cgiroot,
+                           ca_certs, titan_work_dir, routing]).
+
+% The keys a site of the sites key takes, all required.
+-define(SITE_KEYS, [certfile, keyfile, routing]).
+
+% The sites key. Each site is built independently, by the same code as
+% the single site, from its own certfile, keyfile and routing, and the
+% realms (and port, servlets) are the global keys. The sites key with
+% any key of the single-site configuration is refused, as one error
+% naming the keys, with nothing else reported (it is not known which
+% configuration was meant). Otherwise every problem of every site is
+% reported in one pass, in the order of the sites, each labelled by its
+% site; see from_app_env/0 for the order and the cascade rule, which
+% holds for each site.
+-spec sites_from_env(App, Value) -> Result
+              when App    :: atom(),
+                   Value  :: term(),
+                   Result :: {'ok', map()} | {'error', [term()]}.
+sites_from_env(App, Value) ->
+    case [ K || K <- ?SINGLE_SITE_KEYS,
+                application:get_env(App, K) =/= undefined ] of
+        [] ->
+            Port = application:get_env(App, port, ?PORT),
+            Servlets = application:get_env(App, servlets,
+                                           ?DEFAULT_SERVLETS),
+            Global = global(Port, Servlets),
+            % no ca_certs, titan_work_dir or routing key here, so the
+            % realms are just the realms key
+            {Realms, Failed, RealmErrors} = realms_from_env(App, []),
+            case is_list(Value) of
+                true ->
+                    Outcomes = [ site_entry(E, Realms, Failed)
+                                 || E <- Value ],
+                    assemble(Global, RealmErrors, Outcomes);
+                false ->
+                    {error, RealmErrors ++ [{invalid_sites, Value}]
+                            ++ problems_global(Global)}
+            end;
+        Keys ->
+            {error, [{sites_and_single_site_keys, Keys}]}
+    end.
+
+
+% One entry of the sites key, as the outcome of building that site.
+-spec site_entry(Entry, Realms, Failed) -> Outcome
+              when Entry   :: term(),
+                   Realms  :: realm_table(),
+                   Failed  :: 'all' | [term()],
+                   Outcome :: outcome().
+site_entry({Host, Opts}, Realms, Failed) when is_list(Opts) ->
+    Pairs = [ O || O <- Opts, is_tuple(O), tuple_size(O) =:= 2 ],
+    Keys = [ element(1, O) || O <- Pairs ],
+    Unknown = [ element_key(O) || O <- Opts,
+                                  not is_known_option(O) ],
+    Repeated = lists:usort(Keys -- lists:usort(Keys)),
+    Missing = [ K || K <- ?SITE_KEYS, not lists:member(K, Keys) ],
+    Cert = proplists:get_value(certfile, Pairs),
+    Key = proplists:get_value(keyfile, Pairs),
+    Routing = proplists:get_value(routing, Pairs, []),
+    Bad = [ {invalid_site_value, K, V}
+            || {K, V} <- [{certfile, Cert}, {keyfile, Key}],
+               V =/= undefined, not is_path(V) ],
+    SiteProblems = [ {unknown_site_key, K} || K <- Unknown ]
+        ++ [ {duplicate_site_key, K} || K <- Repeated ]
+        ++ [ {missing_site_key, K} || K <- Missing ] ++ Bad,
+    HostResult = hostname_from_env(Host),
+    PrepareOpts = case HostResult of
+                      {ok, Name} -> #{site => Name};
+                      {error, _} -> #{}
+                  end,
+    case SiteProblems of
+        [] ->
+            site_from_env(Host, Cert, Key, Routing, Realms, Failed,
+                          PrepareOpts);
+        _ ->
+            % the files cannot be tried, but the routes can
+            {Routes, RouteErrors} = routes_from_env(
+                                      Routing, Realms, Failed,
+                                      PrepareOpts),
+            {Label, HostErrors} = case HostResult of
+                                      {ok, N} -> {N, []};
+                                      {error, E} -> {Host, [E]}
+                                  end,
+            {unbuilt, Label, Routes,
+             HostErrors
+             ++ [ {site, Label, E} || E <- SiteProblems ++ RouteErrors ]}
+    end;
+site_entry({Host, Other}, _, _) ->
+    {unbuilt, Host, [], [{site, Host, {site_options_not_a_list, Other}}]};
+site_entry(Other, _, _) ->
+    {unbuilt, Other, [], [{invalid_site_entry, Other}]}.
+
+
+-spec is_known_option(Option) -> Result
+              when Option :: term(),
+                   Result :: boolean().
+is_known_option(O) when is_tuple(O), tuple_size(O) =:= 2 ->
+    lists:member(element(1, O), ?SITE_KEYS);
+is_known_option(_) ->
+    false.
+
+
+-spec element_key(Option) -> Result
+              when Option :: term(),
+                   Result :: term().
+element_key(O) when is_tuple(O), tuple_size(O) =:= 2 -> element(1, O);
+element_key(O) -> O.
+
+
+-spec is_path(Value) -> Result
+              when Value  :: term(),
+                   Result :: boolean().
+is_path(Value) ->
+    Value =/= [] andalso io_lib:char_list(Value).
+
+
+% What building one site from the environment came to: the site, and the
+% errors that were found (already labelled), or the site's label, its
+% routes that built and the errors, when the site itself could not be
+% built.
+-type outcome() :: {'built', site(), [term()]}
+                 | {'unbuilt', term(), [route()], [term()]}.
+
+% Build one site: the hostname folded and checked, its routes, and then
+% site/3 for the files.
+-spec site_from_env(HostValue, Cert, Key, RouteList, Realms, Failed,
+                    PrepareOpts) -> Outcome
+              when HostValue   :: term(),
+                   Cert        :: string(),
+                   Key         :: string(),
+                   RouteList   :: term(),
+                   Realms      :: realm_table(),
+                   Failed      :: 'all' | [term()],
+                   PrepareOpts :: map(),
+                   Outcome     :: outcome().
+site_from_env(HostValue, Cert, Key, RouteList, Realms, Failed, Opts) ->
+    HostResult = hostname_from_env(HostValue),
+    {Routes, RouteErrors} = routes_from_env(RouteList, Realms, Failed,
+                                            Opts),
     case HostResult of
         {ok, Hostname} ->
             case site(Hostname, Cert, Key) of
                 {ok, Site} ->
-                    Built = Site#site{routing = Routes},
-                    finish(Global, {Hostname, Built}, RealmErrors,
-                           RouteErrors);
+                    {built, Site#site{routing = Routes},
+                     [ {site, Hostname, E} || E <- RouteErrors ]};
                 {error, Why} ->
-                    unbuilt_site(Global, Hostname, Routes, RealmErrors,
-                                 RouteErrors
-                                 ++ site_build_errors(Why, Hostname, Cert,
-                                                      Key))
+                    {unbuilt, Hostname, Routes,
+                     [ site_error(Hostname, E)
+                       || E <- RouteErrors
+                              ++ site_build_errors(Why, Hostname, Cert,
+                                                   Key) ]}
             end;
         {error, {invalid_hostname, Bad} = Why} ->
-            unbuilt_site(Global, Bad, Routes, RealmErrors,
-                         [Why | RouteErrors])
+            {unbuilt, Bad, Routes,
+             [ site_error(Bad, E) || E <- [Why | RouteErrors] ]}
     end.
+
+
+% Put the sites together: the realm errors, then each site's own errors
+% in order, then the problems of validate_all/1 on the sites that were
+% built, then the servlets the routes of the unbuilt sites name. When no
+% site could be built the sites are not validated, so that "no sites" is
+% not reported on top of the errors of the sites that were given.
+-spec assemble(Global, RealmErrors, Outcomes) -> Result
+              when Global      :: global_config(),
+                   RealmErrors :: [term()],
+                   Outcomes    :: [outcome()],
+                   Result      :: {'ok', map()} | {'error', [term()]}.
+assemble(Global = #global{port = Port, servlets = Servlets}, RealmErrors,
+         Outcomes) ->
+    Built = [ S || {built, S, _} <- Outcomes ],
+    Stands = [ stand_in(L, R) || {unbuilt, L, R, _} <- Outcomes ],
+    SiteErrors = lists:append([ case O of
+                                    {built, _, Es} -> Es;
+                                    {unbuilt, _, _, Es} -> Es
+                                end || O <- Outcomes ]),
+    Problems = case {Built, Stands} of
+                   {[], []} ->
+                       errors_of(validate_all(new(Global, [])));
+                   {[], _} ->
+                       problems_global(Global)
+                       ++ problems_servlet_use(Global, Stands);
+                   {_, _} ->
+                       errors_of(validate_all(new(Global, Built)))
+                       ++ problems_servlet_use(Global, Stands)
+               end,
+    case RealmErrors ++ SiteErrors ++ Problems of
+        [] -> {ok, make(Port, Servlets, Built)};
+        All -> {error, All}
+    end.
+
+
+-spec errors_of(Result) -> Errors
+              when Result :: 'ok' | {'error', [term()]},
+                   Errors :: [term()].
+errors_of(ok) -> [];
+errors_of({error, Errors}) -> Errors.
+
+
+% A site that could not be built, as far as the servlet-use check needs.
+-spec stand_in(Label, Routes) -> Site
+              when Label  :: term(),
+                   Routes :: [route()],
+                   Site   :: site().
+stand_in(Label, Routes) ->
+    Name = case is_list(Label) of
+               true -> try erlang:list_to_binary(Label)
+                       catch error:badarg -> <<>> end;
+               false -> <<>>
+           end,
+    #site{hostname = Name, certfile = "", keyfile = "", routing = Routes}.
 
 
 % What site/3 refused, as errors. site/3 stops at the first unreadable
@@ -984,53 +1214,6 @@ file_problems(Hostname, Cert, Key) ->
       || {fail, Why} <- [blizanci_x509:validate_pem_file(Cert)] ]
     ++ [ {bad_keyfile, Hostname, Why}
          || {fail, Why} <- [blizanci_x509:validate_pem_file(Key)] ].
-
-
-% The site was built; whatever else went wrong, validate what there is.
--spec finish(Global, Site, RealmErrors, RouteErrors) -> Result
-              when Global      :: global_config(),
-                   Site        :: {string(), site()},
-                   RealmErrors :: [term()],
-                   RouteErrors :: [term()],
-                   Result      :: {'ok', map()} | {'error', [term()]}.
-finish(Global = #global{port = Port, servlets = Servlets},
-       {Hostname, Site}, RealmErrors, RouteErrors) ->
-    Problems = case validate_all(new(Global, [Site])) of
-                   ok -> [];
-                   {error, P} -> P
-               end,
-    case RealmErrors ++ RouteErrors ++ Problems of
-        [] ->
-            {ok, make(Port, Servlets, [Site])};
-        _ ->
-            {error, RealmErrors
-                    ++ [ {site, Hostname, E} || E <- RouteErrors ]
-                    ++ Problems}
-    end.
-
-
-% The site could not be built, so it is not in the configuration: only
-% the global checks, and the servlets its routes name, are made.
--spec unbuilt_site(Global, Label, Routes, RealmErrors, SiteErrors) ->
-              Result
-              when Global      :: global_config(),
-                   Label       :: term(),
-                   Routes      :: [route()],
-                   RealmErrors :: [term()],
-                   SiteErrors  :: [term()],
-                   Result      :: {'error', [term()]}.
-unbuilt_site(Global, Label, Routes, RealmErrors, SiteErrors) ->
-    Name = case is_list(Label) of
-               true -> try erlang:list_to_binary(Label)
-                       catch error:badarg -> <<>> end;
-               false -> <<>>
-           end,
-    Stand = #site{hostname = Name, certfile = "", keyfile = "",
-                  routing = Routes},
-    {error, RealmErrors
-            ++ [ site_error(Label, E) || E <- SiteErrors ]
-            ++ problems_global(Global)
-            ++ problems_servlet_use(Global, [Stand])}.
 
 
 % An error found building the site, named by the site, unless it is that
@@ -1067,16 +1250,18 @@ hostname_from_env(Value) ->
 % The site's routes: those that build, and an error for each that does
 % not, less any unknown_realm error for a realm already reported as
 % failed.
--spec routes_from_env(RouteList, Realms, Failed) -> Result
+-spec routes_from_env(RouteList, Realms, Failed, Opts) -> Result
               when RouteList :: term(),
                    Realms    :: realm_table(),
                    Failed    :: 'all' | [term()],
+                   Opts      :: map(),
                    Result    :: {[route()], [term()]}.
-routes_from_env(RouteList, Realms, Failed) when is_list(RouteList) ->
-    {Routes, Errors} = blizanci_router:prepare_all(RouteList, Realms, #{}),
+routes_from_env(RouteList, Realms, Failed, Opts)
+  when is_list(RouteList) ->
+    {Routes, Errors} = blizanci_router:prepare_all(RouteList, Realms, Opts),
     Relevant = [ E || E <- Errors, not realm_failed(E, Failed) ],
     {Routes, [ {invalid_routing, E} || E <- Relevant ]};
-routes_from_env(RouteList, _, _) ->
+routes_from_env(RouteList, _, _, _) ->
     {[], [{invalid_routing, {routing_not_a_list, RouteList}}]}.
 
 
