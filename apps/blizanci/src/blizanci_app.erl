@@ -44,7 +44,8 @@ stop(_State) ->
 -include_lib("eunit/include/eunit.hrl").
 
 -define(ENV_KEYS, [certfile, keyfile, hostname, port, servlets, realms,
-                   routing, docroot, cgiroot]).
+                   routing, docroot, cgiroot, sites, ca_certs,
+                   titan_work_dir]).
 
 %% start/2 reads the application environment of the application it runs
 %% in, so these tests start blizanci itself (application:start/1, which
@@ -76,8 +77,11 @@ with_app_env(Env, Fun) ->
                                   #{config => #{notify => self()}}),
           Base = [{certfile, Cert}, {keyfile, Key},
                   {hostname, "test.example"}, {port, free_port()}],
-          [ application:set_env(blizanci, K, V)
-            || {K, V} <- Base ++ Env ],
+          %% {K, unset} removes a key of the base environment
+          [ case V of
+                unset -> application:unset_env(blizanci, K);
+                _ -> application:set_env(blizanci, K, V)
+            end || {K, V} <- Base ++ Env ],
           try Fun()
           after
               ok = logger:remove_handler(Handler),
@@ -327,4 +331,309 @@ default_routing_quiet_test() ->
       fun() ->
           ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
           ?assertEqual([], routing_warnings(logged()))
+      end).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% The sites key.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% The environment of a sites test: the base single-site keys are
+%% removed, as the sites key refuses them.
+sites_env(Sites) ->
+    [{hostname, unset}, {certfile, unset}, {keyfile, unset},
+     {servlets, [blizanci_test_stub]}, {sites, Sites}].
+
+%% Two certificate and key pairs, in a directory of their own.
+with_pairs(Fun) ->
+    Dir = blizanci_x509:test_tmp_dir(),
+    try Fun(blizanci_x509:test_pair_files(Dir, "a", rsa),
+            blizanci_x509:test_pair_files(Dir, "b", rsa))
+    after file:del_dir_r(Dir)
+    end.
+
+public_routes() ->
+    [{mount, gemini, "/", blizanci_test_stub, public, #{}}].
+
+site_opts({Cert, Key}) ->
+    [{certfile, Cert}, {keyfile, Key}, {routing, public_routes()}].
+
+%% Start the application and return what it logged as errors.
+start_errors() ->
+    ?assertMatch({error, _}, application:ensure_all_started(blizanci)),
+    blizanci_lines(logged()).
+
+%% Two sites are built, each from its own files and routes, and both
+%% are served; a name with capitals is folded.
+two_sites_start_test() ->
+    with_pairs(
+      fun(A, B) ->
+          with_app_env(
+            sites_env([{"a.example", site_opts(A)},
+                       {"B.Example", site_opts(B)}]),
+            fun() ->
+                ?assertMatch({ok, _},
+                             application:ensure_all_started(blizanci)),
+                ?assertEqual([], blizanci_lines(logged())),
+                [ ?assertMatch({ok, _}, blizanci_conf_serv:find_site(H))
+                  || H <- [<<"a.example">>, <<"b.example">>] ],
+                ?assertEqual(not_found,
+                             blizanci_conf_serv:find_site(<<"c.example">>))
+            end)
+      end).
+
+%% The sites key with any single-site key is refused, with one line
+%% naming the keys given, and nothing else is reported.
+sites_with_single_site_keys_test_() ->
+    {timeout, 120, fun sites_with_single_site_keys_body/0}.
+
+sites_with_single_site_keys_body() ->
+    with_pairs(
+      fun(A, _) ->
+          Sites = [{"a.example", site_opts(A)}],
+          Values = [{hostname, "x.example"}, {certfile, "c.pem"},
+                    {keyfile, "k.pem"}, {docroot, "."}, {cgiroot, "."},
+                    {ca_certs, []}, {titan_work_dir, "."},
+                    {routing, []}],
+          [ with_app_env(
+              sites_env(Sites) ++ [KV],
+              fun() ->
+                  ?assertEqual(
+                     ["blizanci: the sites key cannot be combined with "
+                      "the single-site keys " ++ atom_to_list(K)
+                      ++ "; use one or the other"],
+                     start_errors())
+              end) || {K, _} = KV <- Values ],
+          %% several at once, in a fixed order
+          with_app_env(
+            sites_env(Sites) ++ [{routing, []}, {hostname, "x"},
+                                 {ca_certs, []}],
+            fun() ->
+                ?assertEqual(
+                   ["blizanci: the sites key cannot be combined with "
+                    "the single-site keys hostname, ca_certs, routing; "
+                    "use one or the other"],
+                   start_errors())
+            end),
+          %% the base environment of these tests has three of them
+          with_app_env(
+            [{sites, Sites}, {servlets, [blizanci_test_stub]}],
+            fun() ->
+                ?assertEqual(
+                   ["blizanci: the sites key cannot be combined with "
+                    "the single-site keys hostname, certfile, keyfile; "
+                    "use one or the other"],
+                   start_errors())
+            end)
+      end).
+
+%% Each way a site can be wrong, one line naming the site.
+site_shape_errors_test_() ->
+    {timeout, 120, fun site_shape_errors_body/0}.
+
+site_shape_errors_body() ->
+    with_pairs(
+      fun(A, _) ->
+          [Cert, Key, Routing] = site_opts(A),
+          Case = fun(Sites, Lines) ->
+                     with_app_env(
+                       sites_env(Sites),
+                       fun() ->
+                           ?assertEqual(["blizanci: " ++ L || L <- Lines],
+                                        start_errors())
+                       end)
+                 end,
+          Case([{"a.example", [Key, Routing]}],
+               ["site a.example: the required key certfile is missing"]),
+          Case([{"a.example", [Cert, Routing]}],
+               ["site a.example: the required key keyfile is missing"]),
+          Case([{"a.example", [Cert, Key]}],
+               ["site a.example: the required key routing is missing"]),
+          Case([{"a.example", []}],
+               ["site a.example: the required key certfile is missing",
+                "site a.example: the required key keyfile is missing",
+                "site a.example: the required key routing is missing"]),
+          Case([{"a.example", [Cert, Key, Routing, {docroot, "."}]}],
+               ["site a.example: docroot is not a key of a site (a site "
+                "takes only certfile, keyfile and routing)"]),
+          Case([{"a.example", [Cert, Key, Routing, {ca_certs, []},
+                               {hostname, "z"}]}],
+               ["site a.example: ca_certs is not a key of a site (a site "
+                "takes only certfile, keyfile and routing)",
+                "site a.example: hostname is not a key of a site (a site "
+                "takes only certfile, keyfile and routing)"]),
+          Case([{"a.example", [Cert, Key, Routing, Routing]}],
+               ["site a.example: the key routing is given more than "
+                "once"]),
+          Case([{"a.example", [{certfile, ""}, Key, Routing]}],
+               ["site a.example: certfile must be a non-empty file name "
+                "string, not []"]),
+          Case([{"a.example", not_a_list}],
+               ["site a.example: the site's options must be a list, not "
+                "not_a_list"]),
+          Case([not_a_pair],
+               ["sites entry not_a_pair is not a {Hostname, Options} "
+                "pair"]),
+          Case([{42, site_opts(A)}],
+               ["hostname 42 is not a non-empty string"]),
+          Case([{"", site_opts(A)}],
+               ["hostname [] is not a non-empty string"]),
+          Case([{<<"a.example">>, site_opts(A)}],
+               ["hostname <<\"a.example\">> is not a non-empty string"])
+      end),
+    with_app_env(
+      sites_env(not_a_list),
+      fun() ->
+          ?assertEqual(["blizanci: sites must be a list of {Hostname, "
+                        "Options}, not not_a_list"],
+                       start_errors())
+      end),
+    %% no sites at all is "no sites", as ever
+    with_app_env(
+      sites_env([]),
+      fun() ->
+          ?assertEqual(["blizanci: no sites are configured"],
+                       start_errors())
+      end).
+
+%% The same name twice, after folding to lower case.
+duplicate_sites_test_() ->
+    {timeout, 120, fun duplicate_sites_body/0}.
+
+duplicate_sites_body() ->
+    with_pairs(
+      fun(A, B) ->
+          with_app_env(
+            sites_env([{"a.example", site_opts(A)},
+                       {"A.EXAMPLE", site_opts(B)}]),
+            fun() ->
+                ?assertEqual(["blizanci: site a.example is configured "
+                              "more than once"],
+                             start_errors())
+            end)
+      end).
+
+%% Every problem of every site is reported in one pass, the sites in
+%% their order, a bad site not hiding the next, and the realms first.
+several_sites_problems_test_() ->
+    {timeout, 120, fun several_sites_problems_body/0}.
+
+several_sites_problems_body() ->
+    with_pairs(
+      fun(A, B) ->
+          Stub = blizanci_test_stub,
+          [_, _, Routing] = site_opts(B),
+          with_app_env(
+            sites_env(
+              [{"one.example",
+                [{certfile, "/no/such/cert.pem"},
+                 {keyfile, element(2, A)},
+                 {routing, [{mount, gemini, "/a", Stub,
+                             {private, {realm, <<"q">>}}, #{}},
+                            {mount, gemini, "/b", blizanci_no_such, public,
+                             #{}}]}]},
+               {"two.example", [{keyfile, element(2, B)}, Routing]},
+               {"three.example", site_opts(A) ++ [{extra, 1}]},
+               {"four.example", site_opts(B)}])
+            ++ [{port, 99999},
+                {realms, [{<<"r">>, ["/no/such/ca.pem"]}]}],
+            fun() ->
+                ?assertEqual(
+                   ["blizanci: realm <<\"r\">>: CA file /no/such/ca.pem "
+                    "cannot be used (enoent); check that it exists and "
+                    "holds a PEM certificate",
+                    "blizanci: site one.example: invalid routing table: "
+                    "route 1 (mount route): route \"/a\" (servlet "
+                    "blizanci_test_stub) names realm <<\"q\">>, which is "
+                    "not defined",
+                    "blizanci: site one.example: invalid routing table: "
+                    "route 2 (mount route): servlet blizanci_no_such "
+                    "cannot be loaded; check the module name and that it "
+                    "is installed",
+                    "blizanci: site one.example: the certificate file is "
+                    "not a readable PEM file (couldnt_open_pem_file)",
+                    "blizanci: site two.example: the required key "
+                    "certfile is missing",
+                    "blizanci: site three.example: extra is not a key of "
+                    "a site (a site takes only certfile, keyfile and "
+                    "routing)",
+                    "blizanci: port 99999 is not a TCP port number "
+                    "(1 to 65535)"],
+                   start_errors())
+            end)
+      end).
+
+%% The sites are validated together: a site whose key does not match
+%% its certificate is not built, and an undeclared servlet is reported
+%% for the built site and for the unbuilt one.
+sites_validated_together_test_() ->
+    {timeout, 120, fun sites_validated_together_body/0}.
+
+sites_validated_together_body() ->
+    with_pairs(
+      fun(A, B) ->
+          with_app_env(
+            sites_env(
+              [{"a.example",
+                [{certfile, element(1, A)}, {keyfile, element(2, B)},
+                 {routing, public_routes()}]},
+               {"b.example", site_opts(B)}])
+            ++ [{servlets, []}],
+            fun() ->
+                ?assertEqual(
+                   ["blizanci: site a.example: certificate "
+                    ++ element(1, A) ++ " and private key "
+                    ++ element(2, B) ++ " are not a matching pair",
+                    %% built sites are validated first, then the
+                    %% servlets used by the one that was not built
+                    "blizanci: site b.example: a route uses servlet "
+                    "blizanci_test_stub, which is not in the servlets "
+                    "list",
+                    "blizanci: site a.example: a route uses servlet "
+                    "blizanci_test_stub, which is not in the servlets "
+                    "list"],
+                   start_errors())
+            end)
+      end),
+    with_pairs(
+      fun(A, B) ->
+          with_app_env(
+            sites_env([{"a.example", site_opts(A)},
+                       {"b.example", site_opts(B)}])
+            ++ [{servlets, []}],
+            fun() ->
+                ?assertEqual(
+                   ["blizanci: site a.example: a route uses servlet "
+                    "blizanci_test_stub, which is not in the servlets "
+                    "list",
+                    "blizanci: site b.example: a route uses servlet "
+                    "blizanci_test_stub, which is not in the servlets "
+                    "list"],
+                   start_errors())
+            end)
+      end).
+
+%% The warnings about a routing table say which site's it is.
+sites_routing_warnings_test() ->
+    with_pairs(
+      fun(A, B) ->
+          Stub = blizanci_test_stub,
+          Old = {gemini, "(?<PATH>a)", Stub, public, #{}},
+          with_app_env(
+            sites_env(
+              [{"a.example", site_opts(A)},
+               {"B.Example",
+                [{certfile, element(1, B)}, {keyfile, element(2, B)},
+                 {routing, [Old,
+                            {mount, gemini, "/", Stub, public, #{}},
+                            {mount, gemini, "/x", Stub, public,
+                             #{}}]}]}]),
+            fun() ->
+                ?assertMatch({ok, _},
+                             application:ensure_all_started(blizanci)),
+                ?assertMatch(
+                   [{warning, "routing: site b.example: 1 routes use "
+                     "the old tuple format " ++ _},
+                    {warning, "routing: site b.example: route 3 " ++ _}],
+                   routing_warnings(logged()))
+            end)
       end).
