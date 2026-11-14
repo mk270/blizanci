@@ -71,7 +71,9 @@ matches everything.
 The validator requires a mount path to be a non-empty string (or
 binary) that starts with `/`. It may have no empty segment (so no
 `//`), though one trailing `/` is allowed and ignored. It may have no
-`.` or `..` segment and no control character.
+`.` or `..` segment. Only printable ASCII (codes 32 to 126) is
+allowed: no control character and nothing non-ASCII, as a request path
+is always printable ASCII once decoded.
 
 What the servlet receives:
 
