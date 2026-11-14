@@ -84,6 +84,13 @@
          new/2, validate/1, apply/1, ascii_lowercase/1,
          describe_error/1, tls_versions/0, site_wants_client_cert/1]).
 
+% A site record with no check on its files, for tests of everything but
+% the files themselves; site/3 refuses a certificate and key that do not
+% match.
+-ifdef(TEST).
+-export([test_site/3]).
+-endif.
+
 % The default port: the one assigned to Gemini.
 -define(PORT, 1965).
 
@@ -190,14 +197,44 @@ global(Port, Servlets) ->
                    CertFile :: string(),
                    KeyFile  :: string(),
                    Result   :: {'ok', site()}
-                             | {'error', 'hostname_not_lowercase'}.
+                             | {'error', 'hostname_not_lowercase'}
+                             | {'error', pair_error()}.
 site(Hostname, CertFile, KeyFile) ->
     case Hostname =:= ascii_lowercase(Hostname) of
         false -> {error, hostname_not_lowercase};
-        true  -> {ok, #site{hostname = erlang:list_to_binary(Hostname),
-                            certfile = CertFile,
-                            keyfile  = KeyFile,
-                            routing  = []}}
+        true  ->
+            Host = erlang:list_to_binary(Hostname),
+            case check_pair(Host, CertFile, KeyFile) of
+                ok -> {ok, #site{hostname = Host,
+                                 certfile = CertFile,
+                                 keyfile  = KeyFile,
+                                 routing  = []}};
+                {error, _} = Error -> Error
+            end
+    end.
+
+
+% A site's certificate and key must be a matching pair, else TLS fails
+% at handshake time, for every client: so it is refused here, naming
+% the site and both files.
+-type pair_error() :: {'cert_key_mismatch', binary(), term(), term()}
+                    | {'bad_certfile', binary(), term()}
+                    | {'bad_keyfile', binary(), term()}.
+
+-spec check_pair(Hostname, CertFile, KeyFile) -> Result
+              when Hostname :: binary(),
+                   CertFile :: term(),
+                   KeyFile  :: term(),
+                   Result   :: 'ok' | {'error', pair_error()}.
+check_pair(Hostname, CertFile, KeyFile) ->
+    case blizanci_x509:cert_key_match(CertFile, KeyFile) of
+        ok -> ok;
+        {error, mismatch} ->
+            {error, {cert_key_mismatch, Hostname, CertFile, KeyFile}};
+        {error, {certfile, Why}} ->
+            {error, {bad_certfile, Hostname, Why}};
+        {error, {keyfile, Why}} ->
+            {error, {bad_keyfile, Hostname, Why}}
     end.
 
 
@@ -333,9 +370,14 @@ validate_site(#site{hostname = Hostname, certfile = Cert,
         {{fail, Why}, _} -> {error, {bad_certfile, Hostname, Why}};
         {_, {fail, Why}} -> {error, {bad_keyfile, Hostname, Why}};
         _ ->
-            case blizanci_router:check_upload_dirs(Routing) of
-                ok -> ok;
-                {error, Why} -> {error, {bad_routes, Hostname, Why}}
+            case check_pair(Hostname, Cert, Key) of
+                ok ->
+                    case blizanci_router:check_upload_dirs(Routing) of
+                        ok -> ok;
+                        {error, Why} ->
+                            {error, {bad_routes, Hostname, Why}}
+                    end;
+                {error, _} = Error -> Error
             end
     end.
 
@@ -390,6 +432,7 @@ apply(Config = #config{global = #global{port = Port, servlets = Servlets},
                    Routes   :: [route_entry()],
                    Result   :: {'ok', site()}
                              | {'error', 'hostname_not_lowercase'}
+                             | {'error', pair_error()}
                              | {'error', {'invalid_routing', term()}}.
 make_site(Hostname, Cert, Key, Routes) ->
     make_site(Hostname, Cert, Key, Routes, #{}).
@@ -403,6 +446,7 @@ make_site(Hostname, Cert, Key, Routes) ->
                    Realms   :: realm_table(),
                    Result   :: {'ok', site()}
                              | {'error', 'hostname_not_lowercase'}
+                             | {'error', pair_error()}
                              | {'error', {'invalid_routing', term()}}.
 make_site(Hostname, Cert, Key, Routes, Realms) ->
     build_site(Hostname, Cert, Key, Routes, Realms, #{}).
@@ -419,6 +463,7 @@ make_site(Hostname, Cert, Key, Routes, Realms) ->
                    PrepareOpts :: map(),
                    Result      :: {'ok', site()}
                                 | {'error', 'hostname_not_lowercase'}
+                                | {'error', pair_error()}
                                 | {'error', {'invalid_routing', term()}}.
 build_site(Hostname, Cert, Key, Routes, Realms, PrepareOpts) ->
     case blizanci_router:prepare(Routes, Realms, PrepareOpts) of
@@ -445,6 +490,9 @@ describe_error(ca_certs_and_default_realm) ->
     "must not also define one of that name";
 describe_error(hostname_not_lowercase) ->
     "hostname is not lower case";
+describe_error({cert_key_mismatch, Hostname, CertFile, KeyFile}) ->
+    flat("site ~s: certificate ~s and private key ~s are not a "
+         "matching pair", [Hostname, CertFile, KeyFile]);
 describe_error({shutdown, {failed_to_start_child, blizanci_servlets,
                            Reason}}) ->
     describe_error(Reason);
@@ -827,8 +875,8 @@ site_from_env(App, Hostname, Cert, Key, Routes, Realms, Prep) ->
 -define(RX, "(?<PATH>x)").
 
 test_site(Hostname, Cert, Key) ->
-    {ok, Site} = site(Hostname, Cert, Key),
-    Site.
+    #site{hostname = erlang:list_to_binary(Hostname), certfile = Cert,
+          keyfile = Key, routing = []}.
 
 route_ok_test_() ->
     Opts = #{ docroot => ?TEST_DOCROOT },
@@ -1143,12 +1191,27 @@ route_errors_test_() ->
                    route(gemini, ?RX, blizanci_static, public,
                          #{ docroot => "/no/such/dir" }))].
 
+% A directory holding a real certificate and key, for tests of sites
+% built with site/3, which refuses a pair that does not match.
+pair_fixture(Tests) ->
+    {setup,
+     fun() ->
+         Dir = blizanci_x509:test_tmp_dir(),
+         {Dir, blizanci_x509:test_pair_files(Dir, "a", rsa),
+          blizanci_x509:test_pair_files(Dir, "b", rsa)}
+     end,
+     fun({Dir, _, _}) -> file:del_dir_r(Dir) end,
+     fun({_, A, B}) -> Tests(A, B) end}.
+
 make_site_test_() ->
+    pair_fixture(fun make_site_tests/2).
+
+make_site_tests({Cert, Key}, {_, OtherKey}) ->
     Opts = #{ docroot => ?TEST_DOCROOT },
     Good = {gemini, ?RX, blizanci_static, public, Opts},
     Bad = {gemini, "x", blizanci_static, public, Opts},
     Make = fun(Host, Routes) ->
-               make_site(Host, "c.pem", "k.pem", Routes)
+               make_site(Host, Cert, Key, Routes)
            end,
     [?_assertMatch({ok, #site{routing = [#route{}]}},
                    Make("example.org", [Good])),
@@ -1164,7 +1227,11 @@ make_site_test_() ->
                    Make("example.org",
                         [{gopher, ?RX, blizanci_static, public, Opts}])),
      ?_assertEqual({error, hostname_not_lowercase},
-                   Make("Example.org", [Good]))].
+                   Make("Example.org", [Good])),
+     % a certificate that does not match the key is refused
+     ?_assertEqual({error, {cert_key_mismatch, <<"example.org">>,
+                            Cert, OtherKey}},
+                   make_site("example.org", Cert, OtherKey, [Good]))].
 
 describe_titan_work_dir_test() ->
     Work = filename:join(blizanci_x509:test_tmp_dir(), "no-such-dir"),
@@ -1505,12 +1572,41 @@ site_test() ->
                  test_site("example.org", "c.pem", "k.pem")).
 
 site_rejects_uppercase_test_() ->
-    [?_assertEqual({error, hostname_not_lowercase},
-                   site("Example.org", "c.pem", "k.pem")),
-     ?_assertEqual({error, hostname_not_lowercase},
-                   site("EXAMPLE.ORG", "c.pem", "k.pem")),
-     ?_assertMatch({ok, #site{hostname = <<"example.org">>}},
-                   site("example.org", "c.pem", "k.pem"))].
+    pair_fixture(fun({Cert, Key}, _) ->
+        [?_assertEqual({error, hostname_not_lowercase},
+                       site("Example.org", Cert, Key)),
+         ?_assertEqual({error, hostname_not_lowercase},
+                       site("EXAMPLE.ORG", Cert, Key)),
+         ?_assertMatch({ok, #site{hostname = <<"example.org">>}},
+                       site("example.org", Cert, Key))]
+    end).
+
+% site/3 refuses a certificate and key that are not a pair, naming the
+% site and both files.
+site_cert_key_pair_test_() ->
+    pair_fixture(fun({Cert, Key}, {OtherCert, OtherKey}) ->
+        Missing = filename:join(filename:dirname(Cert), "missing.pem"),
+        [?_assertMatch({ok, #site{certfile = Cert, keyfile = Key}},
+                       site("a.example", Cert, Key)),
+         ?_assertEqual({error, {cert_key_mismatch, <<"a.example">>,
+                                Cert, OtherKey}},
+                       site("a.example", Cert, OtherKey)),
+         ?_assertEqual({error, {cert_key_mismatch, <<"b.example">>,
+                                OtherCert, Key}},
+                       site("b.example", OtherCert, Key)),
+         ?_assertEqual({error, {bad_certfile, <<"a.example">>,
+                                {unreadable, enoent}}},
+                       site("a.example", Missing, Key)),
+         ?_assertEqual({error, {bad_keyfile, <<"a.example">>,
+                                no_private_key}},
+                       site("a.example", Cert, Cert)),
+         ?_assertEqual("site a.example: certificate " ++ Cert
+                       ++ " and private key " ++ OtherKey
+                       ++ " are not a matching pair",
+                       describe_error(
+                         {cert_key_mismatch, <<"a.example">>,
+                          Cert, OtherKey}))]
+    end).
 
 ascii_lowercase_test_() ->
     [?_assertEqual("example.org", ascii_lowercase("Example.ORG")),
@@ -1752,9 +1848,14 @@ validate_tests(Pem) ->
 
 write_test_pem() ->
     Path = blizanci_test_support:tmp_path("validate_test") ++ ".pem",
-    Pem = public_key:pem_encode([{'Certificate', <<1, 2, 3>>,
-                                  not_encrypted}]),
-    ok = file:write_file(Path, Pem),
+    % A real certificate and its key in one file, so that the pair
+    % check passes when the file is used as both.
+    Dir = blizanci_x509:test_tmp_dir(),
+    {Cert, Key} = blizanci_x509:test_pair_files(Dir, "p", rsa),
+    {ok, CertPem} = file:read_file(Cert),
+    {ok, KeyPem} = file:read_file(Key),
+    ok = file:write_file(Path, [CertPem, KeyPem]),
+    ok = file:del_dir_r(Dir),
     Path.
 
 %% apply/1.
@@ -1812,6 +1913,56 @@ apply_tests(Pem) ->
                                     sites => [Site("a")]}},
                              blizanci_conf_serv:current())
             end)].
+
+%% An apply/1 whose site has a certificate and key that are not a pair
+%% is refused, and the configuration that was serving keeps serving. The
+%% bad site is one rebuilt from a key file replaced since site/3 passed
+%% it, and one built without the check, as a record.
+apply_cert_key_mismatch_test_() ->
+    pair_fixture(
+      fun({Cert, Key}, {_, OtherKey}) ->
+          {ok, R} = route(gemini, "(?<PATH>.*)", blizanci_static, public,
+                          #{ docroot => ?TEST_DOCROOT }),
+          Conf = fun(Sites) ->
+                     new(global(1965, [blizanci_static]), Sites)
+                 end,
+          {setup,
+           fun() ->
+               {ok, Good} = site("a.example", Cert, Key),
+               Old = add_route(Good, R),
+               live_up(1965, [blizanci_static], [Old]),
+               Old
+           end,
+           fun(_) -> blizanci_test_support:live_down() end,
+           fun(Old) ->
+               Bad = add_route(test_site("a.example", Cert, OtherKey), R),
+               Expected = {error, {cert_key_mismatch, <<"a.example">>,
+                                   Cert, OtherKey}},
+               Unchanged = fun() ->
+                   ?assertEqual({ok, #{port => 1965,
+                                       servlets => [blizanci_static],
+                                       sites => [Old]}},
+                                blizanci_conf_serv:current()),
+                   ?assertEqual({ok, Old},
+                                blizanci_conf_serv:find_site(
+                                  <<"a.example">>))
+               end,
+               [?_test(begin
+                   ?assertEqual(Expected, apply(Conf([Bad]))),
+                   Unchanged()
+                end),
+                % one bad site among good ones refuses the whole lot
+                ?_test(begin
+                    Other = add_route(test_site("b.example", Cert, Key), R),
+                    ?assertEqual(Expected, apply(Conf([Other, Bad]))),
+                    Unchanged()
+                end),
+                ?_test(begin
+                    ?assertEqual(ok, apply(Conf([Old]))),
+                    Unchanged()
+                end)]
+           end}
+      end).
 
 %% A private route holds the CA certificates decoded when it was built:
 %% a CA file changed afterwards takes effect only when a rebuilt route is

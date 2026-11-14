@@ -17,6 +17,7 @@
 -export([validate_pem_file/1, certificates_from_file/1,
          validate_ca_file/1]).
 -export([check_cert/1]).
+-export([cert_key_match/2]).
 -export([verify_signed_by/2]).
 
 % RFC 5280 UTCTime has a two-digit year: 50 to 99 mean 1950 to 1999 and
@@ -28,6 +29,7 @@
 % Certificate-making helpers for the tests here and in blizanci_auth.
 -ifdef(TEST).
 -export([test_pki/0, test_tmp_dir/0, test_write_pem/3]).
+-export([test_pair_files/3]).
 -endif.
 
 %% @doc
@@ -361,6 +363,185 @@ validate_pem_file(Filename) ->
     end.
 
 
+%% @doc
+%% Check that a PEM certificate file and a PEM private key file are a
+%% matching pair, so that a server using them can complete a handshake.
+%% The certificate is the first one in its file (the leaf, when the file
+%% holds a chain); the key is the first private key in its file, which
+%% may be the same file. RSA keys match on modulus and public exponent;
+%% EC keys (P-256, P-384, P-521) on the public point derived from the
+%% private scalar, which must be on the same named curve; Ed25519 and
+%% Ed448 likewise. Nothing is trusted from the file's own idea of the
+%% public key. PKCS#1, PKCS#8 and SEC1 containers are all handled.
+%%
+%% Failure is distinct for each cause and says which file was at fault:
+%% `{certfile, Why}' (`{unreadable, Posix}', `no_certificate_in_file',
+%% `certificate_not_decodable' or `{unsupported_key_type, Alg}') or
+%% `{keyfile, Why}' (`{unreadable, Posix}', `no_private_key',
+%% `encrypted_private_key', `private_key_not_decodable' or
+%% `{unsupported_key_type, Alg}'), or `mismatch' for a well-formed pair
+%% that does not match. An unsupported key is never a pass.
+%% @end
+-spec cert_key_match(CertFile, KeyFile) -> Result
+              when CertFile :: string(),
+                   KeyFile  :: string(),
+                   Result   :: 'ok' | {'error', term()}.
+
+cert_key_match(CertFile, KeyFile) ->
+    try
+        Pub = case cert_public_key(CertFile) of
+                  {ok, P} -> P;
+                  {error, CWhy} -> throw({error, {certfile, CWhy}})
+              end,
+        Priv = case private_key_from_file(KeyFile) of
+                   {ok, K} -> K;
+                   {error, KWhy} -> throw({error, {keyfile, KWhy}})
+               end,
+        key_matches(Pub, Priv)
+    catch
+        throw:{error, _} = Error -> Error;
+        _:_ -> {error, {keyfile, private_key_not_decodable}}
+    end.
+
+
+-spec read_pem(File) -> Result
+              when File   :: term(),
+                   Result :: {'ok', [term()]} | {'error', term()}.
+read_pem(File) ->
+    try file:read_file(File) of
+        {ok, Bin} -> {ok, public_key:pem_decode(Bin)};
+        {error, Posix} -> {error, {unreadable, Posix}}
+    catch
+        _:_ -> {error, {unreadable, badarg}}
+    end.
+
+
+% The first certificate's public key, as {Algorithm, Parameters, Key}.
+-spec cert_public_key(File) -> Result
+              when File   :: term(),
+                   Result :: {'ok', {term(), term(), term()}}
+                           | {'error', term()}.
+cert_public_key(File) ->
+    case read_pem(File) of
+        {error, _} = Error -> Error;
+        {ok, Entries} ->
+            case [ D || {'Certificate', D, not_encrypted} <- Entries ] of
+                [] -> {error, no_certificate_in_file};
+                [Der | _] -> decode_cert_key(Der)
+            end
+    end.
+
+
+-spec decode_cert_key(Der) -> Result
+              when Der    :: binary(),
+                   Result :: {'ok', {term(), term(), term()}}
+                           | {'error', 'certificate_not_decodable'}.
+decode_cert_key(Der) ->
+    try public_key:pkix_decode_cert(Der, otp) of
+        #'OTPCertificate'{tbsCertificate = TBS} ->
+            #'OTPTBSCertificate'{subjectPublicKeyInfo = SPKI} = TBS,
+            #'OTPSubjectPublicKeyInfo'{algorithm = A,
+                                       subjectPublicKey = Key} = SPKI,
+            #'PublicKeyAlgorithm'{algorithm = Alg, parameters = P} = A,
+            {ok, {Alg, P, Key}}
+    catch
+        _:_ -> {error, certificate_not_decodable}
+    end.
+
+
+-define(PRIVATE_KEY_TYPES, ['RSAPrivateKey', 'ECPrivateKey',
+                            'PrivateKeyInfo', 'DSAPrivateKey']).
+
+-spec private_key_from_file(File) -> Result
+              when File   :: term(),
+                   Result :: {'ok', term()} | {'error', term()}.
+private_key_from_file(File) ->
+    case read_pem(File) of
+        {error, _} = Error -> Error;
+        {ok, Entries} ->
+            case [ E || {T, _, _} = E <- Entries,
+                        lists:member(T, ?PRIVATE_KEY_TYPES) ] of
+                [] -> {error, no_private_key};
+                [{_, _, not_encrypted} = E | _] ->
+                    try {ok, public_key:pem_entry_decode(E)}
+                    catch _:_ -> {error, private_key_not_decodable}
+                    end;
+                [_ | _] ->
+                    {error, encrypted_private_key}
+            end
+    end.
+
+
+-spec key_matches(CertKey, PrivKey) -> Result
+              when CertKey :: {term(), term(), term()},
+                   PrivKey :: term(),
+                   Result  :: 'ok' | {'error', term()}.
+key_matches({?rsaEncryption, _, #'RSAPublicKey'{modulus = N,
+                                                  publicExponent = E}},
+            #'RSAPrivateKey'{modulus = N, publicExponent = E}) ->
+    ok;
+key_matches({?rsaEncryption, _, #'RSAPublicKey'{}},
+            #'RSAPrivateKey'{}) ->
+    {error, mismatch};
+key_matches({Alg, Params, #'ECPoint'{point = Point}},
+            #'ECPrivateKey'{privateKey = Scalar, parameters = KeyCurve})
+  when is_binary(Scalar) ->
+    CertCurve = case Alg of
+                    ?'id-ecPublicKey' -> Params;
+                    _ -> {namedCurve, Alg}
+                end,
+    case {curve_name(CertCurve), curve_name(KeyCurve)} of
+        {{ok, Curve}, {ok, Curve}} ->
+            {Derived, _} = crypto:generate_key(curve_kind(Curve), Curve,
+                                               Scalar),
+            case Derived =:= Point of
+                true -> ok;
+                false -> {error, mismatch}
+            end;
+        {{ok, _}, {ok, _}} ->
+            {error, mismatch};
+        {{error, Why}, _} -> {error, {certfile, Why}};
+        {_, {error, Why}} -> {error, {keyfile, Why}}
+    end;
+key_matches({?rsaEncryption, _, _}, #'ECPrivateKey'{}) ->
+    {error, mismatch};
+key_matches({_, _, #'ECPoint'{}}, #'RSAPrivateKey'{}) ->
+    {error, mismatch};
+key_matches({Alg, _, _}, #'RSAPrivateKey'{}) ->
+    {error, {certfile, {unsupported_key_type, Alg}}};
+key_matches({Alg, _, _}, #'ECPrivateKey'{}) ->
+    {error, {certfile, {unsupported_key_type, Alg}}};
+key_matches(_, Other) ->
+    {error, {keyfile, {unsupported_key_type, key_kind(Other)}}}.
+
+
+-spec key_kind(Key) -> Result
+              when Key    :: term(),
+                   Result :: atom().
+key_kind(Key) when is_tuple(Key) -> element(1, Key);
+key_kind(_) -> unknown.
+
+
+-spec curve_name(Params) -> Result
+              when Params :: term(),
+                   Result :: {'ok', atom()}
+                           | {'error', {'unsupported_key_type', term()}}.
+curve_name({namedCurve, ?'secp256r1'}) -> {ok, secp256r1};
+curve_name({namedCurve, ?'secp384r1'}) -> {ok, secp384r1};
+curve_name({namedCurve, ?'secp521r1'}) -> {ok, secp521r1};
+curve_name({namedCurve, {1,3,101,112}}) -> {ok, ed25519};
+curve_name({namedCurve, {1,3,101,113}}) -> {ok, ed448};
+curve_name(Other) -> {error, {unsupported_key_type, Other}}.
+
+
+-spec curve_kind(Curve) -> Result
+              when Curve  :: atom(),
+                   Result :: 'ecdh' | 'eddsa'.
+curve_kind(ed25519) -> eddsa;
+curve_kind(ed448) -> eddsa;
+curve_kind(_) -> ecdh.
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Tests.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -433,6 +614,59 @@ test_cert(Subject, Issuer, SubjectKey, SignKey, {NotBefore, NotAfter}) ->
              subjectUniqueID = asn1_NOVALUE,
              extensions = asn1_NOVALUE},
     public_key:pkix_sign(TBS, SignKey).
+
+% A certificate and key for a site, written as Name.crt and Name.key in
+% Dir; returns their paths. Kind is the key's type: rsa, p256, p384,
+% ed25519 or ed448. The certificate is self-signed in form only: it is
+% signed by a throwaway RSA key, which is all that matching needs.
+test_pair_files(Dir, Name, Kind) ->
+    {KeyEntry, SPKI} = test_pair_key(Kind),
+    Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
+    Subject = test_cn(Name),
+    Alg = #'SignatureAlgorithm'{algorithm = ?'sha256WithRSAEncryption',
+                                parameters = asn1_NOVALUE},
+    TBS = #'OTPTBSCertificate'{
+             version = v1, serialNumber = 1, signature = Alg,
+             issuer = Subject,
+             validity = #'Validity'{notBefore = test_utc(Now - ?DAY),
+                                    notAfter = test_utc(Now + ?DAY)},
+             subject = Subject, subjectPublicKeyInfo = SPKI,
+             issuerUniqueID = asn1_NOVALUE,
+             subjectUniqueID = asn1_NOVALUE,
+             extensions = asn1_NOVALUE},
+    Der = public_key:pkix_sign(TBS, test_key()),
+    {test_write_pem(Dir, Name ++ ".crt", [test_pem_cert(Der)]),
+     test_write_pem(Dir, Name ++ ".key", [KeyEntry])}.
+
+test_pair_key(rsa) ->
+    Key = test_key(),
+    {public_key:pem_entry_encode('RSAPrivateKey', Key),
+     test_spki(?rsaEncryption, asn1_NOVALUE, test_rsa_public(Key))};
+test_pair_key(Curve) when Curve =:= p256; Curve =:= p384 ->
+    Oid = case Curve of
+              p256 -> ?'secp256r1';
+              p384 -> ?'secp384r1'
+          end,
+    Key = public_key:generate_key({namedCurve, Oid}),
+    {public_key:pem_entry_encode('ECPrivateKey', Key),
+     test_spki(?'id-ecPublicKey', {namedCurve, Oid},
+               #'ECPoint'{point = Key#'ECPrivateKey'.publicKey})};
+test_pair_key(Kind) when Kind =:= ed25519; Kind =:= ed448 ->
+    Oid = case Kind of
+              ed25519 -> {1,3,101,112};
+              ed448 -> {1,3,101,113}
+          end,
+    {Pub, Priv} = crypto:generate_key(eddsa, Kind),
+    Key = #'ECPrivateKey'{version = 1, privateKey = Priv,
+                          parameters = {namedCurve, Oid}},
+    {public_key:pem_entry_encode('PrivateKeyInfo', Key),
+     test_spki(Oid, asn1_NOVALUE, #'ECPoint'{point = Pub})}.
+
+test_spki(Alg, Params, Key) ->
+    #'OTPSubjectPublicKeyInfo'{
+       algorithm = #'PublicKeyAlgorithm'{algorithm = Alg,
+                                         parameters = Params},
+       subjectPublicKey = Key}.
 
 test_pki() ->
     Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
@@ -709,4 +943,137 @@ pem_files_test_() ->
           ?_assertEqual(ok, validate_ca_file(Both)),
           ?_assertEqual({error, certificate_not_decodable},
                         validate_ca_file(Mixed))]
+     end}.
+
+% The key-pair check, on keys of every supported type.
+-define(KINDS, [rsa, p256, p384, ed25519, ed448]).
+-define(ENC_PKCS8,
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----\n"
+        "MIH0MF8GCSqGSIb3DQEFDTBSMDEGCSqGSIb3DQEFDDAkBBAd8ooWkLz04GZ/awNS\n"
+        "g/GNAgIIADAMBggqhkiG9w0CCQUAMB0GCWCGSAFlAwQBKgQQjVo+OqEoi6SNywqk\n"
+        "gZRAkgSBkGgoLESlVKny7ZznVmQz0jEaN4gBWrAchXrYEOSBKFvRnWrznrNgXtzG\n"
+        "H3vComwbLOHNdQyzXDdO3HXdpgOhh+IDGu0TxAG+We4SoIt1kp9CGq63d88Sgu9U\n"
+        "GaabHjm3LEN7QqZfiqdcqgTet50Eh/ln/tAQAsM0ByNsN3pe4oyRgPuP1P+AoUay\n"
+        "FxAk4VmWLw==\n"
+        "-----END ENCRYPTED PRIVATE KEY-----\n").
+
+cert_key_match_test_() ->
+    {setup,
+     fun() ->
+         Dir = test_tmp_dir(),
+         Pairs = maps:from_list(
+                   [ {{K, N}, test_pair_files(Dir, atom_to_list(K) ++ N,
+                                              K)}
+                     || K <- ?KINDS, N <- ["1", "2"] ]),
+         {Dir, Pairs}
+     end,
+     fun({Dir, _}) -> file:del_dir_r(Dir) end,
+     fun({Dir, Pairs}) ->
+         Cert = fun(K, N) -> element(1, maps:get({K, N}, Pairs)) end,
+         Key = fun(K, N) -> element(2, maps:get({K, N}, Pairs)) end,
+         Match = fun(K1, K2) ->
+                     cert_key_match(Cert(K1, "1"), Key(K2, "1"))
+                 end,
+         Write = fun(Name, Entries) ->
+                     test_write_pem(Dir, Name, Entries)
+                 end,
+         Pem = fun(File) ->
+                   {ok, B} = file:read_file(File),
+                   public_key:pem_decode(B)
+               end,
+         Raw = fun(Name, Bin) ->
+                   P = filename:join(Dir, Name),
+                   ok = file:write_file(P, Bin),
+                   P
+               end,
+         Missing = filename:join(Dir, "missing"),
+         [ ?_assertEqual(ok, Match(K, K)) || K <- ?KINDS ]
+         ++ [ ?_assertEqual({error, mismatch},
+                            cert_key_match(Cert(K, "1"), Key(K, "2")))
+              || K <- ?KINDS ]
+         ++ [ ?_assertEqual({error, mismatch}, Match(A, B))
+              || A <- ?KINDS, B <- ?KINDS, A =/= B ]
+         ++ [
+          % the same file may hold both certificate and key
+          ?_assertEqual(ok, begin
+              Both = Write("both.pem", Pem(Cert(p256, "1"))
+                                       ++ Pem(Key(p256, "1"))),
+              cert_key_match(Both, Both)
+          end),
+          % PKCS#8 wrapping of an RSA key
+          ?_assertEqual(ok, begin
+              [{_, Der, _}] = Pem(Key(rsa, "1")),
+              Rsa = public_key:der_decode('RSAPrivateKey', Der),
+              cert_key_match(Cert(rsa, "1"),
+                             Write("rsa8.pem",
+                                   [public_key:pem_entry_encode(
+                                      'PrivateKeyInfo', Rsa)]))
+          end),
+          % PKCS#8 wrapping of an EC key
+          ?_assertEqual(ok, begin
+              [{_, Der, _}] = Pem(Key(p256, "1")),
+              Ec = public_key:der_decode('ECPrivateKey', Der),
+              cert_key_match(Cert(p256, "1"),
+                             Write("ec8.pem",
+                                   [public_key:pem_entry_encode(
+                                      'PrivateKeyInfo', Ec)]))
+          end),
+          % a chain: the leaf is the first certificate
+          ?_assertEqual(ok, begin
+              Chain = Write("chain.pem", Pem(Cert(rsa, "1"))
+                                         ++ Pem(Cert(p256, "1"))),
+              cert_key_match(Chain, Key(rsa, "1"))
+          end),
+          ?_assertEqual({error, mismatch}, begin
+              Chain = Write("chain2.pem", Pem(Cert(rsa, "1"))
+                                          ++ Pem(Cert(p256, "1"))),
+              cert_key_match(Chain, Key(p256, "1"))
+          end),
+          % encrypted keys
+          ?_assertEqual({error, {keyfile, encrypted_private_key}},
+                        cert_key_match(
+                          Cert(rsa, "1"),
+                          Write("enc.pem",
+                                [{'RSAPrivateKey', <<1, 2, 3>>,
+                                  {"AES-128-CBC", <<0:128>>}}]))),
+          % a PKCS#8 key encrypted with a password, as openssl writes it
+          ?_assertEqual({error, {keyfile, encrypted_private_key}},
+                        cert_key_match(
+                          Cert(rsa, "1"),
+                          Raw("enc8.pem", <<?ENC_PKCS8>>))),
+          % unreadable and garbage files
+          ?_assertEqual({error, {certfile, {unreadable, enoent}}},
+                        cert_key_match(Missing, Key(rsa, "1"))),
+          ?_assertEqual({error, {keyfile, {unreadable, enoent}}},
+                        cert_key_match(Cert(rsa, "1"), Missing)),
+          ?_assertEqual({error, {certfile, no_certificate_in_file}},
+                        cert_key_match(Raw("text1", <<"hello\n">>),
+                                       Key(rsa, "1"))),
+          ?_assertEqual({error, {certfile, no_certificate_in_file}},
+                        cert_key_match(Key(rsa, "1"), Key(rsa, "1"))),
+          ?_assertEqual({error, {keyfile, no_private_key}},
+                        cert_key_match(Cert(rsa, "1"),
+                                       Raw("text2", <<"hello\n">>))),
+          ?_assertEqual({error, {keyfile, no_private_key}},
+                        cert_key_match(Cert(rsa, "1"), Cert(rsa, "1"))),
+          ?_assertEqual({error, {certfile, certificate_not_decodable}},
+                        cert_key_match(Write("junkcert", [junk_cert()]),
+                                       Key(rsa, "1"))),
+          ?_assertEqual({error, {keyfile, private_key_not_decodable}},
+                        cert_key_match(
+                          Cert(rsa, "1"),
+                          Write("junkkey",
+                                [{'RSAPrivateKey', <<1, 2, 3>>,
+                                  not_encrypted}]))),
+          % a key type that is not supported is not a pass
+          ?_assertMatch({error, {keyfile, {unsupported_key_type, _}}},
+                        cert_key_match(
+                          Cert(rsa, "1"),
+                          Write("dsa.pem",
+                                [public_key:pem_entry_encode(
+                                   'DSAPrivateKey',
+                                   #'DSAPrivateKey'{
+                                      version = 0, p = 1, q = 1, g = 1,
+                                      y = 1, x = 1})])))
+         ]
      end}.
