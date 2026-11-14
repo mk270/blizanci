@@ -735,7 +735,7 @@ client_sees(Module, Matches, RouteOpts) ->
     Data.
 
 refused_tests(Base) ->
-    Opts = #{ cgiroot => filename:join(Base, "cgi"),
+    Opts = #{ cgiroot => filename:join(Base, <<"cgi">>),
               cgiprefix => "/cgi-bin/" },
     Cgi = fun(Path) ->
               client_sees(blizanci_cgi, #{ <<"PATH">> => Path }, Opts)

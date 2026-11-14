@@ -68,7 +68,7 @@
 -record(worker_state, {parent, parent_ref, cgi_status}).
 -type worker_state() :: #worker_state{}.
 -type options() :: #{
-                     cgiroot := string(),
+                     cgiroot := binary(),
                      cgiprefix := string()
                     }.
 
@@ -157,7 +157,7 @@ default_options() ->
               when Opts   :: map(),
                    Result :: 'ok' | {'error', term()}.
 validate_options(#{ cgiroot := CGIRoot, cgiprefix := CGIPrefix })
-  when is_list(CGIRoot), is_list(CGIPrefix) ->
+  when is_binary(CGIRoot), is_list(CGIPrefix) ->
     case filelib:is_dir(filename:absname(CGIRoot)) of
         true ->
             case valid_prefix(CGIPrefix) of
@@ -724,7 +724,7 @@ orphan_run(Base) ->
     Dir = filename:join(Base, "cgi"),
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
                          routing = []},
-    Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
+    Opts = #{ cgiroot => list_to_binary(Dir), cgiprefix => "/cgi-bin/" },
     Me = self(),
     Container = spawn(fun() ->
         Me ! {started, serve(#{ <<"PATH">> => <<"sleeper">> },
@@ -797,7 +797,7 @@ hidden_tests(Base) ->
     Dir = filename:join(Base, "cgi"),
     Cfg = #server_config{hostname = <<"h">>, port = 1965,
                          routing = []},
-    Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
+    Opts = #{ cgiroot => list_to_binary(Dir), cgiprefix => "/cgi-bin/" },
     Serve = fun(Path) ->
                 serve(#{ <<"PATH">> => Path }, test_request(#{}), Cfg, Opts)
             end,
@@ -968,7 +968,7 @@ run_script(Base, Name, Matches, ReqExtra) ->
     Dir = filename:join(Base, "cgi"),
     Cfg = #server_config{hostname = <<"example.org">>, port = 1965,
                          routing = []},
-    Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
+    Opts = #{ cgiroot => list_to_binary(Dir), cgiprefix => "/cgi-bin/" },
     M = maps:merge(#{ <<"PATH">> => list_to_binary(Name) }, Matches),
     {gateway_started, Worker} =
         serve(M, test_request(ReqExtra), Cfg, Opts),

@@ -71,15 +71,13 @@ path_under_root(S, Root) when is_list(S), is_list(Root) ->
 %% a request path against a configured root directory (CGI, static
 %% files, Titan uploads).
 %%
-%% File names are bytes. SubPath is a binary and so is the result; Root
-%% may be a binary or a string. A string, which is a list of code points,
-%% is turned into the bytes the VM itself would use for it (its file-name
-%% encoding: UTF-8 or Latin-1, chosen from the locale), once, here; after
-%% that nothing is a string, so the name that is checked is exactly the
-%% name that is opened. (Checking a string and opening it under another
-%% encoding once let a symlink named with a non-ASCII character lead out
-%% of the docroot.) A Root that cannot be represented in the VM's
-%% encoding could never be opened by it, and is refused.
+%% File names are bytes. SubPath, Root and the result are all binaries,
+%% so the name that is checked is exactly the name that is opened.
+%% (Checking a string and opening it under another encoding once let a
+%% symlink named with a non-ASCII character lead out of the docroot.)
+%% The router converts the configured roots to binaries when a route is
+%% built (see blizanci_router); anything else as Root or SubPath is
+%% refused.
 %%
 %% Root is resolved to an absolute path first (via filename:absname/1,
 %% as blizanci_titan already does for its own root), since fix_path/1
@@ -128,7 +126,7 @@ path_under_root(S, Root) when is_list(S), is_list(Root) ->
 %% @end
 -spec confine(SubPath, Root) -> Result
               when SubPath :: binary(),
-                   Root    :: binary() | string(),
+                   Root    :: binary(),
                    Result  :: {ok, binary()}
                             | {error, file_not_found}.
 
@@ -138,19 +136,13 @@ confine(SubPath, Root) ->
 
 -spec confine(SubPath, Root, Opts) -> Result
               when SubPath :: binary(),
-                   Root    :: binary() | string(),
+                   Root    :: binary(),
                    Opts    :: #{ well_known => boolean() },
                    Result  :: {ok, binary()}
                             | {error, file_not_found}.
 
-confine(SubPath, Root, Opts) when is_binary(SubPath) ->
-    case root_bytes(Root) of
-        {ok, RootBin} -> confine0(SubPath, RootBin, Opts);
-        error ->
-            logger:warning("root ~w cannot be represented as a file name",
-                           [Root]),
-            {error, file_not_found}
-    end;
+confine(SubPath, Root, Opts) when is_binary(SubPath), is_binary(Root) ->
+    confine0(SubPath, Root, Opts);
 confine(SubPath, Root, _Opts) ->
     logger:warning("path ~w under root ~p is not a binary", [SubPath, Root]),
     {error, file_not_found}.
@@ -164,7 +156,7 @@ confine(SubPath, Root, _Opts) ->
 %% @end
 -spec resolve_request(Matches, Root, Opts) -> Result
               when Matches :: path_matches(),
-                   Root    :: binary() | string(),
+                   Root    :: binary(),
                    Opts    :: #{ well_known => boolean() },
                    Result  :: {ok, binary()}
                             | {error, file_not_found}.
@@ -187,24 +179,6 @@ confine0(SubPath, Root, Opts) ->
             logger:warning("root ~w contains a NUL", [Root]),
             {error, file_not_found}
     end.
-
-
-% The bytes the VM would use to open the file named by Root.
--spec root_bytes(Root) -> Result
-              when Root   :: binary() | string(),
-                   Result :: {ok, binary()} | error.
-root_bytes(Root) when is_binary(Root) ->
-    {ok, Root};
-root_bytes(Root) when is_list(Root) ->
-    try unicode:characters_to_binary(Root, unicode,
-                                     file:native_name_encoding()) of
-        Bin when is_binary(Bin) -> {ok, Bin};
-        _ -> error
-    catch
-        error:badarg -> error
-    end;
-root_bytes(_Root) ->
-    error.
 
 
 % Bytes below 16#20 (NUL included) and DEL.
@@ -401,11 +375,12 @@ confine_tests(Base) ->
     BaseBin = list_to_binary(Base),
     Docs = filename:join(BaseBin, <<"docs">>),
     {ok, CanonDocs} = fix_path(Docs),
-    % a root given as a string, with a character that is not ASCII; what
-    % is opened is the bytes the VM makes of it
+    % a root with a character that is not ASCII, as the bytes the VM
+    % makes of it
     Odd = filename:join(Base, [$d, 243, $c, $s]),
     % (called through apply/3 so that dialyzer does not object)
     NotBinary = fun(P) -> apply(?MODULE, confine, [P, Docs]) end,
+    StringRoot = fun(R) -> apply(?MODULE, confine, [<<"f.txt">>, R]) end,
     OddBytes = unicode:characters_to_binary(Odd, unicode,
                                             file:native_name_encoding()),
     {ok, CanonOdd} = fix_path(OddBytes),
@@ -478,8 +453,9 @@ confine_tests(Base) ->
      ?_assertEqual({ok, filename:join(CanonDocs, "sub/new file.txt")},
                    confine(<<"sub/new file.txt">>, Docs)),
      % the root is the operator's and may be non-ASCII (but not hold a NUL)
-     ?_assertEqual({ok, filename:join(CanonOdd, "f.txt")},
-                   confine(<<"f.txt">>, Odd)),
+     % a root that is a string is refused: the router makes binaries
+     ?_assertEqual({error, file_not_found}, StringRoot(Odd)),
+     ?_assertEqual({error, file_not_found}, StringRoot("/tmp")),
      ?_assertEqual({ok, filename:join(CanonOdd, "f.txt")},
                    confine(<<"f.txt">>, OddBytes))]
     ++ resolve_request_tests(Docs, CanonDocs)
@@ -513,8 +489,8 @@ hidden_tests(Base, Docs, CanonDocs) ->
                            #{ well_known => true }) end,
     Refused = {error, file_not_found},
     In = fun(P) -> {ok, filename:join(CanonDocs, P)} end,
-    DotRoot = filename:join(Base, ".dotroot"),
-    {ok, CanonDotRoot} = fix_path(list_to_binary(DotRoot)),
+    DotRoot = list_to_binary(filename:join(Base, ".dotroot")),
+    {ok, CanonDotRoot} = fix_path(DotRoot),
     [% any segment starting with a dot, at any depth, whether or not the
      % file exists
      ?_assertEqual(Refused, Strict(".env")),

@@ -645,6 +645,9 @@ describe_route_error({invalid_route_options, blizanci_titan,
          "from its docroot; uploads are installed by hard link and "
          "rename, so use a directory on the docroot's filesystem",
          [Dir]);
+describe_route_error({invalid_path_option, Key, Value}) ->
+    flat("the ~s option must be a plain ASCII file name (printable "
+         "ASCII characters only), not ~w", [Key, Value]);
 describe_route_error({unknown_realm, {realm, Name}, Regex, Module}) ->
     flat("route ~0p (servlet ~0p) names realm ~0p, which is not "
          "defined", [Regex, Module, Name]);
@@ -669,6 +672,14 @@ describe_route_error(file_list_in_new_route) ->
 describe_route_error({invalid_ca_file, File, Why}) ->
     flat("a private route's CA file ~ts cannot be used (~0p); check that "
          "it exists and holds a PEM certificate", [File, Why]);
+describe_route_error({invalid_route_options, _Module,
+                      {docroot_not_a_directory, Dir}}) ->
+    flat("the route's docroot ~ts is not a directory; create it, or "
+         "set docroot to an existing directory", [Dir]);
+describe_route_error({invalid_route_options, blizanci_cgi,
+                      {cgiroot_not_a_directory, Dir}}) ->
+    flat("the route's cgiroot ~ts is not a directory; create it, or "
+         "set cgiroot to an existing directory", [Dir]);
 describe_route_error({invalid_route_options, Module, Reason}) ->
     flat("route for servlet ~p has invalid options: ~0p", [Module, Reason]);
 describe_route_error(Reason) ->
@@ -1677,7 +1688,9 @@ route_merges_default_options_test() ->
         route(gemini, ?RX, blizanci_static, public,
               #{ docroot => ?TEST_DOCROOT }),
     Defaults = blizanci_static:default_options(),
-    ?assertEqual(maps:merge(Defaults, #{ docroot => ?TEST_DOCROOT }),
+    % the route builder converts the path option to a binary
+    ?assertEqual(maps:merge(Defaults,
+                            #{ docroot => list_to_binary(?TEST_DOCROOT) }),
                  Options).
 
 route_errors_test_() ->
@@ -1735,7 +1748,7 @@ route_errors_test_() ->
      ?_assertEqual({error, {invalid_route_opts, not_a_map}},
                    BadRoute(gemini, ?RX, blizanci_static, public, not_a_map)),
      ?_assertEqual({error, {invalid_route_options, blizanci_static,
-                            {docroot_not_a_directory, "/no/such/dir"}}},
+                            {docroot_not_a_directory, <<"/no/such/dir">>}}},
                    route(gemini, ?RX, blizanci_static, public,
                          #{ docroot => "/no/such/dir" }))].
 
@@ -1814,11 +1827,11 @@ titan_work_dir_refusals_test_() ->
                                 Why}}})
           end,
     [?_assertEqual(Bad(work_dir_missing), Prep(#{})),
-     ?_assertEqual(Bad({work_dir_not_absolute, "rel"}),
+     ?_assertEqual(Bad({work_dir_not_absolute, <<"rel">>}),
                    Prep(#{ work_dir => "rel" })),
      ?_assertEqual(Bad({work_dir_not_absolute, <<"rel">>}),
                    Prep(#{ work_dir => <<"rel">> })),
-     ?_assertEqual(Bad({work_dir_other_filesystem, "/proc"}),
+     ?_assertEqual(Bad({work_dir_other_filesystem, <<"/proc">>}),
                    Prep(#{ work_dir => "/proc" })),
      ?_assertMatch({ok, _}, Prep(#{ work_dir => test_tmp() })),
      ?_assertEqual("invalid routing table: route 1 (old-format route): "
@@ -1868,7 +1881,23 @@ default_table_no_shadow_warning_test_() ->
          [?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI,
                                                    [CA]))),
           ?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI,
-                                                   [CA], test_tmp())))]
+                                                   [CA], test_tmp()))),
+          % the strings the default table is built from are converted
+          % to binaries when the routes are built
+          ?_test(begin
+                     Table = routing_table(?TEST_DOCROOT, CGI, [CA],
+                                           test_tmp()),
+                     {ok, Routes} = blizanci_router:prepare(Table, Realms),
+                     ?assertEqual(
+                        [{blizanci_cgi, #{ cgiroot => list_to_binary(CGI) }},
+                         {blizanci_static,
+                          #{ docroot => list_to_binary(?TEST_DOCROOT) }},
+                         {blizanci_titan,
+                          #{ docroot => list_to_binary(?TEST_DOCROOT),
+                             work_dir => list_to_binary(test_tmp()) }}],
+                        [ {M, maps:with([docroot, cgiroot, work_dir], O)}
+                          || #route{module = M, options = O} <- Routes ])
+                 end)]
      end}.
 
 drain() ->
@@ -2085,11 +2114,25 @@ describe_error_test_() ->
                       {invalid_ca_file, "/x/ca.pem", enoent}})),
      ?_assertEqual("invalid routing table: route for servlet "
                    "blizanci_static has invalid options: "
-                   "{docroot_not_a_directory,\"/nope\"}",
+                   "{unknown_option,1}",
                    describe_error(
                      {invalid_routing,
                       {invalid_route_options, blizanci_static,
-                       {docroot_not_a_directory, "/nope"}}})),
+                       {unknown_option, 1}}})),
+     ?_assertEqual("invalid routing table: the route's docroot /nope is "
+                   "not a directory; create it, or set docroot to an "
+                   "existing directory",
+                   describe_error(
+                     {invalid_routing,
+                      {invalid_route_options, blizanci_static,
+                       {docroot_not_a_directory, <<"/nope">>}}})),
+     ?_assertEqual("invalid routing table: the route's cgiroot /nope is "
+                   "not a directory; create it, or set cgiroot to an "
+                   "existing directory",
+                   describe_error(
+                     {invalid_routing,
+                      {invalid_route_options, blizanci_cgi,
+                       {cgiroot_not_a_directory, <<"/nope">>}}})),
      ?_assertEqual("servlet blizanci_cgi could not start: "
                    "{invalid_limit,0}",
                    describe_error(

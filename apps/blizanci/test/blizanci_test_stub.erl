@@ -17,7 +17,12 @@
 
 default_options() -> #{}.
 
-validate_options(_Opts) -> ok.
+%% A test may ask to be told the options the router validated.
+validate_options(#{ report_to := Pid } = Opts) ->
+    Pid ! {validate_options, Opts},
+    ok;
+validate_options(_Opts) ->
+    ok.
 
 request(_Matches, _Req, _Config, #{ script := F }) -> F(request).
 

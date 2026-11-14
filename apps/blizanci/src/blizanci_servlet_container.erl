@@ -388,7 +388,7 @@ refusal_request(Extra) ->
 
 refusal_tests(Base) ->
     Dir = filename:join(Base, "cgi"),
-    Opts = #{ cgiroot => Dir, cgiprefix => "/cgi-bin/" },
+    Opts = #{ cgiroot => list_to_binary(Dir), cgiprefix => "/cgi-bin/" },
     Cgi = fun(Path, Extra) ->
               init_exit(blizanci_cgi, #{ <<"PATH">> => Path },
                         refusal_request(Extra), Opts)
