@@ -107,7 +107,11 @@ serve_file(Matches, Opts) ->
     case blizanci_path:resolve_request(Matches, Docroot,
                                        #{ well_known => true }) of
         {error, file_not_found} -> {error_code, file_not_found};
-        {ok, Cmd} -> serve_confined_file(Cmd, Path, Opts)
+        {ok, Cmd} ->
+            % a redirect is to the whole requested path, which under a
+            % mount is more than PATH
+            Whole = maps:get(<<"FULL_PATH">>, Matches, Path),
+            serve_confined_file(Cmd, Whole, Opts)
     end.
 
 
@@ -280,6 +284,31 @@ hidden_tests(Base) ->
      % the one exception, at the top of the docroot
      ?_assertMatch({immediate, {file, _, _}},
                    Request(<<".well-known/security">>))].
+
+%% A redirect to a directory's index is to the whole requested path, so
+%% under a mount it keeps the mount: PATH is only what follows it.
+redirect_under_mount_test_() ->
+    {setup, fun hidden_setup/0, fun hidden_teardown/1,
+     fun(Base) ->
+         Docs = filename:join(Base, "docs"),
+         Opts = maps:merge(default_options(), #{ docroot => Docs }),
+         Request = fun(Matches) ->
+                       request(Matches, test_request(#{}),
+                               test_config(), Opts)
+                   end,
+         [?_assertEqual({immediate, {redirect, <<"nested/index.gemini">>}},
+                        Request(#{ <<"PATH">> => <<"nested">> })),
+          ?_assertEqual({immediate,
+                         {redirect, <<"m/nested/index.gemini">>}},
+                        Request(#{ <<"PATH">> => <<"nested">>,
+                                   <<"FULL_PATH">> => <<"m/nested">> })),
+          ?_assertEqual({immediate, {redirect, <<"m/index.gemini">>}},
+                        Request(#{ <<"PATH">> => <<>>,
+                                   <<"FULL_PATH">> => <<"m">> })),
+          ?_assertEqual({immediate, {redirect, <<"m/index.gemini">>}},
+                        Request(#{ <<"PATH">> => <<>>,
+                                   <<"FULL_PATH">> => <<"m/">> }))]
+     end}.
 
 
 %% default_options/0 plus a docroot is a complete, valid map.
