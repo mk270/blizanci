@@ -206,6 +206,20 @@ and is on the same filesystem as the route's docroot (uploads are
 installed by hard link and rename). Neither the docroot nor the work
 directory of a Titan route may overlap a CGI root.
 
+### Directory options
+
+The directory options of a route (`docroot`, `cgiroot` and `work_dir`),
+and the single-site keys that feed them, may be written as a string or
+as a binary. They are converted to binaries once, when the route is
+built, and servlets only ever see binaries. Library callers that supply
+their own servlets must therefore expect a binary `docroot`, `cgiroot`
+and `work_dir` in their options.
+
+They must be plain ASCII file names (printable characters only, codes
+32 to 126). Anything else is refused at start-up with an error that
+names the route and the option. Relative paths are kept as written.
+`cgiprefix` is a URL prefix, not a file name, and is not affected.
+
 ### Example: an explicit routing table
 
 This table reproduces the protected areas that the default table had
