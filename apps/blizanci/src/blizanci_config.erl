@@ -1128,6 +1128,31 @@ titan_work_dir_refusals_test_() ->
 test_tmp() ->
     filename:absname(?TEST_DOCROOT).
 
+% The project's own default table must not trigger the shadowing warning.
+default_table_no_shadow_warning_test_() ->
+    Warnings = fun(Table) ->
+                   Id = default_table_log_handler,
+                   ok = logger:add_handler(Id, blizanci_test_log_handler,
+                                           #{config =>
+                                             #{notify => self()}}),
+                   try {ok, _} = blizanci_router:prepare(
+                                   Table, #{},
+                                   #{ warn_old_format => false }),
+                       drain()
+                   after ok = logger:remove_handler(Id)
+                   end
+               end,
+    CGI = blizanci_x509:test_tmp_dir(),
+    [?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI, []))),
+     ?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI, [],
+                                              test_tmp())))].
+
+drain() ->
+    receive {logged, _, "routing: " ++ _ = T} -> [T | drain()];
+            {logged, _, _} -> drain()
+    after 0 -> []
+    end.
+
 default_titan_route_test_() ->
     Titan = fun(L) -> [R || {titan, _, _, _, _} = R <- L] end,
     [?_assertEqual([], Titan(routing_table("d", "c", []))),
