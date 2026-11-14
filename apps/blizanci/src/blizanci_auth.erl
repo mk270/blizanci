@@ -75,7 +75,7 @@ valid_authz_policy(Policy) ->
 % the table, once, here; the result is {private, Realms, Certs}, Certs
 % being the certificates of all the named realms.  A realm that is not
 % in the table is {unknown_realm, Realm}; one with no certificates
-% authorises nobody and is {empty_realm, Realm}.  A realm tuple that
+% is fine and authorises nobody.  A realm tuple that
 % realm/1 would not have built is {invalid_realm_name, Name}.
 
 valid_authz_policy(public, _) -> {ok, public};
@@ -105,7 +105,6 @@ resolve_realms([{realm, Name} = Realm | Rest], Realms, Acc) ->
     case realm(Name) of
         {ok, Realm} ->
             case maps:find(Realm, Realms) of
-                {ok, {_, []}} -> {error, {empty_realm, Realm}};
                 {ok, {_, Certs}} ->
                     resolve_realms(Rest, Realms, [{Realm, Certs} | Acc]);
                 error -> {error, {unknown_realm, Realm}}
@@ -134,7 +133,8 @@ realm(Name) ->
 
 
 %% @doc Add a realm to a realm table, reading and decoding its CA files
-%% now.  A realm may have no files; a private route may not use it.
+%% now.  A realm may have no files; a private route on it
+%% authorises nobody.
 %% @end
 -spec add_realm(Realms, Name, Files) -> Result
               when Realms :: realm_table(),
@@ -590,10 +590,13 @@ policy_realm_test_() ->
                          V({private, {realm, <<"x">>}})),
            ?_assertEqual({error, {unknown_realm, {realm, <<"Staff">>}}},
                          V({private, [Staff, {realm, <<"Staff">>}]})),
-           ?_assertEqual({error, {empty_realm, None}},
+           % an empty realm is allowed and authorises nobody
+           ?_assertMatch({ok, {private, [None], []}},
                          V({private, None})),
-           ?_assertEqual({error, {empty_realm, None}},
+           ?_assertMatch({ok, {private, [Staff, None], [_]}},
                          V({private, [Staff, None]})),
+           ?_assertEqual({error_code, cert_not_authorised},
+                         Auth({private, None}, Peer)),
            ?_assertEqual({error, {invalid_realm_name, <<>>}},
                          V({private, {realm, <<>>}})),
            ?_assertEqual({error, {invalid_realm_name, nope}},

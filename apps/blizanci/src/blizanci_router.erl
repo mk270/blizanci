@@ -568,8 +568,6 @@ valid_authz(AuthPolicy, Realms, Regex, Module) ->
             throw({invalid_authz_policy, AuthPolicy});
         {error, {unknown_realm, Realm}} ->
             throw({unknown_realm, Realm, Regex, Module});
-        {error, {empty_realm, Realm}} ->
-            throw({empty_realm, Realm, Regex, Module});
         {error, Reason} -> throw(Reason)
     end.
 
