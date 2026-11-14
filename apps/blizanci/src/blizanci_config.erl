@@ -14,10 +14,13 @@
 %% app, before the ranch listener is started. Its output is then inherited
 %% via the many processes started (directly or otherwise) by ranch.
 %%
-%% Invalid configuration items generally result in a crash of the process
-%% which responds to a relevant Gemini request. However, future versions
-%% of blizanci will become increasingly strict about verifying that the
-%% configuration is valid at application start time.
+%% At start-up, from_app_env/0 builds the configuration from the
+%% application environment and validates it, reporting every problem
+%% found in one pass as a list (see describe_error/1 for the one-line
+%% text of each); a bad configuration stops the application starting.
+%% A site's certificate and private key must be a matching pair, or the
+%% site is refused; a pair whose key type cannot be compared is accepted
+%% with a warning.
 %%
 %% Configuration items:
 %%
@@ -43,11 +46,12 @@
 %%   <dt><code>{docroot, DocrootPath::string()}</code></dt>
 %%   <dd>the path to the root of the documents to be served</dd>
 %%   <dt><code>{hostname, Hostname::string()}</code></dt>
-%%   <dd>the hostname (defaults to system hostname)</dd>
+%%   <dd>the hostname, folded to lower case (defaults to system hostname)</dd>
 %%   <dt><code>{keyfile, PrivKeyPath::string()}</code></dt>
 %%   <dd>the path to the server's private key</dd>
 %%   <dt><code>{port, Port::integer()}</code></dt>
-%%   <dd>the port to listen on (defaults to 1965)</dd>
+%%   <dd>the port to listen on (defaults to 1965); 1 to 65535, so 0 is
+%%       refused</dd>
 %%   <dt><code>{routing, [Route]}</code></dt>
 %%   <dd>the routing table: an ordered list, first match wins, one
 %%       protocol per route. Each entry is
@@ -61,6 +65,18 @@
 %%       README, Routing. Without this key the default table is
 %%       mounts /cgi-bin and /, plus a Titan route if titan_work_dir is
 %%       set.</dd>
+%%   <dt><code>{sites, [{Hostname::string(), [Option]}]}</code></dt>
+%%   <dd>several sites on one port, instead of the single-site keys. A
+%%       site takes <code>certfile</code>, <code>keyfile</code> and
+%%       <code>routing</code> only, all three required; there is no
+%%       default routing table and no shorthand key (docroot, cgiroot,
+%%       titan_work_dir, ca_certs). <code>port</code>,
+%%       <code>servlets</code> and <code>realms</code> stay global.
+%%       Giving <code>sites</code> together with any single-site key
+%%       (hostname, certfile, keyfile, docroot, cgiroot, ca_certs,
+%%       titan_work_dir, routing) is refused. Hostnames are folded to
+%%       lower case; a name given twice is an error. See the README,
+%%       Several sites.</dd>
 %%   <dt><code>{titan_work_dir, WorkDir::string()}</code></dt>
 %%   <dd>opts in to the Titan route of the default routing table (ignored
 %%       if routing is set): an absolute path to an existing directory on
