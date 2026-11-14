@@ -197,8 +197,8 @@ live_test() ->
     in_clean_state(fun live/0).
 
 live() ->
-    {ok, A} = blizanci_config:site("a.example", "a.pem", "a.key"),
-    {ok, B} = blizanci_config:site("b.example", "b.pem", "b.key"),
+    A = blizanci_config:test_site("a.example", "a.pem", "a.key"),
+    B = blizanci_config:test_site("b.example", "b.pem", "b.key"),
     ?assertEqual(not_running, current()),
     ?assertEqual([], sites()),
     ?assertEqual(not_found, find_site(<<"a.example">>)),
@@ -213,7 +213,7 @@ live() ->
     ?assertEqual(not_running, current()).
 
 test_site(Name, Cert) ->
-    {ok, S} = blizanci_config:site(Name, Cert, "k.key"),
+    S = blizanci_config:test_site(Name, Cert, "k.key"),
     S.
 
 layout_test() ->

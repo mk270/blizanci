@@ -103,8 +103,8 @@ with_tree(Servlets, Fun) ->
           {ok, _} = application:ensure_all_started(ranch),
           {ok, _} = application:ensure_all_started(ppool),
           blizanci_test_support:live_down(),
-          {ok, A} = blizanci_config:site("a.example", "a.pem", "a.key"),
-          {ok, B} = blizanci_config:site("b.example", "b.pem", "b.key"),
+          A = blizanci_config:test_site("a.example", "a.pem", "a.key"),
+          B = blizanci_config:test_site("b.example", "b.pem", "b.key"),
           process_flag(trap_exit, true),
           {ok, Sup} = start_link(blizanci_config:make(0, Servlets, [A])),
           try Fun(Sup, A, B)
@@ -217,7 +217,7 @@ servlet_start_error_test() ->
           {ok, _} = application:ensure_all_started(ranch),
           {ok, _} = application:ensure_all_started(ppool),
           blizanci_test_support:live_down(),
-          {ok, A} = blizanci_config:site("a.example", "a.pem", "a.key"),
+          A = blizanci_config:test_site("a.example", "a.pem", "a.key"),
           process_flag(trap_exit, true),
           Config = blizanci_config:make(
                      0, [blizanci_cgi, blizanci_test_failing], [A]),

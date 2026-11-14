@@ -55,10 +55,7 @@ with_app_env(Env, Fun) ->
     blizanci_test_support:isolated(
       fun() ->
           Dir = blizanci_x509:test_tmp_dir(),
-          Pki = blizanci_x509:test_pki(),
-          Cert = blizanci_x509:test_write_pem(
-                   Dir, "cert.pem",
-                   [{'Certificate', maps:get(ca, Pki), not_encrypted}]),
+          {Cert, Key} = blizanci_x509:test_pair_files(Dir, "site", rsa),
           Loaded = lists:keymember(blizanci, 1,
                                    application:loaded_applications()),
           ok = case Loaded of
@@ -74,7 +71,7 @@ with_app_env(Env, Fun) ->
                            erlang:unique_integer([positive]))),
           ok = logger:add_handler(Handler, blizanci_test_log_handler,
                                   #{config => #{notify => self()}}),
-          Base = [{certfile, Cert}, {keyfile, Cert},
+          Base = [{certfile, Cert}, {keyfile, Key},
                   {hostname, "test.example"}, {port, 0}],
           [ application:set_env(blizanci, K, V)
             || {K, V} <- Base ++ Env ],
