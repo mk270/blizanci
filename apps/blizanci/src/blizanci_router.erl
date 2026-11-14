@@ -90,8 +90,8 @@ prepare(RouteInfo, Realms) ->
 %%
 %% Old-format routes are translated, not refused.  If there are any,
 %% one warning is logged saying how many, unless the option
-%% warn_old_format is false (the default routing table, which is the
-%% project's own, uses that; default true).
+%% warn_old_format is false (default true).  The default routing table
+%% is in the new format and never triggers it.
 %%
 %% A table that validated is also checked for shadowed routes, which
 %% can never be reached because an earlier route of the same protocol
@@ -915,7 +915,7 @@ upload_tests(Base) ->
      % the order of the routes doesn't matter
      ?_assert((Overlaps(docroot))(
                 Check([Titan(D("cgi"), D("work")), Cgi(D("cgi"))]))),
-     % binary directory names, as the default Titan work_dir is
+     % binary directory names, as a Titan work_dir may be
      ?_assert((Overlaps(work_dir))(
                 Check([Cgi(D("cgi")),
                        Titan(D("up"), list_to_binary(D("cgi")))]))),
