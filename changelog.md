@@ -1,5 +1,18 @@
 # Blizanci Changelog
 
+## 7.0.2
+
+- README: state the OTP 27 minimum, and replace the `manage.sh
+  start-daemon` instruction, which has not worked since the release
+  config was removed, with running `erl` directly and stopping it with
+  SIGTERM
+- Correct and complete the comments in several module headers: the
+  configuration, request, connection, authorisation (the 60, 61 and 62
+  statuses), CGI (its limits) and servlet contract headers
+- Fix a CGI comment that said extra requests queue; they are refused
+  as too busy
+- Remove the stale `roadmap.gmi`
+
 ## 7.0.1
 
 - Declare OTP 27 as the minimum version in rebar.config, so that rebar3
