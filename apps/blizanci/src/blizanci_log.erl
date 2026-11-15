@@ -10,9 +10,16 @@
 %% level that controls what each handler actually emits.  `level/1' sets
 %% both together so the observable behaviour is straightforward.
 %%
-%% The default configuration keeps the primary level at `debug', which
-%% means `module_level/2' can enable debug output for individual modules
-%% at runtime without restarting the node.
+%% The application sets no log levels itself; they come from the node's
+%% kernel configuration.  With no `logger' or `logger_level' key, the
+%% primary level is `notice' and the default handler's level is `all';
+%% `module_level/2' then makes a module's debug events appear, provided
+%% they are logged with the logger macros (?LOG_DEBUG and the like),
+%% since a plain logger:debug/1 call carries no module for the override
+%% to match.  With the example configuration (`logger_level' `debug' but
+%% the default handler at `info'), the primary level is `debug' and the
+%% handler level `info', so `module_level/2' alone prints nothing; the
+%% handler level must be lowered too, as `level/1' does for both.
 %% @end
 
 -module(blizanci_log).

@@ -16,7 +16,7 @@
 %% blizanci_config:apply/1 last published, and calls start/0 on each,
 %% which is harmless for a pool that is already running. On termination
 %% it calls stop/0 on the servlets it believes are running. A stop/0
-%% that raises or returns something but ok is logged with
+%% that raises or returns anything other than ok is logged with
 %% logger:warning and ignored, here and on apply/1 and after a failed
 %% start, so every servlet is stopped and this process never crashes
 %% over one. The list of servlets running is

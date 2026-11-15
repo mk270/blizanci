@@ -7,12 +7,11 @@
 %% there remain some key values hardwired into the source code of the other
 %% modules.
 %%
-%% Generally, configuration data is hardwired into this module, or derived
-%% from the application environment set in sys.config.
-%%
-%% This module is primarily called during the initialisation of the blizanci
-%% app, before the ranch listener is started. Its output is then inherited
-%% via the many processes started (directly or otherwise) by ranch.
+%% The configuration is built from the application environment (sys.config)
+%% at start-up, by from_app_env/0. It is held in an ETS table owned by
+%% blizanci_conf_serv, the single source of truth, which is read by the
+%% TLS sni_fun and by each connection, and which apply/1 replaces while
+%% the server runs. See blizanci_conf_serv for the detail.
 %%
 %% At start-up, from_app_env/0 builds the configuration from the
 %% application environment and validates it, reporting every problem
@@ -25,7 +24,7 @@
 %% Configuration items:
 %%
 %% <dl>
-%%   <dt><code>{ca_certs, [CACertPath::string()}]</code></dt>
+%%   <dt><code>{ca_certs, [CACertPath::string()]}</code></dt>
 %%   <dd>the path(s) to the certificate authority certificate(s)
 %%       to be used for verifying client certificates;
 %%       may be the empty list. A file may hold several certificates
@@ -42,9 +41,14 @@
 %%   <dt><code>{certfile, CertPath::string()}</code></dt>
 %%   <dd>the path to the server's certificate</dd>
 %%   <dt><code>{cgiroot, CGIRootPath::string()}</code></dt>
-%%   <dd>the path to the root directory for CGI scripts; normally there would only be a single, top-level directory with no subdirectories</dd>
+%%   <dd>the path to the root directory for CGI scripts; normally there
+%%       would only be a single, top-level directory with no
+%%       subdirectories. A single-site shorthand key: used only as input
+%%       to the default routing table (ignored if routing is set).</dd>
 %%   <dt><code>{docroot, DocrootPath::string()}</code></dt>
-%%   <dd>the path to the root of the documents to be served</dd>
+%%   <dd>the path to the root of the documents to be served. A
+%%       single-site shorthand key: used only as input to the default
+%%       routing table (ignored if routing is set).</dd>
 %%   <dt><code>{hostname, Hostname::string()}</code></dt>
 %%   <dd>the hostname, folded to lower case (defaults to system hostname)</dd>
 %%   <dt><code>{keyfile, PrivKeyPath::string()}</code></dt>

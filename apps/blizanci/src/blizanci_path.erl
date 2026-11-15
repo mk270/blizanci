@@ -79,11 +79,9 @@ path_under_root(S, Root) when is_list(S), is_list(Root) ->
 %% built (see blizanci_router); anything else as Root or SubPath is
 %% refused.
 %%
-%% Root is resolved to an absolute path first (via filename:absname/1,
-%% as blizanci_titan already does for its own root), since fix_path/1
-%% requires an absolute path and most of the configured roots default
-%% to relative ones. This is a minimal, local fix to keep those
-%% defaults working; it does not validate such config up front.
+%% Root is resolved to an absolute path first (via filename:absname/1),
+%% since fix_path/1 requires an absolute path and configured roots may
+%% be relative.
 %%
 %% Root itself is canonicalised too, not just absname'd, before being
 %% used as the confinement prefix: if Root sits behind a symlink (e.g.
