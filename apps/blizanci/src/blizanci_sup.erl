@@ -16,8 +16,8 @@
 %% Each depends on those before it: the pools are set up from the
 %% table, the listener's TLS and connections read the table and use the
 %% pools. So a crash restarts the crashed child and those after it,
-%% never those before: the table owner is not logic, and survives a
-%% crash of the servlet child with every applied change intact.
+%% never those before: the table owner contains no logic, and survives
+%% a crash of the servlet child with every applied change intact.
 %% Shutdown is the reverse of start: listener, then pools, then table.
 %%
 %% Intensity is 3 restarts in 10 seconds, not the 1 in 5 of a flat

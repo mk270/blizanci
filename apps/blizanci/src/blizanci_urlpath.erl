@@ -27,7 +27,7 @@
 %%
 %% A decoded path is returned as `{decoded_path, Bin}', so that it is
 %% distinguishable from a raw one. Callers outside this module may unwrap
-%% it (and the request layer does, for now).
+%% it (and the request layer does).
 %% @end
 
 -module(blizanci_urlpath).

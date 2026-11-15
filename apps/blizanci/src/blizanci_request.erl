@@ -6,7 +6,8 @@
 % down the call chain (always towards the bottom of the file) as follows:
 %
 %   handle_line(...):
-%     decode URL from line (i.e., Unicode, RFC-3986 percent escaping)
+%     check the line is valid UTF-8, and parse it into a URL (the path
+%     is not percent-decoded here; that is done later, see handle_file)
 %
 %   handle_parsed_url(...):
 %     provide defaults for missing URL parts, such as port number
@@ -32,7 +33,8 @@
 %   [what the servlet then does with the path, e.g. serve_file/2 in
 %    blizanci_static, is outside this module.]
 %
-% All calls below handle_request return a response of type gemini_response().
+% Every handle_* function in the chain above, starting with handle_line,
+% returns a response of type gemini_response().
 
 -module(blizanci_request).
 -include_lib("eunit/include/eunit.hrl").
