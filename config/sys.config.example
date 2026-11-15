@@ -5,23 +5,15 @@
    %% The port to listen on; 1965 if left out.
    {port, 1965},
 
-   %% Authentication realms, global to all sites: named sets of CA
-   %% certificates that client certificates are checked against.
-   %% {Name :: binary(), [CAFile]}.  A route names one as
-   %% {private, {realm, Name}}.
+   %% Authentication realms, global to all sites: {Name :: binary(),
+   %% [CAFile]}.  A route names one as {private, {realm, Name}}.  See
+   %% the manual, chapter Authorisation.
    {realms, [{<<"staff">>, ["/path/to/blizanci/ssl/staff-ca.pem"]}]},
 
-   %% The sites served on the port, at least one.  A site is
-   %% {Hostname, Options}; Options takes certfile, keyfile and routing
-   %% only, and all three are required.  There is no default routing
-   %% table, so each site gives its own routes.  The routes are tried in
-   %% order, first match wins.  A mount matches whole path segments, and
-   %% the servlet gets the remainder as PATH, so each mount names its
-   %% own root.  SNI picks the site.  See README, Sites and Routing.
-   %%
-   %% The old flat keys (hostname, certfile, keyfile, docroot, cgiroot,
-   %% ca_certs, titan_work_dir and routing at the top level) are no
-   %% longer supported: start-up is refused if any is present.
+   %% The sites served on the port, at least one: {Hostname, Options},
+   %% with certfile, keyfile and routing, all required.  Routes are
+   %% tried in order, first match wins.  See the manual, chapters
+   %% Configuration and Routing (doc/manual/).
    {sites, [
     {"your.fully.qualified.host.name", [
       {certfile, "/path/to/blizanci/ssl/certificate.pem"},
