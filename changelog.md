@@ -1,5 +1,17 @@
 # Blizanci Changelog
 
+## 7.1.0
+
+- Remove manage.sh; use `rebar3 shell` for a REPL
+- Convert the edoc documentation to OTP 27 -moduledoc/-doc attributes,
+  and build the docs with ex_doc (`rebar3 ex_doc`, via the rebar3_ex_doc
+  plugin) instead of `rebar3 edoc`
+- doc/overview.edoc becomes doc/overview.md
+- The plain-comment headers of blizanci_auth, blizanci_request,
+  blizanci_connection, blizanci_titan and blizanci_static are now module
+  docs, so they appear in the generated documentation
+- docs-to-gh-pages builds with ex_doc
+
 ## 7.0.2
 
 - README: state the OTP 27 minimum, and replace the `manage.sh
