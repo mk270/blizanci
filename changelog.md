@@ -1,5 +1,11 @@
 # Blizanci Changelog
 
+## 7.0.1
+
+- Declare OTP 27 as the minimum version in rebar.config, so that rebar3
+  refuses an older OTP with a clear message (erlexec 2.4.0, a
+  dependency since 5.10.0, already needed it)
+
 ## 7.0.0
 
 - Remove single-site mode: the `sites` key is now the only way to
