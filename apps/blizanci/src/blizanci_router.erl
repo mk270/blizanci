@@ -59,9 +59,9 @@
 -type prepare_opts() :: #{ warn_shadowed => boolean(),
                           site => string() }.
 
-%% @doc
-%% Check that a routing table entry is valid.
-%% @end
+-doc """
+Check that a routing table entry is valid.
+""".
 -spec prepare(RouteInfo) -> Result
               when RouteInfo :: [route_info()],
                    Result    :: {'ok', [route()]} |
@@ -71,9 +71,9 @@ prepare(RouteInfo) ->
     prepare(RouteInfo, #{}).
 
 
-%% @doc
-%% As prepare/1, resolving realms against a realm table.
-%% @end
+-doc """
+As prepare/1, resolving realms against a realm table.
+""".
 -spec prepare(RouteInfo, Realms) -> Result
               when RouteInfo :: [route_info()],
                    Realms    :: realm_table(),
@@ -83,44 +83,44 @@ prepare(RouteInfo, Realms) ->
     prepare(RouteInfo, Realms, #{}).
 
 
-%% @doc
-%% As prepare/2, with options.  Routes are one ordered list, first match
-%% wins.  An error names the route: {bad_route, Index, Kind, Reason},
-%% where Index is the 1-based position in the list, Kind is mount, regex,
-%% tuple (the old format) or unknown, and Reason says what is wrong.
-%%
-%% Old-format routes are translated, not refused.  If there are any,
-%% one warning is logged saying how many.  New-format routes never
-%% trigger it.
-%%
-%% A table that validated is also checked for shadowed routes, which
-%% can never be reached because an earlier route of the same protocol
-%% (gemini routes are compared only with gemini routes, titan with
-%% titan) matches every request they could.  One warning is logged for
-%% each shadowed route, naming it and the first route shadowing it by
-%% position and kind, and by mount path or regex.  This only warns: it
-%% never refuses a table or changes routing, and it can be turned off
-%% with the option warn_shadowed (default true).  Auth is not
-%% considered.  The rules are:
-%%
-%% Mount against mount is exact: the earlier mount shadows the later
-%% if its segments are a prefix of the later one's segments, so "/"
-%% shadows every later mount, and so does an equal mount, but "/docs"
-%% does not shadow "/docsx".
-%%
-%% Whenever a regex is involved (as either route, old-format or not)
-%% overlap cannot be decided, so it is probed, and a false negative is
-%% preferred to a false positive.  Sample paths are derived from the
-%% later route: for a mount M, M itself, M/x and M/a/b; for a regex,
-%% the literal text its source starts with (a leading ^ skipped, the
-%% text cut short before a quantifier, and none at all if the source
-%% has a vertical bar), L, plus L followed by x, a/b and x.gmi.  Only
-%% samples that the later route itself matches are kept, and with
-%% fewer than two of them nothing is reported.  The earlier route is
-%% then run on every sample with the router's own selector, and the
-%% later route is reported only if the earlier one matches all of them.
-%% A partial overlap is never reported.
-%% @end
+-doc """
+As prepare/2, with options.  Routes are one ordered list, first match
+wins.  An error names the route: {bad_route, Index, Kind, Reason},
+where Index is the 1-based position in the list, Kind is mount, regex,
+tuple (the old format) or unknown, and Reason says what is wrong.
+
+Old-format routes are translated, not refused.  If there are any,
+one warning is logged saying how many.  New-format routes never
+trigger it.
+
+A table that validated is also checked for shadowed routes, which
+can never be reached because an earlier route of the same protocol
+(gemini routes are compared only with gemini routes, titan with
+titan) matches every request they could.  One warning is logged for
+each shadowed route, naming it and the first route shadowing it by
+position and kind, and by mount path or regex.  This only warns: it
+never refuses a table or changes routing, and it can be turned off
+with the option warn_shadowed (default true).  Auth is not
+considered.  The rules are:
+
+Mount against mount is exact: the earlier mount shadows the later
+if its segments are a prefix of the later one's segments, so "/"
+shadows every later mount, and so does an equal mount, but "/docs"
+does not shadow "/docsx".
+
+Whenever a regex is involved (as either route, old-format or not)
+overlap cannot be decided, so it is probed, and a false negative is
+preferred to a false positive.  Sample paths are derived from the
+later route: for a mount M, M itself, M/x and M/a/b; for a regex,
+the literal text its source starts with (a leading ^ skipped, the
+text cut short before a quantifier, and none at all if the source
+has a vertical bar), L, plus L followed by x, a/b and x.gmi.  Only
+samples that the later route itself matches are kept, and with
+fewer than two of them nothing is reported.  The earlier route is
+then run on every sample with the router's own selector, and the
+later route is reported only if the earlier one matches all of them.
+A partial overlap is never reported.
+""".
 -spec prepare(RouteInfo, Realms, Opts) -> Result
               when RouteInfo :: [route_info()],
                    Realms    :: realm_table(),
@@ -142,14 +142,14 @@ prepare(RouteInfo, Realms, Opts) ->
     end.
 
 
-%% @doc
-%% As prepare/3, but for start-up validation, which reports every
-%% problem at once: every route is built, and the routes that built are
-%% returned along with an error, {bad_route, Index, Kind, Reason}, for
-%% each one that did not, in order. Warnings are logged only when every
-%% route built. The upload directory check of prepare/3 is not made;
-%% see check_upload_dirs/1, which the caller runs on the routes.
-%% @end
+-doc """
+As prepare/3, but for start-up validation, which reports every
+problem at once: every route is built, and the routes that built are
+returned along with an error, {bad_route, Index, Kind, Reason}, for
+each one that did not, in order. Warnings are logged only when every
+route built. The upload directory check of prepare/3 is not made;
+see check_upload_dirs/1, which the caller runs on the routes.
+""".
 -spec prepare_all(RouteInfo, Realms, Opts) -> Result
               when RouteInfo :: [route_info()],
                    Realms    :: realm_table(),
@@ -357,13 +357,13 @@ route_kind(R) when tuple_size(R) =:= 5 -> tuple;
 route_kind(_) -> unknown.
 
 
-%% @doc
-%% Check that no Titan upload can land in a directory CGI scripts are
-%% run from: neither a Titan route's docroot (where uploads end up) nor
-%% its work_dir (where they are staged) may be, contain, or lie inside
-%% the cgiroot of any CGI route. Directories are compared after
-%% resolving symbolic links, so an alias doesn't get round it.
-%% @end
+-doc """
+Check that no Titan upload can land in a directory CGI scripts are
+run from: neither a Titan route's docroot (where uploads end up) nor
+its work_dir (where they are staged) may be, contain, or lie inside
+the cgiroot of any CGI route. Directories are compared after
+resolving symbolic links, so an alias doesn't get round it.
+""".
 -spec check_upload_dirs(Routes) -> Result
               when Routes :: [route()],
                    Result :: 'ok' | {'error', term()}.
@@ -418,11 +418,11 @@ make_routes(RouteInfo, Realms) ->
       || {I, R} <- lists:enumerate(RouteInfo) ].
 
 
-%% @doc
-%% Build and validate a single route of either format, given as a tuple
-%% (see prepare/3), resolving realms against a realm table.  An old-format
-%% tuple is translated silently.
-%% @end
+-doc """
+Build and validate a single route of either format, given as a tuple
+(see prepare/3), resolving realms against a realm table.  An old-format
+tuple is translated silently.
+""".
 -spec build_route(RouteInfo, Realms) -> Result
               when RouteInfo :: route_info(),
                    Realms    :: realm_table(),
@@ -435,10 +435,10 @@ build_route(RouteInfo, Realms) ->
     end.
 
 
-%% @doc
-%% Build and validate a single route, reporting a specific reason if it
-%% is invalid rather than throwing or crashing.
-%% @end
+-doc """
+Build and validate a single route, reporting a specific reason if it
+is invalid rather than throwing or crashing.
+""".
 -spec build_route(Proto, Regex, Module, AuthPolicy, Opts) -> Result
               when Proto      :: atom(),
                    Regex      :: string() | binary(),
@@ -450,9 +450,9 @@ build_route(Proto, Regex, Module, AuthPolicy, Opts) ->
     build_route(Proto, Regex, Module, AuthPolicy, Opts, #{}).
 
 
-%% @doc
-%% As build_route/5, resolving realms against a realm table.
-%% @end
+-doc """
+As build_route/5, resolving realms against a realm table.
+""".
 -spec build_route(Proto, Regex, Module, AuthPolicy, Opts, Realms) ->
               Result
               when Proto      :: atom(),
@@ -717,13 +717,13 @@ compile_regex(ToCompile, Regex) ->
     end.
 
 
-%% @doc
-%% Check that Module is loadable and exports the callbacks a servlet
-%% needs: all the blizanci_servlet callbacks, that is default_options/0,
-%% validate_options/1, request/4, serve/4, start/0, stop/0, cancel/1 and
-%% handle_client_data/2. A missing one is reported as
-%% {servlet_missing_callbacks, Module, [{Name, Arity}]}.
-%% @end
+-doc """
+Check that Module is loadable and exports the callbacks a servlet
+needs: all the blizanci_servlet callbacks, that is default_options/0,
+validate_options/1, request/4, serve/4, start/0, stop/0, cancel/1 and
+handle_client_data/2. A missing one is reported as
+{servlet_missing_callbacks, Module, [{Name, Arity}]}.
+""".
 -spec check_servlet(Module) -> Result
               when Module :: term(),
                    Result :: 'ok' | {'error', term()}.
@@ -792,18 +792,19 @@ valid_module_opts(Module, Opts) ->
     end.
 
 
-%% @doc
-%% Route a Gemini request to a handler.
-%% The Config provides a routing table, which is an ordered list of regular
-%% expressions and associated handler modules. route/3 searches for whether
-%% the Request matches any of these routes, and if so dispatches it to the
-%% appropriate handler module.
-%%
-%% @param The atom 'gemini' or similar
-%% @param Path the Path in the Gemini request
-%% @param Request the Gemini request
-%% @param Config the server configuration, including the routing table
-%% @end
+-doc """
+Route a Gemini request to a handler.
+
+The Config provides a routing table, which is an ordered list of regular
+expressions and associated handler modules. route/3 searches for whether
+the Request matches any of these routes, and if so dispatches it to the
+appropriate handler module.
+
+- `Proto`: the atom `gemini` or similar
+- `Path`: the Path in the Gemini request
+- `Request`: the Gemini request
+- `Config`: the server configuration, including the routing table
+""".
 -spec route(Proto, Path, Request, Config) -> Response
               when Proto    :: atom(),
                    Path     :: binary(),

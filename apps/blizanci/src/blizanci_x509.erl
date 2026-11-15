@@ -2,13 +2,13 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @doc
-%% This module handles most of the certificate-related functionality.
-%%
-%% Herein, RDN means "relative distinguished name".
-%% @end
-
 -module(blizanci_x509).
+
+-moduledoc """
+This module handles most of the certificate-related functionality.
+
+Herein, RDN means "relative distinguished name".
+""".
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
@@ -32,22 +32,22 @@
 -export([test_pair_files/3]).
 -endif.
 
-%% @doc
-%% Check if the connection has a valid certificate,
-%% and return the issuer and subject names, or error.
-%%
-%% A certificate is remote-attacker-controlled input: decoding it, or
-%% dumping its RDNs, must never crash the calling process. Any failure
-%% is reported as a distinct {error, Reason}, distinguishing a
-%% certificate we plain couldn't decode (`cert_not_parsed') from one
-%% which decoded fine but uses a directory-string encoding for an RDN
-%% attribute value that we don't know how to render
-%% (`cert_unsupported_encoding'), e.g. bmpString/universalString.
-%%
-%% A certificate with no Common Name is not an error: the corresponding
-%% value in the result is the atom `undefined' (for the subject, the
-%% issuer, or both).
-%% @end
+-doc """
+Check if the connection has a valid certificate,
+and return the issuer and subject names, or error.
+
+A certificate is remote-attacker-controlled input: decoding it, or
+dumping its RDNs, must never crash the calling process. Any failure
+is reported as a distinct {error, Reason}, distinguishing a
+certificate we plain couldn't decode (`cert_not_parsed`) from one
+which decoded fine but uses a directory-string encoding for an RDN
+attribute value that we don't know how to render
+(`cert_unsupported_encoding`), e.g. bmpString/universalString.
+
+A certificate with no Common Name is not an error: the corresponding
+value in the result is the atom `undefined` (for the subject, the
+issuer, or both).
+""".
 -spec peercert_cn(C) -> ClientCert
               when C          :: term(),
                    ClientCert :: client_cert_details().
@@ -72,9 +72,10 @@ peercert_cn(_) ->
     error.
 
 
-%% @doc Return a tuple of the Common Names of the issuer and handler of a
-%% certificate.
-%% @end
+-doc """
+Return a tuple of the Common Names of the issuer and handler of a
+certificate.
+""".
 -spec cert_rdns(Cert) -> CommonNames
               when Cert        :: #'OTPCertificate'{},
                    CommonNames :: {term(), term()}.
@@ -147,16 +148,16 @@ verify_cert(_Cert, _Event, _InitialUserState) ->
     {valid, unknown_user}.
 
 
-%% @doc
-%% Decode a raw client certificate and check that the current time falls
-%% within its validity period (NotBefore/NotAfter).
-%%
-%% As with peercert_cn/1, the input is remote-attacker-controlled, so a
-%% certificate we can't decode at all is reported distinctly
-%% (`cert_not_parsed') from one which decodes fine but is outside its
-%% validity period: past NotAfter (`cert_expired') or before NotBefore
-%% (`cert_not_yet_valid').
-%% @end
+-doc """
+Decode a raw client certificate and check that the current time falls
+within its validity period (NotBefore/NotAfter).
+
+As with peercert_cn/1, the input is remote-attacker-controlled, so a
+certificate we can't decode at all is reported distinctly
+(`cert_not_parsed`) from one which decodes fine but is outside its
+validity period: past NotAfter (`cert_expired`) or before NotBefore
+(`cert_not_yet_valid`).
+""".
 -spec check_cert(DerCert) -> Result
               when DerCert :: public_key:der_encoded(),
                    Result  :: {ok, #'OTPCertificate'{}}
@@ -233,22 +234,22 @@ to_gregorian(Year, [Mo1,Mo2,D1,D2,H1,H2,Mi1,Mi2,S1,S2,$Z]) ->
         list_to_integer([S1,S2])}}).
 
 
-%% @doc
-%% Check that DerCert was actually signed by IssuerCert's private key --
-%% a genuine cryptographic check, not the name-comparison that
-%% public_key:pkix_is_issuer/2 does (that function only compares the
-%% Issuer field of DerCert against the Subject field of IssuerCert; it
-%% is meant for candidate-chain construction, not a standalone trust
-%% decision, and is trivially spoofable by anyone able to set those
-%% fields on a self-signed certificate).
-%%
-%% Deliberately minimal: this does not require IssuerCert to be a
-%% "proper" CA certificate (no basicConstraints/keyUsage checks, unlike
-%% public_key:pkix_path_validation/3) -- blizanci's issuer certs are
-%% used the way an organisation runs its own internal CA for e.g.
-%% mail/VPN clients, not as web-PKI CAs, and may not carry those
-%% extensions.
-%% @end
+-doc """
+Check that DerCert was actually signed by IssuerCert's private key --
+a genuine cryptographic check, not the name-comparison that
+public_key:pkix_is_issuer/2 does (that function only compares the
+Issuer field of DerCert against the Subject field of IssuerCert; it
+is meant for candidate-chain construction, not a standalone trust
+decision, and is trivially spoofable by anyone able to set those
+fields on a self-signed certificate).
+
+Deliberately minimal: this does not require IssuerCert to be a
+"proper" CA certificate (no basicConstraints/keyUsage checks, unlike
+public_key:pkix_path_validation/3) -- blizanci's issuer certs are
+used the way an organisation runs its own internal CA for e.g.
+mail/VPN clients, not as web-PKI CAs, and may not carry those
+extensions.
+""".
 -spec verify_signed_by(DerCert, IssuerCert) -> Result
               when DerCert    :: public_key:der_encoded(),
                    IssuerCert :: #'OTPCertificate'{},
@@ -273,15 +274,15 @@ issuer_public_key(#'OTPCertificate'{tbsCertificate = TBS}) ->
     Key.
 
 
-%% @doc
-%% Return every certificate in a PEM-encoded file, decoded, in file order
-%% (a CA bundle gives all of its CAs). Other PEM entries (keys, say) are
-%% ignored. Does not raise. The error is a posix atom if the file cannot
-%% be read, 'not_a_path' if Path is not a non-empty string,
-%% 'no_certificate_in_file' if there is no certificate entry, and
-%% 'certificate_not_decodable' if ANY certificate entry fails to decode
-%% (the file is refused whole, not partly used).
-%% @end
+-doc """
+Return every certificate in a PEM-encoded file, decoded, in file order
+(a CA bundle gives all of its CAs). Other PEM entries (keys, say) are
+ignored. Does not raise. The error is a posix atom if the file cannot
+be read, 'not_a_path' if Path is not a non-empty string,
+'no_certificate_in_file' if there is no certificate entry, and
+'certificate_not_decodable' if ANY certificate entry fails to decode
+(the file is refused whole, not partly used).
+""".
 -spec certificates_from_file(Path) -> Result
               when Path   :: term(),
                    Result :: {'ok', [#'OTPCertificate'{}, ...]}
@@ -325,12 +326,12 @@ decode_all([Der | Rest], Acc) ->
     end.
 
 
-%% @doc
-%% Check, without raising, that Path is the name of a readable file
-%% holding at least one PEM-encoded certificate, and that every
-%% certificate in it decodes. See certificates_from_file/1 for the
-%% errors.
-%% @end
+-doc """
+Check, without raising, that Path is the name of a readable file
+holding at least one PEM-encoded certificate, and that every
+certificate in it decodes. See certificates_from_file/1 for the
+errors.
+""".
 -spec validate_ca_file(Path) -> Result
               when Path   :: term(),
                    Result :: 'ok' | {'error', term()}.
@@ -341,9 +342,9 @@ validate_ca_file(Path) ->
         {error, _} = Error -> Error
     end.
 
-%% @doc
-%% Check that a file containts (at least) one PEM-encoded certificate.
-%% @end
+-doc """
+Check that a file containts (at least) one PEM-encoded certificate.
+""".
 -spec validate_pem_file(Filename) -> Result
               when Filename :: string(),
                    Result   :: {ok, string()} | {fail, atom()}.
@@ -363,37 +364,37 @@ validate_pem_file(Filename) ->
     end.
 
 
-%% @doc
-%% Check that a PEM certificate file and a PEM private key file are a
-%% matching pair, so that a server using them can complete a handshake.
-%% The certificate is the first one in its file (the leaf, when the file
-%% holds a chain); the key is the first private key in its file, which
-%% may be the same file. RSA keys match on modulus and public exponent;
-%% EC keys (P-256, P-384, P-521) on the public point derived from the
-%% private scalar, which must be on the same named curve; Ed25519 and
-%% Ed448 likewise. Nothing is trusted from the file's own idea of the
-%% public key. PKCS#1, PKCS#8 and SEC1 containers are all handled.
-%%
-%% Result is `ok' for a verified match; `{ok, unverified, Reason}' for a
-%% pair the check cannot compare, where Reason is
-%% `{unsupported_key_type, Name}' (Name a string such as "DSA" or
-%% "EC secp224r1"), which is NOT a failure and the caller should warn;
-%% `{error, mismatch}' for a pair that provably does not match; or
-%% `{error, {certfile, Why}}' / `{error, {keyfile, Why}}' for a file
-%% problem, which names the file at fault: `{unreadable, Posix}',
-%% `no_certificate_in_file' or `certificate_not_decodable' (certfile),
-%% `{unreadable, Posix}', `no_private_key', `encrypted_private_key' or
-%% `private_key_not_decodable' (keyfile).
-%%
-%% The rule: each side's family is RSA, EC (any curve, Ed25519 and
-%% Ed448 included) or DSA when we can tell. Two different families are a
-%% mismatch, even if one is a family we cannot compare, so an RSA
-%% certificate with a DSA key is refused. Within RSA, and within EC on
-%% the supported curves, the keys are compared. Two EC keys on
-%% different named curves are a mismatch. Otherwise (DSA with DSA, the
-%% same unsupported EC curve, RSA-PSS or any other algorithm we do not
-%% know, on either side) the pair is unverified.
-%% @end
+-doc """
+Check that a PEM certificate file and a PEM private key file are a
+matching pair, so that a server using them can complete a handshake.
+The certificate is the first one in its file (the leaf, when the file
+holds a chain); the key is the first private key in its file, which
+may be the same file. RSA keys match on modulus and public exponent;
+EC keys (P-256, P-384, P-521) on the public point derived from the
+private scalar, which must be on the same named curve; Ed25519 and
+Ed448 likewise. Nothing is trusted from the file's own idea of the
+public key. PKCS#1, PKCS#8 and SEC1 containers are all handled.
+
+Result is `ok` for a verified match; `{ok, unverified, Reason}` for a
+pair the check cannot compare, where Reason is
+`{unsupported_key_type, Name}` (Name a string such as "DSA" or
+"EC secp224r1"), which is NOT a failure and the caller should warn;
+`{error, mismatch}` for a pair that provably does not match; or
+`{error, {certfile, Why}}` / `{error, {keyfile, Why}}` for a file
+problem, which names the file at fault: `{unreadable, Posix}`,
+`no_certificate_in_file` or `certificate_not_decodable` (certfile),
+`{unreadable, Posix}`, `no_private_key`, `encrypted_private_key` or
+`private_key_not_decodable` (keyfile).
+
+The rule: each side's family is RSA, EC (any curve, Ed25519 and
+Ed448 included) or DSA when we can tell. Two different families are a
+mismatch, even if one is a family we cannot compare, so an RSA
+certificate with a DSA key is refused. Within RSA, and within EC on
+the supported curves, the keys are compared. Two EC keys on
+different named curves are a mismatch. Otherwise (DSA with DSA, the
+same unsupported EC curve, RSA-PSS or any other algorithm we do not
+know, on either side) the pair is unverified.
+""".
 -spec cert_key_match(CertFile, KeyFile) -> Result
               when CertFile :: string(),
                    KeyFile  :: string(),

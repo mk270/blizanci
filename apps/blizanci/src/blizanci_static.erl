@@ -2,14 +2,16 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-% A servlet serving static files from a route's docroot. Its request/4
-% answers immediately, never deferring to a servlet process: a request
-% for a regular file yields a {file, MimeType, Path} response, a request
-% for a directory is redirected to that directory's index file, and
-% anything else (including paths that escape the docroot) is a
-% file_not_found. Paths are canonicalised and confined by blizanci_path.
-
 -module(blizanci_static).
+
+-moduledoc """
+A servlet serving static files from a route's docroot. Its request/4
+answers immediately, never deferring to a servlet process: a request
+for a regular file yields a `{file, MimeType, Path}` response, a request
+for a directory is redirected to that directory's index file, and
+anything else (including paths that escape the docroot) is a
+file_not_found. Paths are canonicalised and confined by blizanci_path.
+""".
 -behaviour(blizanci_servlet).
 
 -include("blizanci_types.hrl").

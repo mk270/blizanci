@@ -2,59 +2,58 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @doc
-%% The process side of the servlet contract (see blizanci_servlet): a
-%% servlet module's request/4 is called here, and, if it defers, a
-%% container process is started to run its serve/4. This is the
-%% servlet process contract (part 2 of blizanci_servlet), and, once
-%% serve/4 has started a worker, the container's side of the gateway
-%% contract (part 3).
-%%
-%% What goes on, for one request:
-%%
-%% <ol>
-%% <li>blizanci_router calls request/5 in the connection process
-%% (blizanci_connection). This calls Module:request/4 there. An
-%% <code>{immediate, Response}</code> is returned as it stands.</li>
-%% <li>On <code>defer</code>, defer_request/5 makes the connection trap
-%% exits and starts a new, linked container process with
-%% proc_lib:start_link/4 (two seconds allowed to start), returning
-%% <code>{init_servlet, Pid}</code>, after which the connection
-%% remembers Pid as its servlet process.</li>
-%% <li>The container acknowledges at once, then calls Module:serve/4 in
-%% its own process. <code>gateway_finished</code> and
-%% <code>gateway_error</code> end the container here, with an exit
-%% reason <code>{shutdown, {gateway_complete, Pid, Response}}</code>
-%% or <code>{shutdown, {gateway_init_error, Pid, Reason}}</code>, which
-%% the connection, trapping exits, answers the client from.
-%% <code>gateway_started</code> turns the process into a gen_server
-%% (gen_server:enter_loop/3) whose state names the worker and the
-%% module.</li>
-%% <li>The gen_server then handles three things. Client data: the
-%% connection calls handle_client_data/2, which calls
-%% Module:handle_client_data/2 with the worker's pid and returns what
-%% it returns. The worker's report: the worker calls gateway_exit/2
-%% (a cast), and the container passes the result on to the connection
-%% by a gen_server:cast of <code>{servlet_result, Result}</code> (so
-%% the container never blocks on a connection which may itself be
-%% waiting on the container), where Result is
-%% <code>{servlet_complete, Output :: binary()}</code> or
-%% <code>{servlet_failed, ErrorCode :: atom()}</code>. Cancellation:
-%% when the connection ends it calls cancel/1, which casts
-%% <code>servlet_quit</code>; the container calls Module:cancel/1 with
-%% the worker's pid and stops.</li>
-%% </ol>
-%%
-%% A servlet is unlikely to need a substantive implementation of both
-%% Module:serve/4 and Module:request/4, since it will behave either
-%% wholly synchronously or wholly asynchronously. A synchronous one
-%% implements Module:request/4, answering <code>immediate</code>, so
-%% that its Module:serve/4 is never called and may be a stub. An
-%% asynchronous one has a trivial Module:request/4 returning
-%% <code>defer</code>, and does its work from Module:serve/4.
-%% @end
-
 -module(blizanci_servlet_container).
+
+-moduledoc """
+The process side of the servlet contract (see blizanci_servlet): a
+servlet module's request/4 is called here, and, if it defers, a
+container process is started to run its serve/4. This is the
+servlet process contract (part 2 of blizanci_servlet), and, once
+serve/4 has started a worker, the container's side of the gateway
+contract (part 3).
+
+What goes on, for one request:
+
+- blizanci_router calls request/5 in the connection process
+  (blizanci_connection). This calls Module:request/4 there. An
+  `{immediate, Response}` is returned as it stands.
+- On `defer`, defer_request/5 makes the connection trap
+  exits and starts a new, linked container process with
+  proc_lib:start_link/4 (two seconds allowed to start), returning
+  `{init_servlet, Pid}`, after which the connection
+  remembers Pid as its servlet process.
+- The container acknowledges at once, then calls Module:serve/4 in
+  its own process. `gateway_finished` and
+  `gateway_error` end the container here, with an exit
+  reason `{shutdown, {gateway_complete, Pid, Response}}`
+  or `{shutdown, {gateway_init_error, Pid, Reason}}`, which
+  the connection, trapping exits, answers the client from.
+  `gateway_started` turns the process into a gen_server
+  (gen_server:enter_loop/3) whose state names the worker and the
+  module.
+- The gen_server then handles three things. Client data: the
+  connection calls handle_client_data/2, which calls
+  Module:handle_client_data/2 with the worker's pid and returns what
+  it returns. The worker's report: the worker calls gateway_exit/2
+  (a cast), and the container passes the result on to the connection
+  by a gen_server:cast of `{servlet_result, Result}` (so
+  the container never blocks on a connection which may itself be
+  waiting on the container), where Result is
+  `{servlet_complete, Output :: binary()}` or
+  `{servlet_failed, ErrorCode :: atom()}`. Cancellation:
+  when the connection ends it calls cancel/1, which casts
+  `servlet_quit`; the container calls Module:cancel/1 with
+  the worker's pid and stops.
+
+
+A servlet is unlikely to need a substantive implementation of both
+Module:serve/4 and Module:request/4, since it will behave either
+wholly synchronously or wholly asynchronously. A synchronous one
+implements Module:request/4, answering `immediate`, so
+that its Module:serve/4 is never called and may be a stub. An
+asynchronous one has a trivial Module:request/4 returning
+`defer`, and does its work from Module:serve/4.
+""".
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
@@ -136,25 +135,27 @@ handle_client_data(Pid, Payload) when is_binary(Payload) ->
     end.
 
 
-%% @doc Called by the router, in the connection process, to dispatch a
-%% request to a specific handler.
-%% @param Module the module implementing the handler
-%% @param Matches a map of binary keys to binary values: what each named
-%% group of the route's pattern captured (see blizanci_servlet)
-%% @param Request the request
-%% @param ServerConfig the configuration for the Gemini server
-%% @param RouteOpts the configuration to be passed to the servlet module
-%%
-%% The function calls Module:request(Matches, Request, ServerConfig,
-%% RouteOpts), which may return either {immediate, Response} or the atom
-%% 'defer'. Where it is indicated that the response will be deferred, a
-%% new container process is started, and in it Module:serve(Matches, Req,
-%% ServerConfig, RouteOpts) is called. This sets things up
-%% for the results of the request to be notified back to the caller
-%% (of request/5), which is a ranch handler for the Gemini protocol.
-%% The result here is then <code>{init_servlet, Pid}</code> (or an
-%% internal-server-error code if the process did not start).
-%% @end
+-doc """
+Called by the router, in the connection process, to dispatch a
+request to a specific handler.
+
+- `Module`: the module implementing the handler
+- `Matches`: a map of binary keys to binary values: what each named
+  group of the route's pattern captured (see blizanci_servlet)
+- `Request`: the request
+- `ServerConfig`: the configuration for the Gemini server
+- `RouteOpts`: the configuration to be passed to the servlet module
+
+The function calls Module:request(Matches, Request, ServerConfig,
+RouteOpts), which may return either `{immediate, Response}` or the atom
+`defer`. Where it is indicated that the response will be deferred, a
+new container process is started, and in it Module:serve(Matches, Req,
+ServerConfig, RouteOpts) is called. This sets things up
+for the results of the request to be notified back to the caller
+(of request/5), which is a ranch handler for the Gemini protocol.
+The result here is then `{init_servlet, Pid}` (or an
+internal-server-error code if the process did not start).
+""".
 -spec request(Module, Matches, Request, ServerConfig, RouteOpts) -> Result
               when Module       :: module(),
                    Matches      :: path_matches(),
@@ -193,9 +194,7 @@ defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
 %%% gen_server callbacks
 %%%===================================================================
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
     proc_lib:init_ack({ok, self()}),
     case Module:serve(Matches, Req, ServerConfig, RouteOpts) of
@@ -224,9 +223,7 @@ init([Parent, Module, Matches, Req, ServerConfig, RouteOpts]) ->
             gen_server:enter_loop(?MODULE, [], State)
     end.
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 handle_call({client_data, Payload}, _From, State) ->
     do_handle_payload(Payload, State);
 
@@ -235,9 +232,7 @@ handle_call(_Request, _From, State) ->
     {reply, Reply, State}.
 
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 handle_cast({gateway_result, Result}, State) ->
     do_handle_gateway_result(Result, State);
 
@@ -250,16 +245,12 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 handle_info(_Info, State) ->
     {noreply, State}.
 
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 terminate(normal, _State) ->
     ok;
 terminate(Reason, _State) ->
@@ -267,9 +258,7 @@ terminate(Reason, _State) ->
     ok.
 
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 

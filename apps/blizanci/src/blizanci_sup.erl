@@ -2,8 +2,6 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @hidden
-
 %% The supervision tree, strategy rest_for_one, in start order:
 %%
 %%   blizanci_sup
@@ -26,6 +24,8 @@
 %% down; but a child that keeps crashing still does.
 
 -module(blizanci_sup).
+
+-moduledoc false.
 
 -behaviour(supervisor).
 -include_lib("eunit/include/eunit.hrl").

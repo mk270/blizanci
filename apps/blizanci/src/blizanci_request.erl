@@ -2,47 +2,51 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-% This module is the second half of the request path: from the parsed
-% request line to the servlet. The first half, from TLS data arriving
-% at the connection process to the call of handle_line/4 below, is in
-% blizanci_connection. The entry point here is handle_line/4. The main
-% code path consists in transforming data and handing it off down the
-% call chain (always towards the bottom of the file) as follows:
-%
-%   handle_line(...):
-%     check the line is valid UTF-8, and parse it into a URL (the path
-%     is not percent-decoded here; that is done later, see handle_file)
-%
-%   handle_parsed_url(...):
-%     provide defaults for missing URL parts, such as port number
-%
-%   handle_url(...):
-%     strip out requests for non-Gemini URLs, requests to proxy, etc
-%
-%   handle_gemini_url(...):
-%     strip out Gemini requests unrelated to this server, normalize URL
-%
-%   handle_path(...):
-%     strip out multiple leading slashes from path component of URL
-%
-%   handle_file(...):
-%     percent-decode the path (via blizanci_urlpath), then strip out
-%     requests involving ".."
-%
-%   handle_decoded(...):
-%     refuse a decoded path containing ".."
-%
-%   serve(...):
-%     pass the request to blizanci_router:route/4
-%
-%   [the processing is handed off to a servlet, which through callbacks then
-%    does something with the path, e.g. serve_file/2 in blizanci_static;
-%    that is outside this module.]
-%
-% Every handle_* function in the chain above, starting with handle_line,
-% returns a response of type gemini_response().
-
 -module(blizanci_request).
+
+-moduledoc """
+This module is the second half of the request path: from the parsed
+request line to the servlet. The first half, from TLS data arriving
+at the connection process to the call of handle_line/4 below, is in
+blizanci_connection. The entry point here is handle_line/4. The main
+code path consists in transforming data and handing it off down the
+call chain (always towards the bottom of the file) as follows:
+
+```
+handle_line(...):
+  check the line is valid UTF-8, and parse it into a URL (the path
+  is not percent-decoded here; that is done later, see handle_file)
+
+handle_parsed_url(...):
+  provide defaults for missing URL parts, such as port number
+
+handle_url(...):
+  strip out requests for non-Gemini URLs, requests to proxy, etc
+
+handle_gemini_url(...):
+  strip out Gemini requests unrelated to this server, normalize URL
+
+handle_path(...):
+  strip out multiple leading slashes from path component of URL
+
+handle_file(...):
+  percent-decode the path (via blizanci_urlpath), then strip out
+  requests involving ".."
+
+handle_decoded(...):
+  refuse a decoded path containing ".."
+
+serve(...):
+  pass the request to blizanci_router:route/4
+
+[the processing is handed off to a servlet, which through callbacks then
+ does something with the path, e.g. serve_file/2 in blizanci_static;
+ that is outside this module.]
+```
+
+Every `handle_*` function in the chain above, starting with handle_line,
+returns a response of type gemini_response().
+""".
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
@@ -57,9 +61,7 @@
 % layer's separate ?MAX_REQUEST_BYTES guards its buffer before that.
 -define(MAX_URL_BYTES, 1024).
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 
 % Take the request line which has been received in full from the client
 % and check that it's valid UTF8; if so, break it down into its URL parts

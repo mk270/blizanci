@@ -11,10 +11,11 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-%% @doc Canonicalise and normalise (q.v.) the path S, which may be a
-%% string or a binary; the result has the same type.
-%% @todo does not support relative paths
-%% @end
+%% TODO: does not support relative paths
+-doc """
+Canonicalise and normalise (q.v.) the path S, which may be a
+string or a binary; the result has the same type.
+""".
 -spec fix_path(S) -> Result
               when S      :: string(),
                    Result :: {ok, string()} | {error, atom()};
@@ -34,17 +35,18 @@ fix_path3(Error) -> Error.
 
 
 
-%% @doc
-%% Is the path S underneath Root (or Root itself)? S must equal Root, or
-%% begin with Root followed by a path separator: a bare string-prefix
-%% test would wrongly accept a sibling such as /srv/docs-secret for a
-%% Root of /srv/docs. S and Root are both strings or both binaries.
-%%
-%% It is (currently) the responsibility of the caller to canonicalise/normalise
-%% the paths before calling this function.
-%% @param S the path to check
-%% @param Root the directory under which S is supposed to be located
-%% @end
+-doc """
+Is the path S underneath Root (or Root itself)? S must equal Root, or
+begin with Root followed by a path separator: a bare string-prefix
+test would wrongly accept a sibling such as /srv/docs-secret for a
+Root of /srv/docs. S and Root are both strings or both binaries.
+
+It is (currently) the responsibility of the caller to canonicalise/normalise
+the paths before calling this function.
+
+- `S`: the path to check
+- `Root`: the directory under which S is supposed to be located
+""".
 -spec path_under_root(S, Root) -> Result
               when S      :: string() | binary(),
                    Root   :: string() | binary(),
@@ -65,63 +67,63 @@ path_under_root(S, Root) when is_list(S), is_list(Root) ->
     S =:= Root orelse lists:prefix(Prefix, S).
 
 
-%% @doc
-%% Join SubPath onto Root, canonicalise the result, and confine it to
-%% lie under Root -- the pattern shared by every servlet that resolves
-%% a request path against a configured root directory (CGI, static
-%% files, Titan uploads).
-%%
-%% File names are bytes. SubPath, Root and the result are all binaries,
-%% so the name that is checked is exactly the name that is opened.
-%% (Checking a string and opening it under another encoding once let a
-%% symlink named with a non-ASCII character lead out of the docroot.)
-%% The router converts the configured roots to binaries when a route is
-%% built (see blizanci_router); anything else as Root or SubPath is
-%% refused.
-%%
-%% Root is resolved to an absolute path first (via filename:absname/1),
-%% since fix_path/1 requires an absolute path and configured roots may
-%% be relative.
-%%
-%% Root itself is canonicalised too, not just absname'd, before being
-%% used as the confinement prefix: if Root sits behind a symlink (e.g.
-%% a blue/green deploy pattern such as docroot -> releases/v3), every
-%% legitimate resolved path would otherwise fail the prefix check,
-%% since Cmd is fully symlink-resolved but a bare absname'd Root would
-%% not be.
-%%
-%% A canonicalisation failure (e.g. a symlink loop tripping
-%% realpath's TTL guard) and a path which resolves outside Root are
-%% deliberately reported identically, as `file_not_found': a remote
-%% client should not be able to use the response to distinguish "this
-%% doesn't exist" from "you tried to escape the root". The real reason
-%% is still logged.
-%%
-%% SubPath may contain any bytes except control characters: NUL, the
-%% other bytes below 16#20, and 16#7F (DEL) are refused. Bytes 16#80 and
-%% above are allowed, whether or not they form valid UTF-8. This is
-%% deliberately NOT a policy on which names are acceptable: invisible,
-%% bidirectional and look-alike characters (zero-width characters, bidi
-%% overrides and so on) pass through here, and are for the caller, in the
-%% URL layer, to refuse. Root is not restricted this way (it is the
-%% operator's), but may not contain NUL, which operating systems treat as
-%% the end of a name.
-%% Anything other than a binary as SubPath is refused.
-%%
-%% Hidden files are refused: any path segment beginning with a dot is
-%% denied (as file_not_found, so the response does not reveal whether
-%% the file exists), whatever the servlet. It is judged twice: on
-%% SubPath as given, so a symlink named ".env" is refused although it
-%% points at an ordinary file, and on the resolved path relative to Root,
-%% so a link to a dot-directory (say "pub" pointing at ".git") is refused
-%% although its own name is innocent. Only segments below Root count: a
-%% Root that itself lies under a dot-directory is fine. The one exception
-%% is a ".well-known" directory as the FIRST segment under Root, as RFC
-%% 8615 places it, and only when the caller asks for it with the option
-%% `well_known' (confine/3); a ".well-known" further down is an ordinary
-%% hidden directory, and a dotfile inside ".well-known" is still hidden.
-%% confine/2 allows no exception.
-%% @end
+-doc """
+Join SubPath onto Root, canonicalise the result, and confine it to
+lie under Root -- the pattern shared by every servlet that resolves
+a request path against a configured root directory (CGI, static
+files, Titan uploads).
+
+File names are bytes. SubPath, Root and the result are all binaries,
+so the name that is checked is exactly the name that is opened.
+(Checking a string and opening it under another encoding once let a
+symlink named with a non-ASCII character lead out of the docroot.)
+The router converts the configured roots to binaries when a route is
+built (see blizanci_router); anything else as Root or SubPath is
+refused.
+
+Root is resolved to an absolute path first (via filename:absname/1),
+since fix_path/1 requires an absolute path and configured roots may
+be relative.
+
+Root itself is canonicalised too, not just absname'd, before being
+used as the confinement prefix: if Root sits behind a symlink (e.g.
+a blue/green deploy pattern such as docroot -> releases/v3), every
+legitimate resolved path would otherwise fail the prefix check,
+since Cmd is fully symlink-resolved but a bare absname'd Root would
+not be.
+
+A canonicalisation failure (e.g. a symlink loop tripping
+realpath's TTL guard) and a path which resolves outside Root are
+deliberately reported identically, as `file_not_found`: a remote
+client should not be able to use the response to distinguish "this
+doesn't exist" from "you tried to escape the root". The real reason
+is still logged.
+
+SubPath may contain any bytes except control characters: NUL, the
+other bytes below 16#20, and 16#7F (DEL) are refused. Bytes 16#80 and
+above are allowed, whether or not they form valid UTF-8. This is
+deliberately NOT a policy on which names are acceptable: invisible,
+bidirectional and look-alike characters (zero-width characters, bidi
+overrides and so on) pass through here, and are for the caller, in the
+URL layer, to refuse. Root is not restricted this way (it is the
+operator's), but may not contain NUL, which operating systems treat as
+the end of a name.
+Anything other than a binary as SubPath is refused.
+
+Hidden files are refused: any path segment beginning with a dot is
+denied (as file_not_found, so the response does not reveal whether
+the file exists), whatever the servlet. It is judged twice: on
+SubPath as given, so a symlink named ".env" is refused although it
+points at an ordinary file, and on the resolved path relative to Root,
+so a link to a dot-directory (say "pub" pointing at ".git") is refused
+although its own name is innocent. Only segments below Root count: a
+Root that itself lies under a dot-directory is fine. The one exception
+is a ".well-known" directory as the FIRST segment under Root, as RFC
+8615 places it, and only when the caller asks for it with the option
+`well_known` (confine/3); a ".well-known" further down is an ordinary
+hidden directory, and a dotfile inside ".well-known" is still hidden.
+confine/2 allows no exception.
+""".
 -spec confine(SubPath, Root) -> Result
               when SubPath :: binary(),
                    Root    :: binary(),
@@ -146,12 +148,12 @@ confine(SubPath, Root, _Opts) ->
     {error, file_not_found}.
 
 
-%% @doc
-%% The step every servlet starts with: take the request path from the
-%% route's Matches (key `<<"PATH">>', which must be present) and confine
-%% it under Root with confine/3. Each servlet chooses the Root and
-%% options it needs, and wraps the error atom in its own result shape.
-%% @end
+-doc """
+The step every servlet starts with: take the request path from the
+route's Matches (key `<<"PATH">>`, which must be present) and confine
+it under Root with confine/3. Each servlet chooses the Root and
+options it needs, and wraps the error atom in its own result shape.
+""".
 -spec resolve_request(Matches, Root, Opts) -> Result
               when Matches :: path_matches(),
                    Root    :: binary(),

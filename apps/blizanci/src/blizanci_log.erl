@@ -2,27 +2,27 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @doc
-%% Runtime log-level control for blizanci.
-%%
-%% The OTP logger has two filtering layers: a primary (global) level that
-%% gates all log events before they reach any handler, and a per-handler
-%% level that controls what each handler actually emits.  `level/1' sets
-%% both together so the observable behaviour is straightforward.
-%%
-%% The application sets no log levels itself; they come from the node's
-%% kernel configuration.  With no `logger' or `logger_level' key, the
-%% primary level is `notice' and the default handler's level is `all';
-%% `module_level/2' then makes a module's debug events appear, provided
-%% they are logged with the logger macros (?LOG_DEBUG and the like),
-%% since a plain logger:debug/1 call carries no module for the override
-%% to match.  With the example configuration (`logger_level' `debug' but
-%% the default handler at `info'), the primary level is `debug' and the
-%% handler level `info', so `module_level/2' alone prints nothing; the
-%% handler level must be lowered too, as `level/1' does for both.
-%% @end
-
 -module(blizanci_log).
+
+-moduledoc """
+Runtime log-level control for blizanci.
+
+The OTP logger has two filtering layers: a primary (global) level that
+gates all log events before they reach any handler, and a per-handler
+level that controls what each handler actually emits.  `level/1` sets
+both together so the observable behaviour is straightforward.
+
+The application sets no log levels itself; they come from the node's
+kernel configuration.  With no `logger` or `logger_level` key, the
+primary level is `notice` and the default handler's level is `all`;
+`module_level/2` then makes a module's debug events appear, provided
+they are logged with the logger macros (?LOG_DEBUG and the like),
+since a plain logger:debug/1 call carries no module for the override
+to match.  With the example configuration (`logger_level` `debug` but
+the default handler at `info`), the primary level is `debug` and the
+handler level `info`, so `module_level/2` alone prints nothing; the
+handler level must be lowered too, as `level/1` does for both.
+""".
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -37,22 +37,23 @@
                    | alert
                    | emergency.
 
-%% @doc Return the current primary log level.
-%% @end
+-doc """
+Return the current primary log level.
+""".
 -spec level() -> Result
               when Result :: log_level().
 level() ->
     #{level := Level} = logger:get_primary_config(),
     Level.
 
-%% @doc
-%% Set the global log level.
-%%
-%% Both the primary filter and the default handler are updated, so the
-%% change takes effect immediately for all modules.  Valid levels in
-%% increasing severity: `debug', `info', `notice', `warning', `error',
-%% `critical', `alert', `emergency'.
-%% @end
+-doc """
+Set the global log level.
+
+Both the primary filter and the default handler are updated, so the
+change takes effect immediately for all modules.  Valid levels in
+increasing severity: `debug`, `info`, `notice`, `warning`, `error`,
+`critical`, `alert`, `emergency`.
+""".
 -spec level(Level) -> Result
               when Level  :: log_level(),
                    Result :: ok.
@@ -60,13 +61,13 @@ level(Level) ->
     ok = logger:set_primary_config(level, Level),
     ok = logger:set_handler_config(default, level, Level).
 
-%% @doc
-%% Override the log level for a specific module.
-%%
-%% Module-level overrides take precedence over the primary level, allowing
-%% temporary debug logging for one module without increasing global
-%% verbosity.  Clear the override with `reset_module_level/1'.
-%% @end
+-doc """
+Override the log level for a specific module.
+
+Module-level overrides take precedence over the primary level, allowing
+temporary debug logging for one module without increasing global
+verbosity.  Clear the override with `reset_module_level/1`.
+""".
 -spec module_level(Module, Level) -> Result
               when Module :: module(),
                    Level  :: log_level(),
@@ -74,8 +75,9 @@ level(Level) ->
 module_level(Module, Level) ->
     ok = logger:set_module_level(Module, Level).
 
-%% @doc Clear the per-module log level override set by `module_level/2'.
-%% @end
+-doc """
+Clear the per-module log level override set by `module_level/2`.
+""".
 -spec reset_module_level(Module) -> Result
               when Module :: module(),
                    Result :: ok.
