@@ -1,5 +1,25 @@
 # Blizanci Changelog
 
+## 7.0.0
+
+- Remove single-site mode: the `sites` key is now the only way to
+  configure the sites of a server in sys.config (breaking change)
+- UPGRADING: the keys `hostname`, `certfile`, `keyfile`, `docroot`,
+  `cgiroot`, `ca_certs`, `titan_work_dir` and `routing`, when set at the
+  top level of the `blizanci` section, are no longer read: start-up is
+  refused with one line naming them. Move them into an entry of `sites`,
+  `{Hostname, [{certfile, ...}, {keyfile, ...}, {routing, [...]}]}`
+- UPGRADING: the default routing table, the `titan_work_dir` shorthand
+  and the realm `default` that `ca_certs` defined are gone with it:
+  write the routes, and define the realms in `realms`, explicitly
+- A configuration with no sites is refused with a message that names
+  the `sites` key
+- Rewrite the README's configuration section and
+  `config/sys.config.example` for the one format, with short examples
+- Correct stale and garbled comments in several module headers; the
+  logging header now says what `module_level/2` needs to show debug
+  output
+
 ## 6.0.0
 
 - Multi-site support: several sites on one port, each with its own
