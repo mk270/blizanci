@@ -408,9 +408,6 @@ the VM a SIGTERM (`kill`, or `systemctl stop` if it runs under
 systemd, with `exec erl ...` in the launch script so that the VM is
 the service's main process); it shuts down cleanly in about a second.
 
-`./manage.sh start-daemon` and `stop-daemon` need a release, so for
-now they only print an error; `./manage.sh repl` starts a rebar3 shell.
-
 Trivia
 ------
 
