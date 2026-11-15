@@ -1,0 +1,33 @@
+# Titan and static files
+
+## Static files
+
+The module blizanci_static is a servlet serving static files from a route's docroot. Its request/4 answers immediately, never deferring to a servlet process: a request for a regular file yields a {file, MimeType, Path} response, a request for a directory is redirected to that directory's index file, and anything else (including paths that escape the docroot) is a file_not_found. Paths are canonicalised and confined by blizanci_path. Its route options are docroot, index, bare_mimetype and unknown_mimetype.
+
+Hidden files are refused, whatever the servlet: see the section Path confinement in the Request handling chapter.
+
+=> request-handling.gmi Request handling
+
+## Titan uploads
+
+The module blizanci_titan is a servlet accepting Titan uploads into a route's docroot. Its request/4 always defers: the upload body arrives after the request line, and is passed to a worker process (run in a ppool queue, and also a gen_server) via handle_client_data/2. The data is staged in the route's work_dir and moved to its place under the docroot once complete; a request of size 0 deletes the resource instead.
+
+The Titan protocol, for uploading to Gemini servers, is specified at the URL below. In it the "size" parameter is mandatory, "mime" is optional (default text/gemini) and "token" is optional. A request with size=0 deletes the resource.
+
+=> gemini://transjovian.org/titan/The%20Titan%20Specification The Titan Specification
+
+A Titan route is a route like any other, with the protocol titan; a static site that also takes uploads needs a gemini route and a titan route (see the Routing chapter), and the titan route will usually be private (see the Authorisation chapter). A titan route names the docroot that uploads go into and the work_dir that stages them.
+
+=> routing.gmi Routing
+=> authorisation.gmi Authorisation
+
+## Limits
+
+* At most 10 uploads are processed at once (the worker pool size, MAX_TITAN).
+* The largest upload accepted is 10 MiB; a request declaring more is refused before any of its data is read.
+* A leftover temporary file in the work directory is expired once it is more than an hour old (MAX_AGE, 3600 seconds).
+* Hidden files are refused, as everywhere, except that a ".well-known" directory at the top of the upload root may be written to.
+
+## Titan work directories
+
+Titan stages uploads in a work directory before installing them in the docroot. A Titan route's work_dir has no default and must be given. Start-up fails unless it is an absolute path, exists, is a directory and is on the same filesystem as the route's docroot (uploads are installed by hard link and rename). Neither the docroot nor the work directory of a Titan route may overlap a CGI root.

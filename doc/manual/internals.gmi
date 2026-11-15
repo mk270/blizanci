@@ -1,0 +1,59 @@
+# Internals
+
+This chapter describes the processes that hold a running server together: the configuration table and its owner, the servlets' lifecycle, and the supervision tree.
+
+## The configuration table
+
+The module blizanci_conf_serv owns the configuration table of the running instance: its port, the servlet modules it declares, and its sites.
+
+The configuration is held in a public ETS table owned by this process, and is the single source of truth for site lookup. It is read by the TLS layer (the sni_fun, which ranch fixes at listen time) and by each connection, and replaced by blizanci_config:apply/1, so a replacement takes effect for every handshake after it without touching the listener. Readers see either the old value or the new one, never a mixture.
+
+### Layout
+
+One row per site, and one index row:
+
+```
+{running, Gen, Port, Servlets, Hostnames}   the index row
+{{site, Hostname}, Gen, Site}               one per site
+```
+
+Hostnames lists the sites' hostnames in published order; Gen is a fresh, increasing integer for each publish, written into the index and into every site row of that publish. find_site/1 therefore copies out only the one site row (and the index row's Gen, an integer), not every site with its compiled routes, which matters because it runs on every handshake and again in every connection. current/0 and sites/0 assemble the whole value from the rows.
+
+### Atomicity
+
+publish/3 writes the index and all the new site rows in one ets:insert/2 of a list, which is atomic and isolated, so a reader sees all of it or none of it. A replaced site keeps its key, so is overwritten with no gap. A site the new configuration drops has its row deleted only afterwards; until then the row is stale, and a reader ignores it, because its Gen is older than the index's (find_site/1 reads the index Gen first, then the row). So a removed site stops being found at the instant the new index is written, and its row is merely garbage for a moment. A reader that read the old index just before a publish and looks the row up just after the publish sees either a newer row (the site is in the new configuration, and the answer is the new one: the lookup is simply linearised after the publish) or, if the site was removed and its row already deleted, no row, which is not_found, correct for the new configuration; it never crashes and never returns a site that the configuration it consulted lacks. current/0 reads the index and then the rows, and starts again if any row is missing or newer than the index it read, so it too returns one publish's value.
+
+Writers are not serialised by the table: publish/3 assumes one publisher at a time, which blizanci_servlets provides. Hostnames are unique in a validated configuration; if not, the first of a name wins, as lookup always did.
+
+### The owner does nothing else
+
+This process does nothing else, deliberately: it creates the table from the initial configuration and then only waits, so that nothing in it can crash and take the table (and every applied change) with it. Readers and writers use the table directly. The servlets' lifecycle is blizanci_servlets, supervised after this process, so a crash there leaves the table alone.
+
+It is supervised first (see below), so the table exists before anything else starts, and is stopped last.
+
+## The servlets' lifecycle
+
+The module blizanci_servlets owns the lifecycle of the declared servlets' shared resources. A servlet is a module implementing the blizanci_servlet behaviour (see the Servlets chapter); its start/0 sets up whatever the module needs in order to serve requests (for blizanci_cgi and blizanci_titan, a pool of worker processes) and its stop/0 tears that down again.
+
+The pools themselves live under ppool's own supervisor, outside our tree; this process is what represents them in it. On start it takes the declared list from the configuration table (blizanci_conf_serv), not from any start argument, so a restart sees whatever blizanci_config:apply/1 last published, and calls start/0 on each, which is harmless for a pool that is already running. On termination it calls stop/0 on the servlets it believes are running. A stop/0 that raises or returns anything other than ok is logged with logger:warning and ignored, here and on apply/1 and after a failed start, so every servlet is stopped and this process never crashes over one. The list of servlets running is kept in its own state, not read from the table, because when the table owner dies the table is gone before this process terminates.
+
+blizanci_config:apply/1 comes here (reconfigure/3), so the declared list and the real pools change in one place, one request at a time. It is supervised after the table owner and before the listener.
+
+=> servlets.gmi Servlets
+
+## The supervision tree
+
+The supervision tree, strategy rest_for_one, in start order:
+
+```
+blizanci_sup
+  blizanci_conf_serv    owns the configuration table, nothing else
+  blizanci_servlets     starts/stops the servlets' pools (which
+                        live under ppool's supervisor) and
+                        applies configuration changes to them
+  blizanci_service_ssl  the ranch listener
+```
+
+Each depends on those before it: the pools are set up from the table, the listener's TLS and connections read the table and use the pools. So a crash restarts the crashed child and those after it, never those before: the table owner contains no logic, and survives a crash of the servlet child with every applied change intact. Shutdown is the reverse of start: listener, then pools, then table.
+
+Intensity is 3 restarts in 10 seconds, not the 1 in 5 of a flat one_for_one tree. One fault in the first child restarts all three, and a single flaky servlet start should not take the application down; but a child that keeps crashing still does.
