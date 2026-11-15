@@ -87,7 +87,7 @@
                     }.
 
 % The most CGI scripts running at once (the worker pool size); further
-% requests queue or are refused as too busy.
+% requests are refused as too busy (gateway_busy), not queued.
 -define(MAX_CGI, 5).
 -define(QUEUE, ?MODULE).
 

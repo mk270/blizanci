@@ -19,7 +19,7 @@ Features:
 Prerequisites
 -------------
 
-You'll need Erlang and Rebar. On a Debian-derived system like Ubuntu, this means installing the rebar3 executable from the rebar3 website, and installing the deb package erlang:
+You'll need Erlang/OTP 27 or later, and Rebar. rebar3 refuses to build on an older OTP. (Check yours with `erl -noshell -eval 'io:format("~s~n", [erlang:system_info(otp_release)]), halt().'`; a packaged erlang may be older than 27.) The build and the run must use the same OTP. On a Debian-derived system like Ubuntu, this means installing the rebar3 executable from the rebar3 website, and installing the deb package erlang if it is recent enough:
 
 * [Rebar3 installation instructions](https://www.rebar3.org/docs/getting-started#installing-binary)
 * `apt-get install erlang`
@@ -29,8 +29,10 @@ Config
 
 Currently, a config file is required. In due course, this will become optional.
 
-Create an appropriate `sys.config` and `vm.args` file in the `config/`
-directory in the format suggested in the examples in that directory.
+Create a `sys.config` file, for example in the `config/` directory, in
+the format suggested in `config/sys.config.example`. (The example
+`vm.args` is for a release, which is not available for now; the way of
+running blizanci described under Run does not read it.)
 
 A minimal configuration serves one site, with one public route. The
 `sites` key lists the sites; each has a hostname, a certificate, a
@@ -393,7 +395,21 @@ The relx release config was removed pending the packaging phase, so
 Run
 ---
 
-    $ ./manage.sh start-daemon
+There is no release for now (see Build), so run blizanci with `erl`
+against the compiled code, using the OTP that built it:
+
+    $ erl -noshell -pa _build/default/lib/*/ebin \
+          -config config/sys.config \
+          -eval '{ok, _} = application:ensure_all_started(blizanci)'
+
+It runs in the foreground. A bad configuration makes it exit at once
+with status 1 and a one-line error for each problem. To stop it, send
+the VM a SIGTERM (`kill`, or `systemctl stop` if it runs under
+systemd, with `exec erl ...` in the launch script so that the VM is
+the service's main process); it shuts down cleanly in about a second.
+
+`./manage.sh start-daemon` and `stop-daemon` need a release, so for
+now they only print an error; `./manage.sh repl` starts a rebar3 shell.
 
 Trivia
 ------
