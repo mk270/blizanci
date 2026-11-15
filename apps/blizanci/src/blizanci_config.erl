@@ -3,23 +3,20 @@
 %% SPDX-License-Identifier: Apache-2.0
 
 %% @doc
-%% Most of the configuration of blizanci is done via this module, albeit
-%% there remain some key values hardwired into the source code of the other
-%% modules.
+%% The configuration of a blizanci instance: built from the application
+%% environment (sys.config) by from_app_env/0, or from explicit values by
+%% the builder functions (new/2, site/3, add_route/2 and so on).
 %%
-%% The configuration is built from the application environment (sys.config)
-%% at start-up, by from_app_env/0. It is held in an ETS table owned by
-%% blizanci_conf_serv, the single source of truth, which is read by the
-%% TLS sni_fun and by each connection, and which apply/1 replaces while
-%% the server runs. See blizanci_conf_serv for the detail.
-%%
-%% At start-up, from_app_env/0 builds the configuration from the
-%% application environment and validates it, reporting every problem
-%% found in one pass as a list (see describe_error/1 for the one-line
-%% text of each); a bad configuration stops the application starting.
-%% A site's certificate and private key must be a matching pair, or the
-%% site is refused; a pair whose key type cannot be compared is accepted
-%% with a warning.
+%% At start-up from_app_env/0 builds the configuration and validates it,
+%% reporting every problem found in one pass as a list (see
+%% describe_error/1 for the one-line text of each); a bad configuration
+%% stops the application starting. A site's certificate and private key
+%% must be a matching pair, or the site is refused; a pair whose key type
+%% cannot be compared is accepted with a warning. The configuration is
+%% held in an ETS table owned by blizanci_conf_serv, the single source of
+%% truth, which is read by the TLS sni_fun and by each connection, and
+%% which apply/1 replaces while the server runs. See blizanci_conf_serv
+%% for the detail.
 %%
 %% Configuration items:
 %%
@@ -47,15 +44,8 @@
 %%       default routing table. The hostname is folded to lower case; a
 %%       name given twice is an error. A site's certificate and key must
 %%       be a matching pair. The routing table is an ordered list, first
-%%       match wins, one protocol per route. Each entry is
-%%       <code>{mount, Proto, Path, Module, Auth, Opts}</code> (whole
-%%       path segments; the servlet's PATH is the remainder after the
-%%       mount), <code>{regex, Proto, Re, Module, Auth, Opts}</code>
-%%       (anchored; needs a named group PATH), or the old
-%%       <code>{Proto, Regex, Module, Auth, Opts}</code>, translated with
-%%       its unanchored behaviour and one start-up warning. FULL_PATH is
-%%       the whole request path. See blizanci_router:prepare/3 and the
-%%       README, Sites and Routing.</dd>
+%%       match wins; see blizanci_router:prepare/3 and the README,
+%%       Routing, for the formats of its entries.</dd>
 %% </dl>
 %%
 %% The flat keys of the single-site form of earlier versions (hostname,

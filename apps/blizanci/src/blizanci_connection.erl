@@ -2,8 +2,12 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-% The main code path consists in transforming data and handing it off
-% down the call chain (always towards the bottom of the file) as follows:
+% This module is the first half of the request path: from TLS data
+% arriving at the connection process (start_link/3 is the ranch entry
+% point) to the call of blizanci_request:handle_line/4; see
+% blizanci_request for the rest. The main code path consists in
+% transforming data and handing it off down the call chain (always
+% towards the bottom of the file) as follows:
 %
 %   handle_info({ssl, ...}):
 %     new data from TLS, add it to buffer

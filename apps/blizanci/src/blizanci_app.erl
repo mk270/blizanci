@@ -394,7 +394,7 @@ two_sites_start_test() ->
       end).
 
 %% The path options of a site's routes are converted to binaries when
-%% its routes are built, as for the single site; one that is not plain
+%% its routes are built; one that is not plain
 %% ASCII is refused, naming the site, the route and the option.
 sites_path_options_test_() ->
     {timeout, 120, fun sites_path_options_body/0}.
