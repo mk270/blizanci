@@ -5,54 +5,11 @@
 -module(blizanci_servlet_container).
 
 -moduledoc """
-The process side of the servlet contract (see blizanci_servlet): a
-servlet module's request/4 is called here, and, if it defers, a
-container process is started to run its serve/4. This is the
-servlet process contract (part 2 of blizanci_servlet), and, once
-serve/4 has started a worker, the container's side of the gateway
-contract (part 3).
+The process side of the servlet contract (see blizanci_servlet): runs
+a servlet's request/4 and, if it defers, a container process for its
+serve/4.
 
-What goes on, for one request:
-
-- blizanci_router calls request/5 in the connection process
-  (blizanci_connection). This calls Module:request/4 there. An
-  `{immediate, Response}` is returned as it stands.
-- On `defer`, defer_request/5 makes the connection trap
-  exits and starts a new, linked container process with
-  proc_lib:start_link/4 (two seconds allowed to start), returning
-  `{init_servlet, Pid}`, after which the connection
-  remembers Pid as its servlet process.
-- The container acknowledges at once, then calls Module:serve/4 in
-  its own process. `gateway_finished` and
-  `gateway_error` end the container here, with an exit
-  reason `{shutdown, {gateway_complete, Pid, Response}}`
-  or `{shutdown, {gateway_init_error, Pid, Reason}}`, which
-  the connection, trapping exits, answers the client from.
-  `gateway_started` turns the process into a gen_server
-  (gen_server:enter_loop/3) whose state names the worker and the
-  module.
-- The gen_server then handles three things. Client data: the
-  connection calls handle_client_data/2, which calls
-  Module:handle_client_data/2 with the worker's pid and returns what
-  it returns. The worker's report: the worker calls gateway_exit/2
-  (a cast), and the container passes the result on to the connection
-  by a gen_server:cast of `{servlet_result, Result}` (so
-  the container never blocks on a connection which may itself be
-  waiting on the container), where Result is
-  `{servlet_complete, Output :: binary()}` or
-  `{servlet_failed, ErrorCode :: atom()}`. Cancellation:
-  when the connection ends it calls cancel/1, which casts
-  `servlet_quit`; the container calls Module:cancel/1 with
-  the worker's pid and stops.
-
-
-A servlet is unlikely to need a substantive implementation of both
-Module:serve/4 and Module:request/4, since it will behave either
-wholly synchronously or wholly asynchronously. A synchronous one
-implements Module:request/4, answering `immediate`, so
-that its Module:serve/4 is never called and may be a stub. An
-asynchronous one has a trivial Module:request/4 returning
-`defer`, and does its work from Module:serve/4.
+See the manual chapter [Servlets](servlets.md).
 """.
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").

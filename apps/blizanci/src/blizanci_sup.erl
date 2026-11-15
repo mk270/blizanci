@@ -2,26 +2,9 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% The supervision tree, strategy rest_for_one, in start order:
-%%
-%%   blizanci_sup
-%%     blizanci_conf_serv    owns the configuration table, nothing else
-%%     blizanci_servlets     starts/stops the servlets' pools (which
-%%                           live under ppool's supervisor) and
-%%                           applies configuration changes to them
-%%     blizanci_service_ssl  the ranch listener
-%%
-%% Each depends on those before it: the pools are set up from the
-%% table, the listener's TLS and connections read the table and use the
-%% pools. So a crash restarts the crashed child and those after it,
-%% never those before: the table owner contains no logic, and survives
-%% a crash of the servlet child with every applied change intact.
-%% Shutdown is the reverse of start: listener, then pools, then table.
-%%
-%% Intensity is 3 restarts in 10 seconds, not the 1 in 5 of a flat
-%% one_for_one tree. One fault in the first child restarts all three,
-%% and a single flaky servlet start should not take the application
-%% down; but a child that keeps crashing still does.
+%% The supervision tree, strategy rest_for_one: blizanci_conf_serv,
+%% then blizanci_servlets, then the ranch listener.  See the manual
+%% chapter 'Internals' (doc/manual/internals.gmi).
 
 -module(blizanci_sup).
 

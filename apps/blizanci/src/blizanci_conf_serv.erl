@@ -3,62 +3,10 @@
 %% SPDX-License-Identifier: Apache-2.0
 
 %% Owns the configuration table of the running instance: its port,
-%% the servlet modules it declares, and its sites.
-%%
-%% The configuration is held in a public ETS table owned by this
-%% process, and is the single source of truth for site lookup. It is
-%% read by the TLS layer (the sni_fun, which ranch fixes at listen
-%% time) and by each connection, and replaced by
-%% blizanci_config:apply/1, so a replacement takes effect for every
-%% handshake after it without touching the listener. Readers see either
-%% the old value or the new one, never a mixture.
-%%
-%% Layout: one row per site, and one index row.
-%%
-%%   {running, Gen, Port, Servlets, Hostnames}   the index row
-%%   {{site, Hostname}, Gen, Site}               one per site
-%%
-%% Hostnames lists the sites' hostnames in published order; Gen is a
-%% fresh, increasing integer for each publish, written into the index
-%% and into every site row of that publish. find_site/1 therefore
-%% copies out only the one site row (and the index row's Gen, an
-%% integer), not every site with its compiled routes, which matters
-%% because it runs on every handshake and again in every connection.
-%% current/0 and sites/0 assemble the whole value from the rows.
-%%
-%% Atomicity: publish/3 writes the index and all the new site rows in
-%% one ets:insert/2 of a list, which is atomic and isolated, so a
-%% reader sees all of it or none of it. A replaced site keeps its key,
-%% so is overwritten with no gap. A site the new configuration drops
-%% has its row deleted only afterwards; until then the row is stale,
-%% and a reader ignores it, because its Gen is older than the index's
-%% (find_site/1 reads the index Gen first, then the row). So a removed
-%% site stops being found at the instant the new index is written, and
-%% its row is merely garbage for a moment. A reader that read the old
-%% index just before a publish and looks the row up just after the
-%% publish sees either a newer row (the site is in the new
-%% configuration, and the answer is the new one: the lookup is simply
-%% linearised after the publish) or, if the site was removed and its
-%% row already deleted, no row, which is not_found, correct for the
-%% new configuration; it never crashes and never returns a site that
-%% the configuration it consulted lacks. current/0 reads the index and
-%% then the rows, and starts again if any row is missing or newer than
-%% the index it read, so it too returns one publish's value.
-%%
-%% Writers are not serialised by the table: publish/3 assumes one
-%% publisher at a time, which blizanci_servlets provides. Hostnames
-%% are unique in a validated configuration; if not, the first of a
-%% name wins, as lookup always did.
-%%
-%% This process does nothing else, deliberately: it creates the table
-%% from the initial configuration and then only waits, so that nothing
-%% in it can crash and take the table (and every applied change) with
-%% it. Readers and writers use the table directly. The servlets'
-%% lifecycle is blizanci_servlets, supervised after this process, so a
-%% crash there leaves the table alone.
-%%
-%% It is supervised first (see blizanci_sup), so the table exists
-%% before anything else starts, and is stopped last.
+%% the servlet modules it declares, and its sites.  The table layout,
+%% its atomic replacement and why this process does nothing else are
+%% described in the manual chapter 'Internals'
+%% (doc/manual/internals.gmi).
 
 -module(blizanci_conf_serv).
 

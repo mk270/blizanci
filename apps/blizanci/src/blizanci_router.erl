@@ -14,28 +14,10 @@
 
 
 %% A route as configured.  The old format, {Proto, Regex, Module, Auth,
-%% Opts}, is translated (see below); the new one is a tagged tuple,
-%% {mount, Proto, Path, Module, Auth, Opts} or {regex, Proto, Re, Module,
-%% Auth, Opts}.
-%%
-%% A mount Path must be a non-empty string or binary (UTF-8) that starts
-%% with "/".  Split on "/", it may have no empty segment (so no "//"),
-%% except that one trailing "/" is allowed and ignored, no "." or ".."
-%% segment and no control character.  "/" is the whole site.  A mount
-%% matches whole path segments only: "/docs" and "/docs/" are the same
-%% and match "/docs", "/docs/" and "/docs/a.gmi", but not "/docsx".  The
-%% servlet's PATH is what follows the mount, without a leading slash
-%% (empty for "/docs" itself); FULL_PATH is the whole request path.
-%% Request paths here are the decoded ones, without the leading slash.
-%%
-%% A regex route's Re must match the WHOLE request path (it is anchored
-%% by wrapping it in \A(?:...)\z, so a trailing comment in (?x) mode
-%% will not compile), and must have a named group PATH and none called
-%% FULL_PATH.  Other named groups pass through to the servlet.
-%%
-%% An old-format tuple behaves exactly as before: its regex is searched
-%% for, not anchored, in the path, and must have a PATH group.  FULL_PATH
-%% is added to its Matches unless its regex has a group of that name.
+%% Opts}, is translated; the new one is a tagged tuple, {mount, Proto,
+%% Path, Module, Auth, Opts} or {regex, Proto, Re, Module, Auth, Opts}.
+%% The rules for mount paths, regexes and old-format routes are in the
+%% manual chapter 'Routing' (doc/manual/routing.gmi).
 -type route_info() :: {'mount', Proto :: atom(), Path :: string() | binary(),
                        Module :: module(), Auth :: authorisation_config(),
                        Opts :: map()}
@@ -93,33 +75,12 @@ Old-format routes are translated, not refused.  If there are any,
 one warning is logged saying how many.  New-format routes never
 trigger it.
 
-A table that validated is also checked for shadowed routes, which
-can never be reached because an earlier route of the same protocol
-(gemini routes are compared only with gemini routes, titan with
-titan) matches every request they could.  One warning is logged for
-each shadowed route, naming it and the first route shadowing it by
-position and kind, and by mount path or regex.  This only warns: it
-never refuses a table or changes routing, and it can be turned off
-with the option warn_shadowed (default true).  Auth is not
-considered.  The rules are:
-
-Mount against mount is exact: the earlier mount shadows the later
-if its segments are a prefix of the later one's segments, so "/"
-shadows every later mount, and so does an equal mount, but "/docs"
-does not shadow "/docsx".
-
-Whenever a regex is involved (as either route, old-format or not)
-overlap cannot be decided, so it is probed, and a false negative is
-preferred to a false positive.  Sample paths are derived from the
-later route: for a mount M, M itself, M/x and M/a/b; for a regex,
-the literal text its source starts with (a leading ^ skipped, the
-text cut short before a quantifier, and none at all if the source
-has a vertical bar), L, plus L followed by x, a/b and x.gmi.  Only
-samples that the later route itself matches are kept, and with
-fewer than two of them nothing is reported.  The earlier route is
-then run on every sample with the router's own selector, and the
-later route is reported only if the earlier one matches all of them.
-A partial overlap is never reported.
+A table that validated is also checked for shadowed routes, which can
+never be reached because an earlier route of the same protocol
+matches every request they could.  One warning is logged for each.
+This only warns, and can be turned off with the option warn_shadowed
+(default true).  The rules are in the manual chapter 'Routing',
+section 'Shadowing'.
 """.
 -spec prepare(RouteInfo, Realms, Opts) -> Result
               when RouteInfo :: [route_info()],
@@ -179,7 +140,7 @@ warn_old_format(RouteInfo, Opts) ->
         N -> logger:warning(
                "routing: ~s~b routes use the old tuple format "
                "{Proto, Regex, Module, Auth, Opts}; translated, "
-               "behaviour unchanged (see README, Routing)",
+               "behaviour unchanged (see manual, Routing)",
                [site_prefix(Opts), N])
     end.
 
@@ -1445,7 +1406,7 @@ old_format_warning_test_() ->
     [?_assertEqual([{warning,
                      "routing: 3 routes use the old tuple format "
                      "{Proto, Regex, Module, Auth, Opts}; translated, "
-                     "behaviour unchanged (see README, Routing)"}],
+                     "behaviour unchanged (see manual, Routing)"}],
                    Warn(Mounts ++ Olds, #{})),
      ?_assertMatch([{warning, "routing: 1 routes use" ++ _}],
                    Warn(Mounts ++ [hd(Olds)], #{})),

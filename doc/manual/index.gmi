@@ -1,0 +1,31 @@
+# Blizanci - a Gemini server
+
+Blizanci is a Gemini protocol server, designed primarily for robustness and security. This is its manual.
+
+Author: Martin Keegan, Copyright (C) 2020-2026, Martin Keegan. Licensed under the Apache Licence, Version 2.0.
+
+## Features
+
+* TLS client certificate support
+* single-user CGI
+* distributed PKI: authorisation by subject or issuer of certificates
+* Titan protocol uploads
+* servlet interface for in-process dynamic page generation
+
+## Chapters
+
+The chapters are written for the operator first (configuration, routing, authorisation, CGI, Titan) and then for the developer (servlets, request handling, internals). Dynamic content is produced by servlets; the contract a servlet module must meet is described, in three layers (module, servlet process, gateway), in the Servlets chapter, with the container's side of the last two.
+
+=> configuration.gmi 2. Configuration: keys, sites, realms, start-up errors
+=> routing.gmi 3. Routing: route kinds, mounts, regex routes, old-format routes, shadowing
+=> authorisation.gmi 4. Authorisation: policies and realms
+=> servlets.gmi 5. Servlets: the servlet contract
+=> cgi.gmi 6. CGI
+=> titan-and-static.gmi 7. Titan and static files
+=> request-handling.gmi 8. Request handling: connection, request pipeline, percent-decoding
+=> internals.gmi 9. Internals: configuration table, servlets lifecycle, supervision tree
+=> logging.gmi 10. Logging
+
+## Building and running
+
+See the README for the prerequisites, how to build blizanci and how to run it. The manual's Markdown form is generated from the Gemtext sources in doc/manual by doc/manual/build-md.sh.

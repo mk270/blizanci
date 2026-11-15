@@ -1,0 +1,42 @@
+# Authorisation
+
+Every route has an authorisation policy, the Auth element of the route tuple (see the Routing chapter). The policy is checked by the module blizanci_auth before the servlet is called.
+
+=> routing.gmi Routing
+
+## Policies
+
+The Auth element of a route is one of:
+
+* public: anyone may request it; no certificate requirement
+* restricted: the client must present a certificate; which one does not matter
+* {private, {realm, Name}}: the client's certificate must be signed by a CA certificate of the named realm
+* {private, [{realm, Name1}, {realm, Name2}]}: as above, for any of the realms in the list
+
+Realm names are binaries, e.g. {realm, <<"staff">>}; see Realms, below. A realm is looked up when the route is built, at start-up (or at blizanci_config:apply/1), not per request: the route's realms are resolved then, and the route holds the certificates, so nothing is looked up per request. A realm that is not defined is an error naming the route and the realm. Mounts and regex routes accept only these realm policies; a {private, CAFiles} (a list of file names, even an empty one) in them is an error that says to define a realm.
+
+## Failures
+
+A failed check gives the client one of these statuses (see blizanci_status):
+
+* 60, certificate required: no client certificate on a restricted or private route.
+* 62: a certificate outside its validity period, expired or not yet valid. This is checked before the policy, so it applies to restricted routes too, and a certificate that cannot be decoded at all is likewise 62.
+* 61, certificate unauthorised: on a private route, a certificate that none of the route's CAs signed.
+
+## Realms
+
+A realm is a named set of CA certificates, and nothing more. Realms are global: defined once, in the top-level realms key, and shared by all sites (see blizanci_auth:add_realm/3, which decodes the files when the realm is defined):
+
+```
+{realms, [{<<"staff">>, ["ssl/staff-ca1.pem", "ssl/staff-ca2.pem"]}]}
+```
+
+A client certificate is accepted for a route if it is signed by any certificate in any file of any realm the route names. A CA file may be a bundle: trust extends to every certificate in a file, not just the first. Names are case-sensitive binaries of 1 to 64 printable ASCII characters. The files are read, and must hold a certificate, when the table is built; a change to a CA file takes effect only at blizanci_config:apply/1 or on restart.
+
+A realm may have an empty file list. A private route on it then authorises nobody: a client sending no certificate gets status 60 (certificate required), and one sending a valid certificate gets 61 (certificate unauthorised). No warning is logged.
+
+## The older {private, Files} form
+
+The older form, {private, Files}, lists CA files directly and is the one that old-format 5-tuple routes still use; new-format mount and regex routes accept only realm policies. The CA files of such a route are read ONCE, when the route is built (blizanci_auth:valid_authz_policy/1), and every certificate found in each file is decoded and kept in the route's policy: {private, Files, Certs}. A request is checked against those decoded certificates and does no file I/O, so a CA file that is later deleted, damaged or made unreadable does not affect a running route. The consequence is that a changed CA file takes effect only when the route is rebuilt (blizanci_config:apply/1) or the server is restarted.
+
+As with realms, a CA file may be a bundle: the client certificate is accepted if it is signed by ANY certificate in ANY of the route's files.

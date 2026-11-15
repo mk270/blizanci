@@ -6,29 +6,9 @@
 
 -moduledoc """
 Percent-decoding of the path of a request URL, and the reverse for
-redirects.
+redirects. This is the one place where a request path is decoded.
 
-This is the one place where a request path is decoded. The rules:
-
-- The path is split on "/" first, and each segment is decoded on its
-  own, so an escaped "/" cannot create a new separator (it is
-  refused).
-- Every "%" must be followed by two hex digits, in either case;
-  otherwise the path is malformed.
-- Decoding happens exactly once: "%2520" gives the text "%20".
-- The result may contain only printable ASCII (16#20 to 16#7E). NUL,
-  other control characters, DEL and every non-ASCII byte are refused,
-  whether they were written raw or as escapes, valid UTF-8 or not.
-  (A decoded name is therefore also a valid name in any file name
-  encoding.) This is a deliberate policy: names stay in a closed
-  character set, so invisible, bidirectional and look-alike
-  characters cannot appear.
-- A decoded segment may not be "." or "..".
-
-
-A decoded path is returned as `{decoded_path, Bin}`, so that it is
-distinguishable from a raw one. Callers outside this module may unwrap
-it (and the request layer does).
+See the manual chapter [Request handling](request-handling.md).
 """.
 
 -export([decode_path/1, split_titan/1, encode_path/1]).

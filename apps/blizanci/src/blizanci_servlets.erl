@@ -2,29 +2,10 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% Owns the lifecycle of the declared servlets' shared resources. A
-%% servlet is a module implementing the blizanci_servlet behaviour; its
-%% start/0 sets up whatever the module needs in order to serve requests
-%% (for blizanci_cgi and blizanci_titan, a pool of worker processes) and
-%% its stop/0 tears that down again.
-%%
-%% The pools themselves live under ppool's own supervisor, outside our
-%% tree; this process is what represents them in it. On start it takes
-%% the declared list from the configuration table (blizanci_conf_serv),
-%% not from any start argument, so a restart sees whatever
-%% blizanci_config:apply/1 last published, and calls start/0 on each,
-%% which is harmless for a pool that is already running. On termination
-%% it calls stop/0 on the servlets it believes are running. A stop/0
-%% that raises or returns anything other than ok is logged with
-%% logger:warning and ignored, here and on apply/1 and after a failed
-%% start, so every servlet is stopped and this process never crashes
-%% over one. The list of servlets running is
-%% kept in its own state, not read from the table, because when the
-%% table owner dies the table is gone before this process terminates.
-%%
-%% blizanci_config:apply/1 comes here (reconfigure/3), so the declared
-%% list and the real pools change in one place, one request at a time.
-%% It is supervised after the table owner and before the listener.
+%% Owns the lifecycle of the declared servlets' shared resources: calls
+%% each servlet's start/0 and stop/0, and applies configuration changes
+%% to them.  See the manual chapter 'Internals'
+%% (doc/manual/internals.gmi).
 
 -module(blizanci_servlets).
 

@@ -5,41 +5,10 @@
 -module(blizanci_auth).
 
 -moduledoc """
-The authorisation policies of a route are:
+The authorisation policies of a route (public, restricted, private)
+and the checking of a client certificate against them.
 
-- `private`: certificate must be signed by one of the listed CAs
-- `restricted`: certificate must be presented
-- `public`: no certificate requirement
-
-A private route names authentication realms: `{private, Realm}` or
-`{private, [Realm]}`.  A realm is a named set of CA files, defined once
-for the whole server (see add_realm/3) and decoded then.  The route's
-realms are resolved when it is built, and it holds the certificates;
-nothing is looked up per request.
-
-A failed check gives the client one of these statuses (see
-blizanci_status).  No client certificate (on a restricted or private
-route): 60.  A certificate outside its validity period, expired or
-not yet valid: 62; this is checked before the policy, so it applies
-to restricted routes too, and a certificate that cannot be decoded at
-all is likewise 62.  On a private route, a certificate that none of
-the route's CAs signed: 61.
-
-The older form, `{private, Files}`, lists CA files directly and is the
-one that old-format 5-tuple routes still use; new-format `{mount, ...}`
-and `{regex, ...}` routes accept only realm policies.  The CA files of
-such a route are read ONCE, when the route is built
-(valid_authz_policy/1), and every certificate found in each file is
-decoded and kept in the route's policy: `{private, Files, Certs}`.  A
-request is checked against those decoded certificates and does no file
-I/O, so a CA file that is later deleted, damaged or made unreadable
-does not affect a running route.  The consequence is that a changed CA
-file takes effect only when the route is rebuilt (blizanci_config:
-apply/1) or the server is restarted.
-
-A CA file may be a bundle: the client certificate is accepted if it is
-signed by ANY certificate in ANY of the route's files, so trust extends
-to every certificate in a file, not just the first.
+See the manual chapter [Authorisation](authorisation.md).
 """.
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").

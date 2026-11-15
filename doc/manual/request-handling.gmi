@@ -1,0 +1,83 @@
+# Request handling
+
+The path of a request through the server is in two halves. The first half, from TLS data arriving at the connection process to the call of blizanci_request:handle_line/4, is in the module blizanci_connection. The second half, from the parsed request line to the servlet, is in blizanci_request, whose entry point is handle_line/4. In both, the main code path consists in transforming data and handing it off down the call chain (always towards the bottom of the file).
+
+## The connection
+
+The module blizanci_connection is the first half of the request path: from TLS data arriving at the connection process (start_link/3 is the ranch entry point) to the call of blizanci_request:handle_line/4. The steps are:
+
+```
+handle_info({ssl, ...}):
+  new data from TLS, add it to buffer
+
+handle_ssl(...):
+  calls handle_request/2, turns any exception into a 40 response,
+  re-activates the socket and sends the response
+
+handle_request(...):
+  extract line from buffer if one is complete
+
+blizanci_request:handle_line(...):
+  decode URL from line (i.e., Unicode, RFC-3986 percent escaping);
+  the rest of the request pipeline continues in that module
+```
+
+Once a servlet has been started, further client data is instead passed to it by handle_request/2 via blizanci_servlet_container:handle_client_data/2. See the Servlets chapter.
+
+=> servlets.gmi Servlets
+
+## The request pipeline
+
+The module blizanci_request is the second half of the request path. The steps, each calling the next:
+
+```
+handle_line(...):
+  check the line is valid UTF-8, and parse it into a URL (the path
+  is not percent-decoded here; that is done later, see handle_file)
+
+handle_parsed_url(...):
+  provide defaults for missing URL parts, such as port number
+
+handle_url(...):
+  strip out requests for non-Gemini URLs, requests to proxy, etc
+
+handle_gemini_url(...):
+  strip out Gemini requests unrelated to this server, normalize URL
+
+handle_path(...):
+  strip out multiple leading slashes from path component of URL
+
+handle_file(...):
+  percent-decode the path (via blizanci_urlpath), then strip out
+  requests involving ".."
+
+handle_decoded(...):
+  refuse a decoded path containing ".."
+
+serve(...):
+  pass the request to blizanci_router:route/4
+
+[the processing is handed off to a servlet, which through callbacks then
+ does something with the path, e.g. serve_file/2 in blizanci_static;
+ that is outside this module.]
+```
+
+Every handle_* function in the chain above, starting with handle_line, returns a response of type gemini_response(). The routing of the request from there is described in the Routing chapter.
+
+=> routing.gmi Routing
+
+## Percent-decoding
+
+The module blizanci_urlpath does the percent-decoding of the path of a request URL, and the reverse for redirects. It is the one place where a request path is decoded. The rules:
+
+* The path is split on "/" first, and each segment is decoded on its own, so an escaped "/" cannot create a new separator (it is refused).
+* Every "%" must be followed by two hex digits, in either case; otherwise the path is malformed.
+* Decoding happens exactly once: "%2520" gives the text "%20".
+* The result may contain only printable ASCII (16#20 to 16#7E). NUL, other control characters, DEL and every non-ASCII byte are refused, whether they were written raw or as escapes, valid UTF-8 or not. (A decoded name is therefore also a valid name in any file name encoding.) This is a deliberate policy: names stay in a closed character set, so invisible, bidirectional and look-alike characters cannot appear.
+* A decoded segment may not be "." or "..".
+
+A decoded path is returned as {decoded_path, Bin}, so that it is distinguishable from a raw one. Callers outside this module may unwrap it (and the request layer does).
+
+## Path confinement
+
+Every servlet that resolves a request path against a configured root directory (CGI, static files, Titan uploads) does so through blizanci_path:confine/2, which joins the path onto the root, canonicalises the result and confines it to lie under the root. File names are bytes, so the name that is checked is exactly the name that is opened. A path which cannot be canonicalised and a path which resolves outside the root are deliberately reported identically, as file_not_found, so that a remote client cannot tell "this does not exist" from "you tried to escape the root". Hidden files (any path segment beginning with a dot) are refused in the same way, whatever the servlet; the one exception, a ".well-known" directory directly under the root, is available only to a caller that asks for it (Titan does). The reference for the rules is the documentation of blizanci_path:confine/2 in the generated API documentation.
