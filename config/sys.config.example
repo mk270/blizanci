@@ -2,76 +2,58 @@
 %% except as noted; the values shown are examples, not all defaults.
 [
   {blizanci, [
-   {certfile, "/path/to/blizanci/ssl/certificate.pem"},
-   {keyfile, "/path/to/blizanci/ssl/key.pem"},
-   {hostname, "your.fully.qualified.host.name"},
+   %% The port to listen on; 1965 if left out.
+   {port, 1965},
 
-   %% Where the documents and CGI scripts are (defaults shown).
-   {docroot, "./public_gemini"},
-   {cgiroot, "./cgi-bin"},
+   %% Authentication realms, global to all sites: named sets of CA
+   %% certificates that client certificates are checked against.
+   %% {Name :: binary(), [CAFile]}.  A route names one as
+   %% {private, {realm, Name}}.
+   {realms, [{<<"staff">>, ["/path/to/blizanci/ssl/staff-ca.pem"]}]},
 
-   %% CA certificates for client certificates: shorthand for a realm
-   %% named <<"default">>, used by the Titan route below.
-   {ca_certs, ["/path/to/blizanci/ssl/cacert.pem"]},
-
-   %% Other realms, global to all sites: {Name :: binary(), [CAFile]}.
-   %% Do not define <<"default">> here if ca_certs is set.
-   %% {realms, [{<<"staff">>, ["/path/to/staff-ca1.pem",
-   %%                          "/path/to/staff-ca2.pem"]}]},
-
-   %% Opt in to Titan uploads in the default routing table.  There is
-   %% no default: an absolute path to an existing directory on the same
-   %% filesystem as docroot.  Ignored if routing is given.
-   %% {titan_work_dir, "/path/to/titan-work"},
-
-   %% An explicit routing table, replacing the default one, which is
-   %% /cgi-bin, then / (and Titan, if titan_work_dir is set).  First
-   %% match wins.  A mount matches whole path segments, and the servlet
-   %% gets the remainder as PATH, so each mount names its own root.
-   %% See README, Routing.
-   %% {routing, [
-   %%   {mount, gemini, "/cgi-bin", blizanci_cgi, public,
-   %%    #{cgiroot => "./cgi-bin"}},
-   %%   {mount, gemini, "/private", blizanci_static,
-   %%    {private, {realm, <<"default">>}},
-   %%    #{docroot => "./public_gemini/private"}},
-   %%   {mount, gemini, "/restricted", blizanci_static, restricted,
-   %%    #{docroot => "./public_gemini/restricted"}},
-   %%   {mount, gemini, "/", blizanci_static, public,
-   %%    #{docroot => "./public_gemini"}},
-   %%   {mount, titan, "/", blizanci_titan,
-   %%    {private, {realm, <<"default">>}},
-   %%    #{docroot => "./public_gemini",
-   %%      work_dir => "/path/to/titan-work"}}
-   %% ]},
-
-   %% Several sites on one port, instead of the single-site keys above.
-   %% The two forms cannot be mixed: with `sites', the keys hostname,
-   %% certfile, keyfile, docroot, cgiroot, ca_certs, titan_work_dir and
-   %% routing must all be left out (start-up is refused otherwise).
-   %% A site is {Hostname, Options}; Options takes certfile, keyfile and
-   %% routing only, and all three are required.  There is no default
-   %% routing table, so each site gives its own routes.  port,
-   %% servlets and realms stay global.  SNI picks the site.  See
-   %% README, Several sites.
-   %% {sites, [
-   %%   {"a.example", [
-   %%     {certfile, "/path/to/a/certificate.pem"},
-   %%     {keyfile, "/path/to/a/key.pem"},
-   %%     {routing, [
-   %%       {mount, gemini, "/", blizanci_static, public,
-   %%        #{docroot => "/path/to/a/public_gemini"}}
-   %%     ]}]},
-   %%   {"b.example", [
-   %%     {certfile, "/path/to/b/certificate.pem"},
-   %%     {keyfile, "/path/to/b/key.pem"},
-   %%     {routing, [
-   %%       {mount, gemini, "/", blizanci_static, public,
-   %%        #{docroot => "/path/to/b/public_gemini"}}
-   %%     ]}]}
-   %% ]},
-
-   {port, 1965}
+   %% The sites served on the port, at least one.  A site is
+   %% {Hostname, Options}; Options takes certfile, keyfile and routing
+   %% only, and all three are required.  There is no default routing
+   %% table, so each site gives its own routes.  The routes are tried in
+   %% order, first match wins.  A mount matches whole path segments, and
+   %% the servlet gets the remainder as PATH, so each mount names its
+   %% own root.  SNI picks the site.  See README, Sites and Routing.
+   %%
+   %% The old flat keys (hostname, certfile, keyfile, docroot, cgiroot,
+   %% ca_certs, titan_work_dir and routing at the top level) are no
+   %% longer supported: start-up is refused if any is present.
+   {sites, [
+    {"your.fully.qualified.host.name", [
+      {certfile, "/path/to/blizanci/ssl/certificate.pem"},
+      {keyfile, "/path/to/blizanci/ssl/key.pem"},
+      {routing, [
+        {mount, gemini, "/cgi-bin", blizanci_cgi, public,
+         #{cgiroot => "./cgi-bin"}},
+        %% needs a client certificate issued by a CA of realm staff
+        {mount, gemini, "/private", blizanci_static,
+         {private, {realm, <<"staff">>}},
+         #{docroot => "./public_gemini/private"}},
+        %% any client certificate will do
+        {mount, gemini, "/restricted", blizanci_static, restricted,
+         #{docroot => "./public_gemini/restricted"}},
+        {mount, gemini, "/", blizanci_static, public,
+         #{docroot => "./public_gemini"}}
+        %% Titan uploads: work_dir is an absolute path to an existing
+        %% directory on the same filesystem as the docroot.
+        %% , {mount, titan, "/", blizanci_titan,
+        %%    {private, {realm, <<"staff">>}},
+        %%    #{docroot => "./public_gemini",
+        %%      work_dir => "/path/to/titan-work"}}
+      ]}]}
+    %% A second site on the same port:
+    %% , {"b.example", [
+    %%     {certfile, "/path/to/b/certificate.pem"},
+    %%     {keyfile, "/path/to/b/key.pem"},
+    %%     {routing, [
+    %%       {mount, gemini, "/", blizanci_static, public,
+    %%        #{docroot => "/path/to/b/public_gemini"}}
+    %%     ]}]}
+   ]}
    ]},
   {kernel, [
    {logger_level, debug},

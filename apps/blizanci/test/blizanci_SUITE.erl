@@ -23,9 +23,9 @@
          init_per_testcase/2, end_per_testcase/2]).
 -export([static/1, cgi/1, titan/1, sni_live_apply/1, restart/1,
          no_leaks/1, tls_versions/1, client_cert_request/1,
-         client_cert_live_apply/1, default_table/1,
-         default_table_titan/1, mounts_table/1, mounts_table_empty_realm/1,
-         default_table_titan_no_ca_certs/1, bad_config_refused/1,
+         client_cert_live_apply/1, mounts_table/1,
+         mounts_table_empty_realm/1, titan_private/1,
+         titan_private_empty_realm/1, bad_config_refused/1,
          sites_from_env/1]).
 -export([log/2]). % logger handler callback, see cert_requested/4
 
@@ -37,10 +37,8 @@
 all() ->
     [static, cgi, titan, sni_live_apply, restart, no_leaks,
      tls_versions, client_cert_request, client_cert_live_apply,
-     default_table, default_table_titan, mounts_table,
-     mounts_table_empty_realm,
-     default_table_titan_no_ca_certs, bad_config_refused,
-     sites_from_env].
+     mounts_table, mounts_table_empty_realm, titan_private,
+     titan_private_empty_realm, bad_config_refused, sites_from_env].
 
 %%%===================================================================
 %%% Setup
@@ -111,22 +109,19 @@ init_per_testcase(Case, Config) ->
          {gemini, "(?<PATH>.*)", blizanci_static, public,
           #{docroot => Docroot}}],
     Env = [{port, Port},
-           {hostname, ?HOST},
-           {certfile, ?config(certfile, Config)},
-           {keyfile, ?config(keyfile, Config)},
-           {docroot, Docroot},
-           {routing, Routing}],
+           {sites, [{?HOST, [{certfile, ?config(certfile, Config)},
+                             {keyfile, ?config(keyfile, Config)},
+                             {routing, Routing}]}]}],
     %% load first: loading after set_env would reset the env
     ok = load_app(),
     [ ok = application:set_env(blizanci, K, V) || {K, V} <- Env ],
     [{port, Port}, {docroot, Docroot}, {cgiroot, CgiRoot},
-     {casedir, Dir} | Config].
+     {workdir, Work}, {casedir, Dir} | Config].
 
 end_per_testcase(_Case, _Config) ->
     _ = application:stop(blizanci),
     [ application:unset_env(blizanci, K)
-      || K <- [port, hostname, certfile, keyfile, docroot, routing,
-               cgiroot, ca_certs, titan_work_dir, realms, sites] ],
+      || K <- [port, realms, sites] ],
     ok.
 
 %%%===================================================================
@@ -191,78 +186,7 @@ titan(Config) ->
     {_, Body} = split_header(R),
     ok.
 
-%% The default routing table (no routing key), from docroot, cgiroot,
-%% ca_certs and titan_work_dir, served end to end: /cgi-bin runs the
-%% script in cgiroot, the rest is public; a directory is redirected to
-%% its index.
-default_table(Config) ->
-    use_default_table(Config, false),
-    Docroot = ?config(docroot, Config),
-    ok = filelib:ensure_path(filename:join(Docroot, "sub")),
-    ok = file:write_file(filename:join(Docroot, "sub/index.gemini"),
-                         <<"# sub">>),
-    CgiOk = exec_works() =:= ok,
-    CgiOk andalso write_cgi_script(Config),
-    {ok, _} = application:ensure_all_started(blizanci),
-    Port = ?config(port, Config),
-    Get = fun(Extra, Path) ->
-              fetch(Port, ?HOST, 'tlsv1.3', Extra, Path)
-          end,
-    {ok, <<"20 text/gemini", _/binary>> = R1} = Get([], "/hello.gmi"),
-    {_, <<"# Hello\n">>} = split_header(R1),
-    {ok, <<"51 ", _/binary>>} = Get([], "/nothere.gmi"),
-    %% directories: the redirect goes to the index
-    Redirect = fun(Rel) ->
-                   iolist_to_binary(["31 gemini://", ?HOST, ":",
-                                     integer_to_list(Port), Rel,
-                                     "\r\n"])
-               end,
-    [ {ok, Want} = Get([], Path)
-      || {Path, Want} <-
-             [{"/sub", Redirect("/sub/index.gemini")},
-              {"/sub/", Redirect("/sub/index.gemini")}] ],
-    {ok, R5} = Get([], "/sub/index.gemini"),
-    {_, <<"# sub">>} = split_header(R5),
-    %% cgi-bin runs the script in cgiroot
-    case CgiOk of
-        true ->
-            {ok, <<"20 text/plain\r\n", "hi\n">>} =
-                Get([], "/cgi-bin/hi.sh");
-        false -> ok
-    end,
-    %% with no titan_work_dir there is no Titan route
-    {ok, <<"5", _/binary>>} =
-        converse(Port, ?HOST,
-                 ["titan://" ?HOST ":" ++ integer_to_list(Port)
-                  ++ "/up.txt;size=1;mime=text/plain\r\n", "x"]),
-    ok.
-
-%% With titan_work_dir set the default table gets a Titan route that
-%% needs the default realm's certificate and shares the docroot.
-default_table_titan(Config) ->
-    use_default_table(Config, true),
-    {ok, _} = application:ensure_all_started(blizanci),
-    Port = ?config(port, Config),
-    Cert = ?config(client_opts, Config),
-    Up = fun(Extra) ->
-             Line = "titan://" ?HOST ":" ++ integer_to_list(Port)
-                 ++ "/up.txt;size=2;mime=text/plain\r\n",
-             {ok, S} = connect(Port, ?HOST, 'tlsv1.3', Extra),
-             try
-                 ok = ssl:send(S, [Line, "hi"]),
-                 recv_all(S, <<>>)
-             after
-                 ssl:close(S)
-             end
-         end,
-    {ok, <<"60 ", _/binary>>} = Up([]),
-    {ok, <<"2", _/binary>>} = Up(Cert),
-    ok = wait_for_file(filename:join(?config(docroot, Config), "up.txt")),
-    {ok, R} = fetch(Port, ?HOST, ?HOST, "/up.txt"),
-    {_, <<"hi">>} = split_header(R),
-    ok.
-
-%% An explicit routing table with /private (realm "default") and
+%% An explicit routing table with /private (realm "staff") and
 %% /restricted mounts over subdirectories of the docroot, beside
 %% /cgi-bin and /, served end to end: private and restricted need a
 %% client certificate and serve their own directories, /cgi-bin runs the
@@ -270,7 +194,7 @@ default_table_titan(Config) ->
 %% its index with the mount kept; "private" is matched as a whole
 %% segment only.
 mounts_table(Config) ->
-    use_mounts_table(Config, [{<<"default">>,
+    use_mounts_table(Config, [{<<"staff">>,
                                [?config(client_ca, Config)]}]),
     Docroot = ?config(docroot, Config),
     [ ok = filelib:ensure_path(filename:join(Docroot, D))
@@ -328,7 +252,7 @@ mounts_table(Config) ->
 %% nobody, not even a certificate; nothing falls through to the public
 %% mount.
 mounts_table_empty_realm(Config) ->
-    use_mounts_table(Config, [{<<"default">>, []}]),
+    use_mounts_table(Config, [{<<"staff">>, []}]),
     Docroot = ?config(docroot, Config),
     ok = filelib:ensure_path(filename:join(Docroot, "private")),
     ok = filelib:ensure_path(filename:join(Docroot, "restricted")),
@@ -349,57 +273,79 @@ mounts_table_empty_realm(Config) ->
 %% realms key.
 use_mounts_table(Config, Realms) ->
     Docroot = ?config(docroot, Config),
-    ok = application:unset_env(blizanci, ca_certs),
-    ok = application:set_env(blizanci, realms, Realms),
-    ok = application:set_env(blizanci, cgiroot, ?config(cgiroot, Config)),
-    ok = application:set_env(
-           blizanci, routing,
-           [{mount, gemini, "/cgi-bin", blizanci_cgi, public,
-             #{ cgiroot => ?config(cgiroot, Config) }},
-            {mount, gemini, "/private", blizanci_static,
-             {private, {realm, <<"default">>}},
-             #{ docroot => filename:join(Docroot, "private") }},
-            {mount, gemini, "/restricted", blizanci_static, restricted,
-             #{ docroot => filename:join(Docroot, "restricted") }},
-            {mount, gemini, "/", blizanci_static, public,
-             #{ docroot => Docroot }}]).
+    use_site(Config, Realms,
+             [{mount, gemini, "/cgi-bin", blizanci_cgi, public,
+               #{ cgiroot => ?config(cgiroot, Config) }},
+              {mount, gemini, "/private", blizanci_static,
+               {private, {realm, <<"staff">>}},
+               #{ docroot => filename:join(Docroot, "private") }},
+              {mount, gemini, "/restricted", blizanci_static, restricted,
+               #{ docroot => filename:join(Docroot, "restricted") }},
+              {mount, gemini, "/", blizanci_static, public,
+               #{ docroot => Docroot }}]).
 
-%% titan_work_dir without ca_certs starts: the realm "default" is empty,
-%% so the Titan route authorises nobody (a certificate gets 61), while
-%% the public routes are served as usual.
-default_table_titan_no_ca_certs(Config) ->
-    use_default_table(Config, true),
-    ok = application:unset_env(blizanci, ca_certs),
+%% The one site of the test, with the given routing table, and the
+%% global realms key.
+use_site(Config, Realms, Routing) ->
+    ok = application:set_env(blizanci, realms, Realms),
+    ok = application:set_env(
+           blizanci, sites,
+           [{?HOST, [{certfile, ?config(certfile, Config)},
+                     {keyfile, ?config(keyfile, Config)},
+                     {routing, Routing}]}]).
+
+%% A Titan route that needs a certificate from the realm "staff" and
+%% shares the docroot: without a certificate the answer is 60, with one
+%% from the realm's CA the upload is accepted and the file is then
+%% served.
+titan_private(Config) ->
+    use_titan_private(Config, [{<<"staff">>,
+                                [?config(client_ca, Config)]}]),
     {ok, _} = application:ensure_all_started(blizanci),
     Port = ?config(port, Config),
-    Up = fun(Extra) ->
-             Line = "titan://" ?HOST ":" ++ integer_to_list(Port)
-                 ++ "/up.txt;size=2;mime=text/plain\r\n",
-             {ok, S} = connect(Port, ?HOST, 'tlsv1.3', Extra),
-             try
-                 ok = ssl:send(S, [Line, "hi"]),
-                 recv_all(S, <<>>)
-             after
-                 ssl:close(S)
-             end
-         end,
+    Up = titan_up(Port),
+    {ok, <<"60 ", _/binary>>} = Up([]),
+    {ok, <<"2", _/binary>>} = Up(?config(client_opts, Config)),
+    ok = wait_for_file(filename:join(?config(docroot, Config), "up.txt")),
+    {ok, R} = fetch(Port, ?HOST, ?HOST, "/up.txt"),
+    {_, <<"hi">>} = split_header(R),
+    ok.
+
+%% The same with a realm that has no CA files: it starts, and the Titan
+%% route authorises nobody (a certificate gets 61), while the public
+%% routes are served as usual.
+titan_private_empty_realm(Config) ->
+    use_titan_private(Config, [{<<"staff">>, []}]),
+    {ok, _} = application:ensure_all_started(blizanci),
+    Port = ?config(port, Config),
+    Up = titan_up(Port),
     {ok, <<"60 ", _/binary>>} = Up([]),
     {ok, <<"61 ", _/binary>>} = Up(?config(client_opts, Config)),
     {ok, <<"20 ", _/binary>>} = fetch(Port, ?HOST, ?HOST, "/hello.gmi"),
     ok.
 
-%% Settings for the default table: no routing key; ca_certs is the CA
-%% that issued the client certificate.
-use_default_table(Config, WithTitan) ->
-    ok = application:unset_env(blizanci, routing),
-    ok = application:set_env(blizanci, cgiroot, ?config(cgiroot, Config)),
-    ok = application:set_env(blizanci, ca_certs,
-                             [?config(client_ca, Config)]),
-    case WithTitan of
-        true ->
-            Work = filename:join(?config(casedir, Config), "titan-temp"),
-            ok = application:set_env(blizanci, titan_work_dir, Work);
-        false -> ok
+use_titan_private(Config, Realms) ->
+    Docroot = ?config(docroot, Config),
+    use_site(Config, Realms,
+             [{mount, titan, "/", blizanci_titan,
+               {private, {realm, <<"staff">>}},
+               #{ docroot => Docroot,
+                  work_dir => ?config(workdir, Config) }},
+              {mount, gemini, "/", blizanci_static, public,
+               #{ docroot => Docroot }}]).
+
+%% A function from client TLS options to the reply to a two-byte upload.
+titan_up(Port) ->
+    fun(Extra) ->
+        Line = "titan://" ?HOST ":" ++ integer_to_list(Port)
+            ++ "/up.txt;size=2;mime=text/plain\r\n",
+        {ok, S} = connect(Port, ?HOST, 'tlsv1.3', Extra),
+        try
+            ok = ssl:send(S, [Line, "hi"]),
+            recv_all(S, <<>>)
+        after
+            ssl:close(S)
+        end
     end.
 
 sni_live_apply(Config) ->
@@ -449,10 +395,13 @@ restart(Config) ->
 %% A configuration with several things wrong is refused in one pass:
 %% the start-up failure carries every problem, and nothing is left
 %% running.
-bad_config_refused(_Config) ->
-    ok = application:set_env(blizanci, certfile, "/no/such/cert.pem"),
-    ok = application:set_env(blizanci, routing,
-                             [{gemini, "x", blizanci_static, public, #{}}]),
+bad_config_refused(Config) ->
+    ok = application:set_env(
+           blizanci, sites,
+           [{?HOST, [{certfile, "/no/such/cert.pem"},
+                     {keyfile, ?config(keyfile, Config)},
+                     {routing, [{gemini, "x", blizanci_static, public,
+                                 #{}}]}]}]),
     {error, {blizanci, {{invalid_configuration, Errors}, _}}} =
         application:ensure_all_started(blizanci),
     [{site, ?HOST, {invalid_routing, {bad_route, 1, tuple, _}}},
@@ -469,8 +418,6 @@ bad_config_refused(_Config) ->
 sites_from_env(Config) ->
     Dir = ?config(casedir, Config),
     Port = ?config(port, Config),
-    [ application:unset_env(blizanci, K)
-      || K <- [hostname, certfile, keyfile, docroot, routing] ],
     Sites = [ begin
                   SDir = filename:join(Dir, Name),
                   Root = filename:join(SDir, "docroot"),

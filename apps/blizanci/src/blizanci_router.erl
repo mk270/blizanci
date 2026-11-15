@@ -90,8 +90,8 @@ prepare(RouteInfo, Realms) ->
 %% tuple (the old format) or unknown, and Reason says what is wrong.
 %%
 %% Old-format routes are translated, not refused.  If there are any,
-%% one warning is logged saying how many.  The default routing table
-%% is in the new format and never triggers it.
+%% one warning is logged saying how many.  New-format routes never
+%% trigger it.
 %%
 %% A table that validated is also checked for shadowed routes, which
 %% can never be reached because an earlier route of the same protocol

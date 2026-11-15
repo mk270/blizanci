@@ -24,41 +24,30 @@
 %% Configuration items:
 %%
 %% <dl>
-%%   <dt><code>{ca_certs, [CACertPath::string()]}</code></dt>
-%%   <dd>the path(s) to the certificate authority certificate(s)
-%%       to be used for verifying client certificates;
-%%       may be the empty list. A file may hold several certificates
-%%       (a bundle), all of which are trusted. The files are read when
-%%       the route is built; a change to one takes effect only on
-%%       apply/1 or a restart.</dd>
-%%   <dt><code>{realms, [{Name::binary(), [CACertPath::string()]}]}</code>
-%%   </dt>
-%%   <dd>authentication realms: named sets of CA certificates, global to
-%%       all sites. A route names them as <code>{private, {realm,
-%%       Name}}</code> or a list of those. <code>ca_certs</code> is
-%%       shorthand for a realm named <code>&lt;&lt;"default"&gt;&gt;</code>;
-%%       giving both it and a realm of that name is an error.</dd>
-%%   <dt><code>{certfile, CertPath::string()}</code></dt>
-%%   <dd>the path to the server's certificate</dd>
-%%   <dt><code>{cgiroot, CGIRootPath::string()}</code></dt>
-%%   <dd>the path to the root directory for CGI scripts; normally there
-%%       would only be a single, top-level directory with no
-%%       subdirectories. A single-site shorthand key: used only as input
-%%       to the default routing table (ignored if routing is set).</dd>
-%%   <dt><code>{docroot, DocrootPath::string()}</code></dt>
-%%   <dd>the path to the root of the documents to be served. A
-%%       single-site shorthand key: used only as input to the default
-%%       routing table (ignored if routing is set).</dd>
-%%   <dt><code>{hostname, Hostname::string()}</code></dt>
-%%   <dd>the hostname, folded to lower case (defaults to system hostname)</dd>
-%%   <dt><code>{keyfile, PrivKeyPath::string()}</code></dt>
-%%   <dd>the path to the server's private key</dd>
 %%   <dt><code>{port, Port::integer()}</code></dt>
 %%   <dd>the port to listen on (defaults to 1965); 1 to 65535, so 0 is
 %%       refused</dd>
-%%   <dt><code>{routing, [Route]}</code></dt>
-%%   <dd>the routing table: an ordered list, first match wins, one
-%%       protocol per route. Each entry is
+%%   <dt><code>{realms, [{Name::binary(), [CACertPath::string()]}]}</code>
+%%   </dt>
+%%   <dd>authentication realms: named sets of CA certificates, global to
+%%       all sites, used for verifying client certificates. A set may be
+%%       the empty list. A file may hold several certificates (a
+%%       bundle), all of which are trusted. The files are read when the
+%%       route is built; a change to one takes effect only on apply/1 or
+%%       a restart. A route names a realm as <code>{private, {realm,
+%%       Name}}</code> or a list of those.</dd>
+%%   <dt><code>{servlets, [Module::atom()]}</code></dt>
+%%   <dd>the servlets which routes may use (defaults to blizanci_static,
+%%       blizanci_cgi and blizanci_titan)</dd>
+%%   <dt><code>{sites, [{Hostname::string(), [Option]}]}</code></dt>
+%%   <dd>the sites served on the port, at least one. A site takes
+%%       <code>certfile</code> (the path to the site's certificate),
+%%       <code>keyfile</code> (the path to its private key) and
+%%       <code>routing</code> only, all three required; there is no
+%%       default routing table. The hostname is folded to lower case; a
+%%       name given twice is an error. A site's certificate and key must
+%%       be a matching pair. The routing table is an ordered list, first
+%%       match wins, one protocol per route. Each entry is
 %%       <code>{mount, Proto, Path, Module, Auth, Opts}</code> (whole
 %%       path segments; the servlet's PATH is the remainder after the
 %%       mount), <code>{regex, Proto, Re, Module, Auth, Opts}</code>
@@ -66,28 +55,14 @@
 %%       <code>{Proto, Regex, Module, Auth, Opts}</code>, translated with
 %%       its unanchored behaviour and one start-up warning. FULL_PATH is
 %%       the whole request path. See blizanci_router:prepare/3 and the
-%%       README, Routing. Without this key the default table is
-%%       mounts /cgi-bin and /, plus a Titan route if titan_work_dir is
-%%       set.</dd>
-%%   <dt><code>{sites, [{Hostname::string(), [Option]}]}</code></dt>
-%%   <dd>several sites on one port, instead of the single-site keys. A
-%%       site takes <code>certfile</code>, <code>keyfile</code> and
-%%       <code>routing</code> only, all three required; there is no
-%%       default routing table and no shorthand key (docroot, cgiroot,
-%%       titan_work_dir, ca_certs). <code>port</code>,
-%%       <code>servlets</code> and <code>realms</code> stay global.
-%%       Giving <code>sites</code> together with any single-site key
-%%       (hostname, certfile, keyfile, docroot, cgiroot, ca_certs,
-%%       titan_work_dir, routing) is refused. Hostnames are folded to
-%%       lower case; a name given twice is an error. See the README,
-%%       Several sites.</dd>
-%%   <dt><code>{titan_work_dir, WorkDir::string()}</code></dt>
-%%   <dd>opts in to the Titan route of the default routing table (ignored
-%%       if routing is set): an absolute path to an existing directory on
-%%       the docroot's filesystem. Titan has no default work directory.
-%%       The route requires a client certificate from the realm
-%%       <code>&lt;&lt;"default"&gt;&gt;</code>.</dd>
+%%       README, Sites and Routing.</dd>
 %% </dl>
+%%
+%% The flat keys of the single-site form of earlier versions (hostname,
+%% certfile, keyfile, docroot, cgiroot, ca_certs, titan_work_dir and
+%% routing, at the top level) are no longer supported: if any is set,
+%% with or without sites, start-up is refused with one error naming
+%% them.
 %%
 %% Relative paths are allowed in all configuration items, including the
 %% docroot and cgiroot options of routing entries.
@@ -531,9 +506,6 @@ build_site(Hostname, Cert, Key, Routes, Realms, PrepareOpts) ->
                    Result :: string().
 describe_error({invalid_routing, Reason}) ->
     "invalid routing table: " ++ describe_route_error(Reason);
-describe_error(ca_certs_and_default_realm) ->
-    "ca_certs is shorthand for the realm \"default\", so the realms key "
-    "must not also define one of that name";
 describe_error(hostname_not_lowercase) ->
     "hostname is not lower case";
 describe_error({cert_key_mismatch, Hostname, CertFile, KeyFile}) ->
@@ -575,10 +547,10 @@ describe_error({undeclared_servlet, Hostname, Module}) ->
 describe_error({duplicate_site, Hostname}) ->
     flat("site ~s is configured more than once", [host_text(Hostname)]);
 describe_error(no_sites) ->
-    "no sites are configured";
-describe_error({sites_and_single_site_keys, Keys}) ->
-    flat("the sites key cannot be combined with the single-site keys "
-         "~s; use one or the other",
+    "no sites are configured; the sites key must list at least one";
+describe_error({single_site_keys_not_supported, Keys}) ->
+    flat("the single-site keys ~s are no longer supported; move them "
+         "into an entry of the sites key",
          [lists:join(", ", [ atom_to_list(K) || K <- Keys ])]);
 describe_error({invalid_sites, Value}) ->
     flat("sites must be a list of {Hostname, Options}, not ~0p", [Value]);
@@ -712,8 +684,6 @@ describe_realm_error({invalid_realm, Def}) ->
 describe_realm_error({invalid_realms, Value}) ->
     flat("the realms key must be a list of {Name, CAFiles} pairs, not "
          "~0p", [Value]);
-describe_realm_error(ca_certs_and_default_realm) ->
-    describe_error(ca_certs_and_default_realm);
 describe_realm_error(Reason) ->
     flat("~0p", [Reason]).
 
@@ -868,46 +838,6 @@ proto_opts(Port) ->
 
 -type route_entry() :: tuple().  % see blizanci_router:route_info()
 
--spec routing_table(Docroot, CGIroot, CACerts) -> RoutingTable
-              when Docroot      :: string(),
-                   CGIroot      :: string(),
-                   CACerts      :: [string()],
-                   RoutingTable :: [route_entry()].
-
-routing_table(Docroot, CGIroot, CACerts) ->
-    routing_table(Docroot, CGIroot, CACerts, undefined).
-
-% As routing_table/3; the Titan route is added only if a work_dir is
-% given, as Titan has no default work directory.
--spec routing_table(Docroot, CGIroot, CACerts, WorkDir) -> RoutingTable
-              when Docroot      :: string(),
-                   CGIroot      :: string(),
-                   CACerts      :: [string()],
-                   WorkDir      :: string() | 'undefined',
-                   RoutingTable :: [route_entry()].
-
-routing_table(Docroot, CGIroot, CACerts, WorkDir) ->
-    % Each mount names its own root, as a servlet's PATH is what follows
-    % the mount. CACerts is not used here: the Titan route names the
-    % realm "default", which from_app_env/0 defines from ca_certs.
-    _ = CACerts,
-    [{mount, gemini, "/cgi-bin", blizanci_cgi, public,
-      #{ cgiroot => CGIroot }},
-     {mount, gemini, "/", blizanci_static, public,
-      #{ docroot => Docroot }}]
-    ++ titan_route(Docroot, WorkDir).
-
-
--spec titan_route(Docroot, WorkDir) -> Routes
-              when Docroot :: string(),
-                   WorkDir :: string() | 'undefined',
-                   Routes  :: [route_entry()].
-titan_route(_Docroot, undefined) ->
-    [];
-titan_route(Docroot, WorkDir) ->
-    [{mount, titan, "/", blizanci_titan, {private, {realm, <<"default">>}},
-      #{ docroot => Docroot, work_dir => WorkDir }}].
-
 
 % Which servlets this instance may ever route to -- a static,
 % deploy-time decision (analogous to {applications, [...]} in
@@ -935,20 +865,32 @@ make(Port, Servlets, Sites) ->
      }.
 
 
+% The flat keys of the single-site form of earlier versions, which are
+% no longer supported: their presence is refused.
+-define(OLD_KEYS, [hostname, certfile, keyfile, docroot, cgiroot,
+                   ca_certs, titan_work_dir, routing]).
+
 % The one place that reads sys.config: pulls blizanci's app env into
 % the explicit values make/3 takes. Must be called from within
 % blizanci's own application context (application:get_application/0
 % resolves via the calling process), i.e. from blizanci_app:start/2.
 %
-% Every problem is reported in one pass, as a list of errors, each of
-% which describe_error/1 turns into one line. The configuration is built
-% without stopping at the first error, and then validate_all/1 is run on
-% what was built, so that a bad realm, a bad route, an unreadable
-% certificate and an undeclared servlet are all found together. The
-% order of the list is stable: first the problems of the realms key, then
-% those found building the site (its hostname, then its routes in
-% order), each as {site, Hostname, Reason}, then those of
-% validate_all/1.
+% The sites are configured by the sites key only; the global keys are
+% port, servlets and realms. Any of the flat keys of the old
+% single-site form (see ?OLD_KEYS), with or without sites, is refused
+% as one error naming the keys found, with nothing else reported (it
+% is not known which form was meant). With no sites key the list of
+% sites is empty, and the error is no_sites.
+%
+% Otherwise every problem is reported in one pass, as a list of errors,
+% each of which describe_error/1 turns into one line. The configuration
+% is built without stopping at the first error, and then validate_all/1
+% is run on what was built, so that a bad realm, a bad route, an
+% unreadable certificate and an undeclared servlet are all found
+% together. The order of the list is stable: first the problems of the
+% realms key, then those found building each site in turn (its
+% hostname, then its routes in order), each as {site, Hostname, Reason},
+% then those of validate_all/1.
 %
 % Where one error makes a later check meaningless, it is not allowed to
 % cause a second, misleading one:
@@ -956,10 +898,10 @@ make(Port, Servlets, Sites) ->
 %    unknown_realm error (the realm's own error is already listed); if
 %    the realms key is so malformed that no name can be said to have
 %    failed, no unknown_realm error is reported at all;
-%  - a route that failed to build is left out of the site, and the
+%  - a route that failed to build is left out of its site, and the
 %    checks that need the routes (upload directories, declared servlets)
 %    run on those that did build;
-%  - if the site itself cannot be built (a bad hostname, or an error
+%  - if a site itself cannot be built (a bad hostname, or an error
 %    from site/3), it is left out of the configuration, so that the
 %    sites are not validated and "no sites" is not reported; only the
 %    global checks and the servlets its routes name are.
@@ -967,83 +909,37 @@ make(Port, Servlets, Sites) ->
               when Result :: {'ok', map()} | {'error', [term()]}.
 from_app_env() ->
     {ok, App} = application:get_application(),
-    case application:get_env(App, sites) of
-        {ok, Sites} -> sites_from_env(App, Sites);
-        undefined -> single_site_from_env(App)
+    case [ K || K <- ?OLD_KEYS,
+                application:get_env(App, K) =/= undefined ] of
+        [] -> sites_from_env(App, application:get_env(App, sites, []));
+        Keys -> {error, [{single_site_keys_not_supported, Keys}]}
     end.
 
-
--spec single_site_from_env(App) -> Result
-              when App    :: atom(),
-                   Result :: {'ok', map()} | {'error', [term()]}.
-single_site_from_env(App) ->
-    {ok, Default_Hostname} = inet:gethostname(),
-    Cert = application:get_env(App, certfile, "./ssl/certificate.pem"),
-    Key = application:get_env(App, keyfile, "./ssl/key.pem"),
-    Docroot = application:get_env(App, docroot, "./public_gemini"),
-    CGIroot = application:get_env(App, cgiroot, "./cgi-bin"),
-    CACerts = application:get_env(App, ca_certs, []),
-    TitanWork = application:get_env(App, titan_work_dir, undefined),
-    Default_Routing = routing_table(Docroot, CGIroot, CACerts, TitanWork),
-    % The default table is in the new format, so only an operator's own
-    % routing key can trigger the old-format warning.
-    RouteList = case application:get_env(App, routing) of
-                    {ok, Own} -> Own;
-                    undefined -> Default_Routing
-                end,
-    Port = application:get_env(App, port, ?PORT),
-    Servlets = application:get_env(App, servlets, ?DEFAULT_SERVLETS),
-    Global = global(Port, Servlets),
-    {Realms, Failed, RealmErrors} = realms_from_env(App, CACerts),
-    Outcome = site_from_env(
-                application:get_env(App, hostname, Default_Hostname),
-                Cert, Key, RouteList, Realms, Failed, #{}),
-    assemble(Global, RealmErrors, [Outcome]).
-
-
-% The keys of the single-site configuration, which the sites key
-% replaces: giving both is refused.
--define(SINGLE_SITE_KEYS, [hostname, certfile, keyfile, docroot, cgiroot,
-                           ca_certs, titan_work_dir, routing]).
 
 % The keys a site of the sites key takes, all required.
 -define(SITE_KEYS, [certfile, keyfile, routing]).
 
-% The sites key. Each site is built independently, by the same code as
-% the single site, from its own certfile, keyfile and routing, and the
-% realms (and port, servlets) are the global keys. The sites key with
-% any key of the single-site configuration is refused, as one error
-% naming the keys, with nothing else reported (it is not known which
-% configuration was meant). Otherwise every problem of every site is
-% reported in one pass, in the order of the sites, each labelled by its
-% site; see from_app_env/0 for the order and the cascade rule, which
-% holds for each site.
+% The sites key. Each site is built independently from its own certfile,
+% keyfile and routing, and the realms (and port, servlets) are the
+% global keys. Every problem of every site is reported in one pass, in
+% the order of the sites, each labelled by its site; see from_app_env/0
+% for the order and the cascade rule, which holds for each site.
 -spec sites_from_env(App, Value) -> Result
               when App    :: atom(),
                    Value  :: term(),
                    Result :: {'ok', map()} | {'error', [term()]}.
 sites_from_env(App, Value) ->
-    case [ K || K <- ?SINGLE_SITE_KEYS,
-                application:get_env(App, K) =/= undefined ] of
-        [] ->
-            Port = application:get_env(App, port, ?PORT),
-            Servlets = application:get_env(App, servlets,
-                                           ?DEFAULT_SERVLETS),
-            Global = global(Port, Servlets),
-            % no ca_certs, titan_work_dir or routing key here, so the
-            % realms are just the realms key
-            {Realms, Failed, RealmErrors} = realms_from_env(App, []),
-            case is_list(Value) of
-                true ->
-                    Outcomes = [ site_entry(E, Realms, Failed)
-                                 || E <- Value ],
-                    assemble(Global, RealmErrors, Outcomes);
-                false ->
-                    {error, RealmErrors ++ [{invalid_sites, Value}]
-                            ++ problems_global(Global)}
-            end;
-        Keys ->
-            {error, [{sites_and_single_site_keys, Keys}]}
+    Port = application:get_env(App, port, ?PORT),
+    Servlets = application:get_env(App, servlets, ?DEFAULT_SERVLETS),
+    Global = global(Port, Servlets),
+    {Realms, Failed, RealmErrors} = realms_from_env(App),
+    case is_list(Value) of
+        true ->
+            Outcomes = [ site_entry(E, Realms, Failed) || E <- Value ],
+            assemble(Global, RealmErrors, Outcomes);
+        false ->
+            {error, RealmErrors ++ [{invalid_sites, Value}]
+                    ++ problems_global(Global)}
     end.
 
 
@@ -1310,11 +1206,7 @@ realm_failed(_, _) ->
     false.
 
 
-% The global realms key, plus ca_certs as the realm "default" when that
-% key is set; both defining "default" is an error. The default table's
-% Titan route (no routing key, titan_work_dir set) names the realm
-% "default", so it is also defined, empty (authorising nobody until CAs
-% are configured), when ca_certs is unset and realms does not have it.
+% The global realms key.
 %
 % Every definition is tried, so every bad one is reported: the result is
 % the table of those that built, the names of those that did not (or
@@ -1322,31 +1214,16 @@ realm_failed(_, _) ->
 % is not a list, so no name can be blamed), and the errors, each
 % {bad_realm, Name, Reason} or {realms, Reason}. Routes naming a failed
 % realm are not also reported (see from_app_env/0).
--spec realms_from_env(App, CACerts) -> Result
-              when App     :: atom(),
-                   CACerts :: term(),
-                   Result  :: {realm_table(), 'all' | [term()], [term()]}.
-realms_from_env(App, CACerts) ->
+-spec realms_from_env(App) -> Result
+              when App    :: atom(),
+                   Result :: {realm_table(), 'all' | [term()], [term()]}.
+realms_from_env(App) ->
     Defs = application:get_env(App, realms, []),
     case is_list(Defs) of
         false ->
             {realms(), all, [{realms, {invalid_realms, Defs}}]};
         true ->
-            Default = <<"default">>,
-            HasCA = application:get_env(App, ca_certs) =/= undefined,
-            Has = lists:keymember(Default, 1, Defs),
-            Titan = application:get_env(App, routing) =:= undefined
-                andalso application:get_env(App, titan_work_dir,
-                                            undefined) =/= undefined,
-            {Extra, Start} =
-                case {HasCA, Has, Titan} of
-                    {true, true, _} ->
-                        {[], [{realms, ca_certs_and_default_realm}]};
-                    {true, false, _} -> {[{Default, CACerts}], []};
-                    {false, false, true} -> {[{Default, []}], []};
-                    {false, _, _} -> {[], []}
-                end,
-            realm_defs(Defs ++ Extra, realms(), [], Start)
+            realm_defs(Defs, realms(), [], [])
     end.
 
 
@@ -1522,10 +1399,10 @@ new_format_file_list_tests(CA, T, Opts) ->
                          #route{auth_policy = {private, [], []}}]},
                    Prep([Old({private, [CA]}), Old({private, []})]))].
 
-% realms_from_env/2 in the shape of blizanci_auth:realm_table/1: the
+% realms_from_env/1 in the shape of blizanci_auth:realm_table/1: the
 % table, or the first error.
-realms_env(App, CACerts) ->
-    case realms_from_env(App, CACerts) of
+realms_env(App) ->
+    case realms_from_env(App) of
         {Table, _, []} -> {ok, Table};
         {_, _, [{_, _, Why} | _]} -> {error, Why};
         {_, _, [{_, Why} | _]} -> {error, Why}
@@ -1537,7 +1414,6 @@ realms_from_env_collects_test_() ->
      fun() -> blizanci_x509:test_tmp_dir() end,
      fun(Dir) ->
          application:unset_env(blizanci_realms_test, realms),
-         application:unset_env(blizanci_realms_test, ca_certs),
          file:del_dir_r(Dir)
      end,
      fun(Dir) ->
@@ -1550,11 +1426,10 @@ realms_from_env_collects_test_() ->
          Set = fun(Key, Val) -> application:set_env(App, Key, Val) end,
          Missing = filename:join(Dir, "missing.pem"),
          [?_test(begin
-                     application:unset_env(App, ca_certs),
                      Set(realms, [{<<"a">>, [Missing]},
                                   {<<"b">>, [CA]},
                                   {<<"c">>, [Missing]}]),
-                     {T, Failed, Errors} = realms_from_env(App, []),
+                     {T, Failed, Errors} = realms_from_env(App),
                      ?assertEqual([{realm, <<"b">>}], maps:keys(T)),
                      ?assertEqual([<<"a">>, <<"c">>], Failed),
                      ?assertEqual(
@@ -1566,30 +1441,25 @@ realms_from_env_collects_test_() ->
                  end),
           % a definition that is not a pair: no name can be blamed
           ?_test(begin
-                     application:unset_env(App, ca_certs),
                      Set(realms, [{<<"b">>, [CA]}, oops]),
                      ?assertMatch(
                         {_, all, [{realms, {invalid_realm, oops}}]},
-                        realms_from_env(App, []))
+                        realms_from_env(App))
                  end),
           ?_test(begin
-                     application:unset_env(App, ca_certs),
                      Set(realms, nonsense),
                      ?assertMatch(
                         {_, all, [{realms, {invalid_realms, nonsense}}]},
-                        realms_from_env(App, []))
+                        realms_from_env(App))
                  end)]
      end}.
 
-% The sys.config key realms, and ca_certs as the realm "default".
+% The sys.config key realms.
 realms_from_env_test_() ->
     {setup,
      fun() -> blizanci_x509:test_tmp_dir() end,
      fun(Dir) ->
          application:unset_env(blizanci_realms_test, realms),
-         application:unset_env(blizanci_realms_test, ca_certs),
-         application:unset_env(blizanci_realms_test, titan_work_dir),
-         application:unset_env(blizanci_realms_test, routing),
          file:del_dir_r(Dir)
      end,
      fun(Dir) ->
@@ -1600,98 +1470,36 @@ realms_from_env_test_() ->
                   not_encrypted}]),
          App = blizanci_realms_test,
          Set = fun(Key, Val) -> application:set_env(App, Key, Val) end,
-         Unset = fun(Key) -> application:unset_env(App, Key) end,
-         Reset = fun() -> [Unset(K) || K <- [realms, ca_certs, routing,
-                                              titan_work_dir]] end,
+         Reset = fun() -> application:unset_env(App, realms) end,
          Staff = {realm, <<"staff">>},
-         Default = {realm, <<"default">>},
          [?_test(begin
                      Reset(),
-                     ?assertEqual({ok, #{}}, realms_env(App, []))
+                     ?assertEqual({ok, #{}}, realms_env(App))
                  end),
           ?_test(begin
                      Reset(),
                      Set(realms, [{<<"staff">>, [CA]}]),
-                     {ok, T} = realms_env(App, []),
+                     {ok, T} = realms_env(App),
                      ?assertEqual([Staff], maps:keys(T))
                  end),
-          ?_test(begin
-                     Reset(),
-                     Set(ca_certs, [CA]),
-                     {ok, T} = realms_env(App, [CA]),
-                     ?assertEqual([Default], maps:keys(T))
-                 end),
-          ?_test(begin
-                     Reset(),
-                     Set(ca_certs, [CA]),
-                     Set(realms, [{<<"staff">>, [CA]}]),
-                     {ok, T} = realms_env(App, [CA]),
-                     ?assertEqual([Default, Staff], lists:sort(maps:keys(T)))
-                 end),
-          ?_test(begin
-                     Reset(),
-                     Set(ca_certs, [CA]),
-                     Set(realms, [{<<"default">>, [CA]}]),
-                     ?assertEqual({error, ca_certs_and_default_realm},
-                                  realms_env(App, [CA]))
-                 end),
-          % a realm "default" is fine when ca_certs is not set
+          % a realm named "default" is an ordinary realm
           ?_test(begin
                      Reset(),
                      Set(realms, [{<<"default">>, [CA]}]),
-                     ?assertMatch({ok, _}, realms_env(App, []))
-                 end),
-          % the default table's Titan route needs the realm "default",
-          % empty if ca_certs is not set
-          ?_test(begin
-                     Reset(),
-                     Set(titan_work_dir, "/w"),
-                     {ok, T} = realms_env(App, []),
-                     ?assertEqual([Default], maps:keys(T)),
-                     ?assertEqual({ok, {private, [Default], []}},
-                                  blizanci_auth:valid_authz_policy(
-                                    {private, Default}, T))
-                 end),
-          ?_test(begin
-                     Reset(),
-                     Set(titan_work_dir, "/w"),
-                     Set(ca_certs, []),
-                     {ok, T} = realms_env(App, []),
-                     ?assertEqual([Default], maps:keys(T))
-                 end),
-          ?_test(begin
-                     Reset(),
-                     Set(titan_work_dir, "/w"),
-                     Set(realms, [{<<"default">>, [CA]}]),
-                     {ok, T} = realms_env(App, []),
-                     ?assertMatch({_, [_]}, maps:get(Default, T))
-                 end),
-          ?_test(begin
-                     Reset(),
-                     Set(titan_work_dir, "/w"),
-                     Set(routing, []),
-                     {ok, T} = realms_env(App, []),
-                     ?assertEqual([], maps:keys(T))
-                 end),
-          ?_test(begin
-                     Reset(),
-                     Set(titan_work_dir, "/w"),
-                     Set(ca_certs, [CA]),
-                     Set(realms, [{<<"default">>, [CA]}]),
-                     ?assertEqual({error, ca_certs_and_default_realm},
-                                  realms_env(App, [CA]))
+                     {ok, T} = realms_env(App),
+                     ?assertEqual([{realm, <<"default">>}], maps:keys(T))
                  end),
           ?_test(begin
                      Reset(),
                      Set(realms, [{<<"staff">>, ["/nonexistent.pem"]}]),
                      ?assertMatch({error, {invalid_ca_file, _, _}},
-                                  realms_env(App, []))
+                                  realms_env(App))
                  end),
           ?_test(begin
                      Reset(),
                      Set(realms, [{staff, [CA]}]),
                      ?assertEqual({error, {invalid_realm_name, staff}},
-                                  realms_env(App, []))
+                                  realms_env(App))
                  end)]
      end}.
 
@@ -1867,87 +1675,16 @@ titan_work_dir_refusals_test_() ->
 test_tmp() ->
     filename:absname(?TEST_DOCROOT).
 
-% The project's own default table must not trigger the shadowing warning.
-default_table_no_shadow_warning_test_() ->
-    {setup,
-     fun() -> blizanci_x509:test_tmp_dir() end,
-     fun(Dir) -> file:del_dir_r(Dir) end,
-     fun(CGI) ->
-         CA = blizanci_x509:test_write_pem(
-                CGI, "ca.pem",
-                [{'Certificate',
-                  maps:get(ca, blizanci_x509:test_pki()),
-                  not_encrypted}]),
-         {ok, Realms} = add_realm(realms(), <<"default">>, [CA]),
-         Warnings =
-             fun(Table) ->
-                 Id = default_table_log_handler,
-                 ok = logger:add_handler(Id, blizanci_test_log_handler,
-                                         #{config =>
-                                           #{notify => self()}}),
-                 try {ok, _} = blizanci_router:prepare(Table, Realms),
-                     drain()
-                 after ok = logger:remove_handler(Id)
-                 end
-             end,
-         [?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI,
-                                                   [CA]))),
-          ?_assertEqual([], Warnings(routing_table(?TEST_DOCROOT, CGI,
-                                                   [CA], test_tmp()))),
-          % the strings the default table is built from are converted
-          % to binaries when the routes are built
-          ?_test(begin
-                     Table = routing_table(?TEST_DOCROOT, CGI, [CA],
-                                           test_tmp()),
-                     {ok, Routes} = blizanci_router:prepare(Table, Realms),
-                     ?assertEqual(
-                        [{blizanci_cgi, #{ cgiroot => list_to_binary(CGI) }},
-                         {blizanci_static,
-                          #{ docroot => list_to_binary(?TEST_DOCROOT) }},
-                         {blizanci_titan,
-                          #{ docroot => list_to_binary(?TEST_DOCROOT),
-                             work_dir => list_to_binary(test_tmp()) }}],
-                        [ {M, maps:with([docroot, cgiroot, work_dir], O)}
-                          || #route{module = M, options = O} <- Routes ])
-                 end)]
-     end}.
-
-drain() ->
-    receive {logged, _, "routing: " ++ _ = T} -> [T | drain()];
-            {logged, _, _} -> drain()
-    after 0 -> []
-    end.
-
-default_titan_route_test_() ->
-    Titan = fun(L) -> [R || {mount, titan, _, _, _, _} = R <- L] end,
-    Default = {private, {realm, <<"default">>}},
-    [?_assertEqual([], Titan(routing_table("d", "c", []))),
-     ?_assertEqual([], Titan(routing_table("d", "c", [], undefined))),
-     ?_assertEqual([], Titan(routing_table("d", "c", ["ca"]))),
-     ?_assertEqual([{mount, titan, "/", blizanci_titan, Default,
-                     #{ docroot => "d", work_dir => "/w" }}],
-                   Titan(routing_table("d", "c", ["ca"], "/w"))),
-     % opting in with no ca_certs is fine: the realm is empty
-     ?_assertEqual([{mount, titan, "/", blizanci_titan, Default,
-                     #{ docroot => "d", work_dir => "/w" }}],
-                   Titan(routing_table("d", "c", [], "/w")))].
-
-% The default table, over a docroot (fixture: Base/docroot/{hello.gmi,
-% sub/index.gemini, sub/x.gmi, private/x.gmi, private/sub/index.gemini,
-% restricted/x.gmi, privatefoo/x.gmi}, Base/cgi).
-default_table_test_() ->
-    {setup,
-     fun default_table_setup/0,
-     fun default_table_teardown/1,
-     fun default_table_tests/1}.
-
-default_table_teardown({Mime, Base}) ->
+% A docroot fixture (Base/docroot/{hello.gmi, sub/index.gemini,
+% sub/x.gmi, private/x.gmi, private/sub/index.gemini, restricted/x.gmi,
+% privatefoo/x.gmi}, Base/cgi).
+table_teardown({Mime, Base}) ->
     file:del_dir_r(Base),
     blizanci_test_support:mime_down(Mime).
 
-default_table_setup() ->
+table_setup() ->
     Mime = blizanci_test_support:mime_up(),
-    Base =blizanci_test_support:tmp_path("default_table_test"),
+    Base = blizanci_test_support:tmp_path("mounts_table_test"),
     Docroot = filename:join(Base, "docroot"),
     [ ok = filelib:ensure_path(filename:join(Docroot, D))
       || D <- ["sub", "private/sub", "restricted", "privatefoo"] ],
@@ -1958,51 +1695,12 @@ default_table_setup() ->
                "restricted/x.gmi", "privatefoo/x.gmi"] ],
     {Mime, Base}.
 
-default_table_tests({_Mime, Base}) ->
-    Docroot = filename:join(Base, "docroot"),
-    Cgi = filename:join(Base, "cgi"),
-    Full = fun(Rel) ->
-               {file, <<"text/gemini">>,
-                list_to_binary(filename:absname(filename:join(Docroot,
-                                                               Rel)))}
-           end,
-    Table = routing_table(Docroot, Cgi, ["ca"]),
-    Plain = routing_table(Docroot ++ "/", Cgi, ["ca"]),
-    [?_assertEqual(
-        [{mount, gemini, "/cgi-bin", blizanci_cgi, public,
-          #{ cgiroot => Cgi }},
-         {mount, gemini, "/", blizanci_static, public,
-          #{ docroot => Docroot }}],
-        Table),
-     % ca_certs does not change the table; only titan_work_dir does
-     ?_assertEqual(Table, routing_table(Docroot, Cgi, [])),
-     % a docroot with a trailing slash is kept as given
-     ?_assertEqual([Docroot ++ "/"],
-                   [ D || {mount, gemini, "/", _, _, #{ docroot := D }}
-                              <- Plain ]),
-     ?_test(default_table_serves(Full, Table)),
-     ?_test(default_table_serves(Full, Plain))].
-
-% What the table does, through the request handler, with no client
-% certificate: everything is public; a directory is redirected to its
-% index, with the path kept.
-default_table_serves(Full, Table) ->
-    {ok, Routing} = blizanci_router:prepare(Table, #{}),
-    H = fun(Path) -> default_table_get(Routing, Path) end,
-    ?assertEqual(Full("hello.gmi"), H(<<"hello.gmi">>)),
-    ?assertEqual(Full("sub/x.gmi"), H(<<"sub/x.gmi">>)),
-    ?assertEqual({redirect, <<"sub/index.gemini">>}, H(<<"sub">>)),
-    ?assertEqual({redirect, <<"sub/index.gemini">>}, H(<<"sub/">>)),
-    ?assertEqual({error_code, file_not_found}, H(<<"nothere.gmi">>)),
-    ?assertEqual({error_code, file_not_found}, H(<<"sub/nothere">>)).
-
-% An explicit routing table with /private and /restricted mounts over
-% subdirectories of the docroot, beside /cgi-bin and /; the fixture is
-% the one of default_table_test_.
+% A routing table with /private and /restricted mounts over
+% subdirectories of the docroot, beside /cgi-bin and /.
 mounts_table_test_() ->
     {setup,
-     fun default_table_setup/0,
-     fun default_table_teardown/1,
+     fun table_setup/0,
+     fun table_teardown/1,
      fun mounts_table_tests/1}.
 
 mounts_table(Docroot, Cgi, Private) ->
@@ -2023,7 +1721,7 @@ mounts_table_tests({_Mime, Base}) ->
                 list_to_binary(filename:absname(filename:join(Docroot,
                                                                Rel)))}
            end,
-    Realm = {private, {realm, <<"default">>}},
+    Realm = {private, {realm, <<"staff">>}},
     Table = mounts_table(Docroot, Cgi, Realm),
     [?_test(mounts_table_serves(Full, Table, Docroot)),
      ?_test(mounts_table_with_cert(Docroot, Full, Table)),
@@ -2037,7 +1735,7 @@ mounts_table_serves(Full, Table, Docroot) ->
     {ok, Routing} = blizanci_router:prepare(
                       Table, mounts_realms(Docroot,
                                            blizanci_x509:test_pki())),
-    H = fun(Path) -> default_table_get(Routing, Path) end,
+    H = fun(Path) -> table_get(Routing, Path) end,
     NotFound = {error_code, file_not_found},
     ?assertEqual(Full("hello.gmi"), H(<<"hello.gmi">>)),
     % "private" is a whole segment
@@ -2052,7 +1750,7 @@ mounts_table_serves(Full, Table, Docroot) ->
                <<"restricted">>] ],
     ?assertEqual(NotFound, H(<<"nothere.gmi">>)).
 
-% With the client certificate of the CA behind realm "default", private
+% With the client certificate of the CA behind realm "staff", private
 % serves <docroot>/private, and a certificate from any CA suffices for
 % restricted; redirects keep the mount.
 mounts_table_with_cert(Docroot, Full, Table) ->
@@ -2060,7 +1758,7 @@ mounts_table_with_cert(Docroot, Full, Table) ->
     {ok, Routing} = blizanci_router:prepare(
                       Table, mounts_realms(Docroot, Pki)),
     #{ peer := Peer } = Pki,
-    H = fun(Path) -> default_table_get(Routing, {ok, Peer}, Path) end,
+    H = fun(Path) -> table_get(Routing, {ok, Peer}, Path) end,
     ?assertEqual(Full("private/x.gmi"), H(<<"private/x.gmi">>)),
     ?assertEqual(Full("restricted/x.gmi"), H(<<"restricted/x.gmi">>)),
     ?assertEqual({redirect, <<"private/index.gemini">>}, H(<<"private">>)),
@@ -2078,20 +1776,20 @@ mounts_table_with_cert(Docroot, Full, Table) ->
 % authorises nobody, even a certificate (rather than falling through to
 % the public mount).
 mounts_table_empty_realm(Docroot, Cgi) ->
-    {ok, Realms} = realms([{<<"default">>, []}]),
+    {ok, Realms} = realms([{<<"staff">>, []}]),
     {ok, Routing} = blizanci_router:prepare(
                       mounts_table(Docroot, Cgi,
-                                   {private, {realm, <<"default">>}}),
+                                   {private, {realm, <<"staff">>}}),
                       Realms),
     #{ peer := Peer } = blizanci_x509:test_pki(),
     NotFound = {error_code, file_not_found},
     ?assertEqual({error_code, cert_not_authorised},
-                 default_table_get(Routing, {ok, Peer},
+                 table_get(Routing, {ok, Peer},
                                    <<"private/x.gmi">>)),
     ?assertEqual({error_code, cert_required},
-                 default_table_get(Routing, {error, no_peercert},
+                 table_get(Routing, {error, no_peercert},
                                    <<"private/x.gmi">>)),
-    ?assertNotEqual(NotFound, default_table_get(
+    ?assertNotEqual(NotFound, table_get(
                                 Routing, {ok, Peer}, <<"private">>)).
 
 mounts_realms(Docroot, Pki) ->
@@ -2099,13 +1797,13 @@ mounts_realms(Docroot, Pki) ->
            filename:dirname(Docroot), "default-ca.pem",
            [{'Certificate', maps:get(ca, Pki),
              not_encrypted}]),
-    {ok, T} = realms([{<<"default">>, [CA]}]),
+    {ok, T} = realms([{<<"staff">>, [CA]}]),
     T.
 
-default_table_get(Routing, Path) ->
-    default_table_get(Routing, {error, no_peercert}, Path).
+table_get(Routing, Path) ->
+    table_get(Routing, {error, no_peercert}, Path).
 
-default_table_get(Routing, Cert, Path) ->
+table_get(Routing, Cert, Path) ->
     Config = #server_config{hostname = <<"h">>, port = 1965,
                             routing = Routing},
     blizanci_request:handle_line(<<"gemini://h/", Path/binary>>, Config,
