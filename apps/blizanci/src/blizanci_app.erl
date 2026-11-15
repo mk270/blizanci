@@ -44,19 +44,22 @@ stop(_State) ->
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
--define(ENV_KEYS, [certfile, keyfile, hostname, port, servlets, realms,
-                   routing, docroot, cgiroot, sites, ca_certs,
-                   titan_work_dir]).
+-define(OLD_KEYS, [hostname, certfile, keyfile, docroot, cgiroot,
+                   ca_certs, titan_work_dir, routing]).
+-define(ENV_KEYS, [port, servlets, realms, sites | ?OLD_KEYS]).
 
 %% start/2 reads the application environment of the application it runs
 %% in, so these tests start blizanci itself (application:start/1, which
 %% calls start/2) with an environment of the test's choosing, in a
-%% process of their own. The environment, the loaded state of the
-%% application, any applications started on the way, the logger handler
-%% and the PEM fixture are all put back afterwards, pass or fail. Port
+%% process of their own. Env is a list of keys to set, or a fun of the
+%% certificate and key file names of a throwaway pair returning one;
+%% the old flat keys and sites are unset first. The environment, the
+%% loaded state of the application, any applications started on the
+%% way, the logger handler and the PEM fixture are all put back
+%% afterwards, pass or fail. Port
 %% 0, and neither test gets as far as a listener: nothing binds a
 %% fixed port.
-with_app_env(Env, Fun) ->
+with_app_env(EnvArg, Fun) ->
     blizanci_test_support:isolated(
       fun() ->
           Dir = blizanci_x509:test_tmp_dir(),
@@ -76,13 +79,13 @@ with_app_env(Env, Fun) ->
                            erlang:unique_integer([positive]))),
           ok = logger:add_handler(Handler, blizanci_test_log_handler,
                                   #{config => #{notify => self()}}),
-          Base = [{certfile, Cert}, {keyfile, Key},
-                  {hostname, "test.example"}, {port, free_port()}],
-          %% {K, unset} removes a key of the base environment
-          [ case V of
-                unset -> application:unset_env(blizanci, K);
-                _ -> application:set_env(blizanci, K, V)
-            end || {K, V} <- Base ++ Env ],
+          Env = case is_function(EnvArg, 2) of
+                    true -> EnvArg(Cert, Key);
+                    false -> EnvArg
+                end,
+          [ application:unset_env(blizanci, K) || K <- ?ENV_KEYS ],
+          [ application:set_env(blizanci, K, V)
+            || {K, V} <- [{port, free_port()} | Env] ],
           try Fun()
           after
               ok = logger:remove_handler(Handler),
@@ -122,6 +125,17 @@ logged() ->
     after 0 -> []
     end.
 
+%% The environment of a start-up test with one site, test.example, whose
+%% certificate and key are those of the throwaway pair.
+one_site(Routing, Extra) ->
+    one_site("test.example", Routing, Extra).
+
+one_site(Host, Routing, Extra) ->
+    fun(Cert, Key) ->
+        [{sites, [{Host, [{certfile, Cert}, {keyfile, Key},
+                          {routing, Routing}]}]} | Extra]
+    end.
+
 blizanci_lines(Logged) ->
     [ T || {error, "blizanci: " ++ _ = T} <- Logged ].
 
@@ -130,7 +144,7 @@ blizanci_lines(Logged) ->
 %% crashing on a badmatch.
 servlet_start_failure_test() ->
     with_app_env(
-      [{servlets, [blizanci_test_failing]}, {routing, []}],
+      one_site([], [{servlets, [blizanci_test_failing]}]),
       fun() ->
           Result = application:ensure_all_started(blizanci),
           ?assertMatch({error, {blizanci, {{shutdown,
@@ -154,7 +168,7 @@ servlet_start_failure_test() ->
 invalid_routing_test() ->
     Bad = {gemini, "x", blizanci_test_stub, public, #{}},
     with_app_env(
-      [{servlets, [blizanci_test_stub]}, {routing, [Bad]}],
+      one_site([Bad], [{servlets, [blizanci_test_stub]}]),
       fun() ->
           Result = application:ensure_all_started(blizanci),
           ?assertMatch({error, {blizanci, {{invalid_configuration,
@@ -181,17 +195,20 @@ invalid_routing_test() ->
 all_problems_reported_test() ->
     Stub = blizanci_test_stub,
     with_app_env(
-      [{certfile, "/no/such/cert.pem"}, {keyfile, "/no/such/key.pem"},
-       {servlets, []},
+      [{servlets, []},
        {realms, [{<<"r">>, ["/no/such/ca.pem"]}]},
-       {routing, [{mount, gemini, "/a", Stub,
-                   {private, {realm, <<"r">>}}, #{}},
-                  {mount, gemini, "/b", Stub,
-                   {private, {realm, <<"q">>}}, #{}},
-                  {gemini, "x", Stub, public, #{}},
-                  {mount, gemini, "/c", blizanci_no_such_servlet,
-                   public, #{}},
-                  {mount, gemini, "/d", Stub, public, #{}}]}],
+       {sites, [{"test.example",
+                 [{certfile, "/no/such/cert.pem"},
+                  {keyfile, "/no/such/key.pem"},
+                  {routing, [{mount, gemini, "/a", Stub,
+                              {private, {realm, <<"r">>}}, #{}},
+                             {mount, gemini, "/b", Stub,
+                              {private, {realm, <<"q">>}}, #{}},
+                             {gemini, "x", Stub, public, #{}},
+                             {mount, gemini, "/c",
+                              blizanci_no_such_servlet, public, #{}},
+                             {mount, gemini, "/d", Stub, public,
+                              #{}}]}]}]}],
       fun() ->
           Result = application:ensure_all_started(blizanci),
           ?assertMatch({error, {blizanci,
@@ -228,8 +245,12 @@ all_problems_reported_test() ->
 %% give one line naming the site.
 unreadable_cert_and_key_test() ->
     with_app_env(
-      [{certfile, "/no/such/cert.pem"}, {servlets, [blizanci_test_stub]},
-       {routing, []}],
+      fun(_, Key) ->
+          [{servlets, [blizanci_test_stub]},
+           {sites, [{"test.example",
+                     [{certfile, "/no/such/cert.pem"}, {keyfile, Key},
+                      {routing, []}]}]}]
+      end,
       fun() ->
           ?assertMatch({error, _},
                        application:ensure_all_started(blizanci)),
@@ -239,8 +260,12 @@ unreadable_cert_and_key_test() ->
                        blizanci_lines(logged()))
       end),
     with_app_env(
-      [{keyfile, "/no/such/key.pem"}, {servlets, [blizanci_test_stub]},
-       {routing, []}],
+      fun(Cert, _) ->
+          [{servlets, [blizanci_test_stub]},
+           {sites, [{"test.example",
+                     [{certfile, Cert}, {keyfile, "/no/such/key.pem"},
+                      {routing, []}]}]}]
+      end,
       fun() ->
           ?assertMatch({error, _},
                        application:ensure_all_started(blizanci)),
@@ -256,8 +281,8 @@ unreadable_cert_and_key_test() ->
 %% always was, and starts.
 bad_hostname_test() ->
     with_app_env(
-      [{hostname, 42}, {port, 99999}, {servlets, [blizanci_test_stub]},
-       {routing, []}],
+      one_site(42, [], [{port, 99999},
+                        {servlets, [blizanci_test_stub]}]),
       fun() ->
           ?assertMatch({error, _},
                        application:ensure_all_started(blizanci)),
@@ -267,8 +292,7 @@ bad_hostname_test() ->
                        blizanci_lines(logged()))
       end),
     with_app_env(
-      [{hostname, "Test.EXAMPLE"}, {servlets, [blizanci_test_stub]},
-       {routing, []}],
+      one_site("Test.EXAMPLE", [], [{servlets, [blizanci_test_stub]}]),
       fun() ->
           ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
           ?assertEqual([], blizanci_lines(logged()))
@@ -278,9 +302,9 @@ bad_hostname_test() ->
 shadowed_routes_warning_test() ->
     Stub = blizanci_test_stub,
     with_app_env(
-      [{servlets, [Stub]},
-       {routing, [{mount, gemini, "/", Stub, public, #{}},
-                  {mount, gemini, "/x", Stub, public, #{}}]}],
+      one_site([{mount, gemini, "/", Stub, public, #{}},
+                {mount, gemini, "/x", Stub, public, #{}}],
+               [{servlets, [Stub]}]),
       fun() ->
           ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
           ?assertMatch([{warning, "routing: " ++ _}],
@@ -297,13 +321,13 @@ old_format_routes_warning_test() ->
     Stub = #{ script => fun(_) -> {immediate, {error_code, no_such}} end },
     Old = fun(Re) -> {gemini, Re, blizanci_test_stub, public, Stub} end,
     with_app_env(
-      [{servlets, [blizanci_test_stub]},
-       {routing, [Old("(?<PATH>a)"), Old("(?<PATH>b)"),
-                  {mount, gemini, "/m", blizanci_test_stub, public,
-                   Stub}]}],
+      one_site([Old("(?<PATH>a)"), Old("(?<PATH>b)"),
+                {mount, gemini, "/m", blizanci_test_stub, public, Stub}],
+               [{servlets, [blizanci_test_stub]}]),
       fun() ->
           ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
-          ?assertMatch([{warning, "routing: 2 routes use the old tuple "
+          ?assertMatch([{warning, "routing: site test.example: 2 routes "
+                         "use the old tuple "
                          "format {Proto, Regex, Module, Auth, Opts}; "
                          "translated, behaviour unchanged (see README, "
                          "Routing)"}],
@@ -314,21 +338,10 @@ old_format_routes_warning_test() ->
 new_format_routes_quiet_test() ->
     Stub = #{ script => fun(_) -> {immediate, {error_code, no_such}} end },
     with_app_env(
-      [{servlets, [blizanci_test_stub]},
-       {routing, [{mount, gemini, "/m", blizanci_test_stub, public, Stub},
-                  {regex, gemini, "(?<PATH>a)", blizanci_test_stub,
-                   public, Stub}]}],
-      fun() ->
-          ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
-          ?assertEqual([], routing_warnings(logged()))
-      end).
-
-%% The default table is in the new format, and it never warns about
-%% the old format.
-default_routing_quiet_test() ->
-    with_app_env(
-      [{servlets, [blizanci_static, blizanci_cgi]},
-       {docroot, "."}, {cgiroot, "."}],
+      one_site([{mount, gemini, "/m", blizanci_test_stub, public, Stub},
+                {regex, gemini, "(?<PATH>a)", blizanci_test_stub,
+                 public, Stub}],
+               [{servlets, [blizanci_test_stub]}]),
       fun() ->
           ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
           ?assertEqual([], routing_warnings(logged()))
@@ -338,11 +351,9 @@ default_routing_quiet_test() ->
 %% The sites key.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% The environment of a sites test: the base single-site keys are
-%% removed, as the sites key refuses them.
+%% The environment of a sites test.
 sites_env(Sites) ->
-    [{hostname, unset}, {certfile, unset}, {keyfile, unset},
-     {servlets, [blizanci_test_stub]}, {sites, Sites}].
+    [{servlets, [blizanci_test_stub]}, {sites, Sites}].
 
 %% Two certificate and key pairs, in a directory of their own.
 with_pairs(Fun) ->
@@ -429,49 +440,73 @@ sites_path_options_body() ->
             end)
       end).
 
-%% The sites key with any single-site key is refused, with one line
-%% naming the keys given, and nothing else is reported.
-sites_with_single_site_keys_test_() ->
-    {timeout, 120, fun sites_with_single_site_keys_body/0}.
+%% Each of the old flat keys alone is refused, with one line naming it
+%% and nothing else reported, even though the rest is fine.
+single_site_key_refused_test_() ->
+    {timeout, 120, fun single_site_key_refused_body/0}.
 
-sites_with_single_site_keys_body() ->
+single_site_key_refused_body() ->
     with_pairs(
       fun(A, _) ->
-          Sites = [{"a.example", site_opts(A)}],
           Values = [{hostname, "x.example"}, {certfile, "c.pem"},
                     {keyfile, "k.pem"}, {docroot, "."}, {cgiroot, "."},
                     {ca_certs, []}, {titan_work_dir, "."},
                     {routing, []}],
           [ with_app_env(
-              sites_env(Sites) ++ [KV],
+              sites_env([{"a.example", site_opts(A)}]) ++ [KV],
               fun() ->
-                  ?assertEqual(
-                     ["blizanci: the sites key cannot be combined with "
-                      "the single-site keys " ++ atom_to_list(K)
-                      ++ "; use one or the other"],
-                     start_errors())
+                  ?assertEqual([old_keys_line(atom_to_list(K))],
+                               start_errors())
               end) || {K, _} = KV <- Values ],
-          %% several at once, in a fixed order
+          %% without sites too: the same line, not "no sites"
+          [ with_app_env(
+              [KV],
+              fun() ->
+                  ?assertEqual([old_keys_line(atom_to_list(K))],
+                               start_errors())
+              end) || {K, _} = KV <- Values ],
+          %% several at once, all named, in a fixed order
           with_app_env(
-            sites_env(Sites) ++ [{routing, []}, {hostname, "x"},
-                                 {ca_certs, []}],
+            sites_env([{"a.example", site_opts(A)}])
+            ++ [{routing, []}, {hostname, "x"}, {ca_certs, []}],
             fun() ->
-                ?assertEqual(
-                   ["blizanci: the sites key cannot be combined with "
-                    "the single-site keys hostname, ca_certs, routing; "
-                    "use one or the other"],
-                   start_errors())
+                ?assertEqual([old_keys_line("hostname, ca_certs, "
+                                            "routing")],
+                             start_errors())
             end),
-          %% the base environment of these tests has three of them
           with_app_env(
-            [{sites, Sites}, {servlets, [blizanci_test_stub]}],
+            [{certfile, "c.pem"}, {keyfile, "k.pem"}, {docroot, "."}],
             fun() ->
-                ?assertEqual(
-                   ["blizanci: the sites key cannot be combined with "
-                    "the single-site keys hostname, certfile, keyfile; "
-                    "use one or the other"],
-                   start_errors())
+                ?assertEqual([old_keys_line("certfile, keyfile, "
+                                            "docroot")],
+                             start_errors())
             end)
+      end).
+
+old_keys_line(Keys) ->
+    "blizanci: the single-site keys " ++ Keys ++ " are no longer "
+    "supported; move them into an entry of the sites key".
+
+%% No sites key and no old key: no sites.
+no_sites_key_test() ->
+    with_app_env(
+      [{servlets, [blizanci_test_stub]}],
+      fun() ->
+          ?assertEqual(["blizanci: no sites are configured; the sites "
+                        "key must list at least one"],
+                       start_errors())
+      end).
+
+%% A valid configuration of one site starts.
+one_site_starts_test() ->
+    with_app_env(
+      one_site([{mount, gemini, "/", blizanci_test_stub, public, #{}}],
+               [{servlets, [blizanci_test_stub]}]),
+      fun() ->
+          ?assertMatch({ok, _}, application:ensure_all_started(blizanci)),
+          ?assertEqual([], blizanci_lines(logged())),
+          ?assertMatch({ok, _},
+                       blizanci_conf_serv:find_site(<<"test.example">>))
       end).
 
 %% Each way a site can be wrong, one line naming the site.
@@ -539,7 +574,8 @@ site_shape_errors_body() ->
     with_app_env(
       sites_env([]),
       fun() ->
-          ?assertEqual(["blizanci: no sites are configured"],
+          ?assertEqual(["blizanci: no sites are configured; the sites "
+                        "key must list at least one"],
                        start_errors())
       end).
 

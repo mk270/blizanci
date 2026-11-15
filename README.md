@@ -32,10 +32,49 @@ Currently, a config file is required. In due course, this will become optional.
 Create an appropriate `sys.config` and `vm.args` file in the `config/`
 directory in the format suggested in the examples in that directory.
 
-You'll also need to put TLS certificates in `ssl/certificate.pem` and
-`ssl/key.pem`; these locations can be reconfigured, but blizanci will
-fail on startup with a `badmatch` / `couldnt_open_pem_file` message if
-the certificates cannot be read.
+A minimal configuration serves one site, with one public route. The
+`sites` key lists the sites; each has a hostname, a certificate, a
+private key and a routing table. Nothing here is defaulted: the paths
+are yours to choose, and the certificate and key must be a matching
+pair that blizanci can read, or it will refuse to start:
+
+    [{blizanci, [
+       {sites, [
+         {"example.org", [
+           {certfile, "ssl/certificate.pem"},
+           {keyfile, "ssl/key.pem"},
+           {routing, [
+             {mount, gemini, "/", blizanci_static, public,
+              #{docroot => "./public_gemini"}}
+           ]}]}
+       ]}
+     ]}].
+
+To keep a part of the site for holders of a client certificate, define a
+realm (a named set of CA certificates) in the top-level `realms` key and
+name it in a private route. Routes are tried in order, so the more
+specific mount comes first:
+
+    [{blizanci, [
+       {realms, [{<<"staff">>, ["ssl/staff-ca.pem"]}]},
+       {sites, [
+         {"example.org", [
+           {certfile, "ssl/certificate.pem"},
+           {keyfile, "ssl/key.pem"},
+           {routing, [
+             {mount, gemini, "/private", blizanci_static,
+              {private, {realm, <<"staff">>}},
+              #{docroot => "./public_gemini/private"}},
+             {mount, gemini, "/", blizanci_static, public,
+              #{docroot => "./public_gemini"}}
+           ]}]}
+       ]}
+     ]}].
+
+The old flat keys (`hostname`, `certfile`, `keyfile`, `docroot`,
+`cgiroot`, `ca_certs`, `titan_work_dir` and `routing` at the top level
+of the blizanci section) are no longer supported; see Sites, below.
+`config/sys.config.example` is a fuller example.
 
 Routing
 -------
@@ -45,8 +84,8 @@ is matched against the routes for its protocol (gemini or titan) in
 order, and the first route that matches serves it. A route serves
 exactly one protocol, so a static site that also takes Titan uploads
 needs a gemini route and a titan route. If no route matches, the
-client gets "not found". The table is set by the `routing` key in
-`sys.config`; without one, a default table is used (see below).
+client gets "not found". The table is the `routing` key of the site, in
+`sys.config` (see Sites, below); there is no default table.
 
 ### Route kinds
 
@@ -166,38 +205,10 @@ bundle of several certificates. Names are case-sensitive binaries of
 a certificate, when the table is built; a change to a CA file takes
 effect only at `blizanci_config:apply/1` or on restart.
 
-The single-site key `ca_certs` is shorthand for a realm named
-`<<"default">>`. Setting `ca_certs` and also defining a realm called
-`<<"default">>` in `realms` is a start-up error.
-
 A realm may have an empty file list. A private route on it then
 authorises nobody: a client sending no certificate gets status 60
 (certificate required), and one sending a valid certificate gets 61
 (certificate unauthorised). No warning is logged.
-
-### The default routing table
-
-If there is no `routing` key, the table is built from the keys
-`docroot` (default `./public_gemini`), `cgiroot` (default `./cgi-bin`)
-and `titan_work_dir`:
-
-    {mount, gemini, "/cgi-bin", blizanci_cgi,    public,
-     #{cgiroot => Cgiroot}},
-    {mount, gemini, "/",        blizanci_static, public,
-     #{docroot => Docroot}}
-
-and, only if `titan_work_dir` is set:
-
-    {mount, titan,  "/",        blizanci_titan,
-     {private, {realm, <<"default">>}},
-     #{docroot => Docroot, work_dir => TitanWorkDir}}
-
-So Titan uploads are off unless `titan_work_dir` is set, and then they
-are accepted only from clients whose certificates are signed by the
-CAs in `ca_certs` (realm `default`). With `titan_work_dir` set but
-`ca_certs` unset, the `default` realm is empty and nobody can upload.
-The default table has no `/private` or `/restricted` mounts: write your
-own `routing` key if you want them (next section).
 
 ### Titan work directories
 
@@ -210,23 +221,21 @@ directory of a Titan route may overlap a CGI root.
 
 ### Directory options
 
-The directory options of a route (`docroot`, `cgiroot` and `work_dir`),
-and the single-site keys that feed them, may be written as a string or
-as a binary. They are converted to binaries once, when the route is
-built, and servlets only ever see binaries. Library callers that supply
-their own servlets must therefore expect a binary `docroot`, `cgiroot`
-and `work_dir` in their options.
+The directory options of a route (`docroot`, `cgiroot` and `work_dir`)
+may be written as a string or as a binary. They are converted to
+binaries once, when the route is built, and servlets only ever see
+binaries. Library callers that supply their own servlets must therefore
+expect a binary `docroot`, `cgiroot` and `work_dir` in their options.
 
 They must be plain ASCII file names (printable characters only, codes
 32 to 126). Anything else is refused at start-up with an error that
 names the route and the option. Relative paths are kept as written.
 `cgiprefix` is a URL prefix, not a file name, and is not affected.
 
-### Example: an explicit routing table
+### Example: a routing table
 
-This table reproduces the protected areas that the default table had
-before version 6: `/private` for clients with certificates from the
-`default` realm (`ca_certs`), and `/restricted` for any client with a
+A table with protected areas: `/private` for clients with certificates
+from the realm `staff`, and `/restricted` for any client with a
 certificate. Each mount names its own subdirectory as its root, and
 the more specific mounts come before `/`:
 
@@ -234,41 +243,41 @@ the more specific mounts come before `/`:
       {mount, gemini, "/cgi-bin", blizanci_cgi, public,
        #{cgiroot => "./cgi-bin"}},
       {mount, gemini, "/private", blizanci_static,
-       {private, {realm, <<"default">>}},
+       {private, {realm, <<"staff">>}},
        #{docroot => "./public_gemini/private"}},
       {mount, gemini, "/restricted", blizanci_static, restricted,
        #{docroot => "./public_gemini/restricted"}},
       {mount, gemini, "/", blizanci_static, public,
        #{docroot => "./public_gemini"}},
       {mount, titan, "/", blizanci_titan,
-       {private, {realm, <<"default">>}},
+       {private, {realm, <<"staff">>}},
        #{docroot => "./public_gemini", work_dir => "/srv/titan-work"}}
     ]}
 
-The realm `default` exists here because `ca_certs` is set; with an
-explicit `routing` key, `titan_work_dir` is not used (name the work
-directory in the Titan route, as above). Relative paths are allowed in
-`docroot` and `cgiroot`. Without the `/private` and `/restricted`
-routes, the `/` route serves those directories publicly.
+The realm `staff` must be defined in the top-level `realms` key. Relative
+paths are allowed in `docroot`, `cgiroot` and `work_dir` (a Titan
+`work_dir` must still be absolute, as above). Without the `/private` and
+`/restricted` routes, the `/` route would serve those directories
+publicly.
 
-Several sites
--------------
+Sites
+-----
 
-By default blizanci serves one site, set by the single-site keys
-(`hostname`, `certfile`, `keyfile`, `docroot`, `cgiroot`, `ca_certs`,
-`titan_work_dir` and `routing`). To serve several hostnames from one
-port, each with its own certificate and routes, use the `sites` key
-instead:
+The sites blizanci serves are set by the `sites` key. To serve several
+hostnames from one port, each with its own certificate and routes, give
+one entry for each:
 
     {blizanci, [
       {port, 1965},
       {sites, [
         {"a.example", [{certfile, "/srv/a/cert.pem"},
                        {keyfile, "/srv/a/key.pem"},
-                       {routing, [...]}]},
+                       {routing, [{mount, gemini, "/", blizanci_static,
+                                   public, #{docroot => "/srv/a"}}]}]},
         {"b.example", [{certfile, "/srv/b/cert.pem"},
                        {keyfile, "/srv/b/key.pem"},
-                       {routing, [...]}]}
+                       {routing, [{mount, gemini, "/", blizanci_static,
+                                   public, #{docroot => "/srv/b"}}]}]}
       ]}
     ]}
 
@@ -277,19 +286,18 @@ The rules:
 * A site is `{Hostname, Options}`, and the hostname is a string. A site
   takes `certfile`, `keyfile` and `routing`, and nothing else; all
   three are required. There is no default routing table and there are
-  no shorthand keys: `docroot`, `cgiroot`, `titan_work_dir` and
-  `ca_certs` are not accepted in a site. Every site spells out its own
-  routes, and each route names its own root in its options (see
-  Routing, above).
-* `port` and `servlets` stay global, as does `realms`. A route in a
-  site names realms defined in the global `realms` key. Since
-  `ca_certs` cannot be used with `sites`, there is no realm `default`
-  unless you define one in `realms`.
-* `sites` cannot be combined with any single-site key: `hostname`,
-  `certfile`, `keyfile`, `docroot`, `cgiroot`, `ca_certs`,
-  `titan_work_dir` or `routing`. If any of them is also set, start-up
-  is refused with one line listing the ones found; blizanci does not
-  guess which form was meant.
+  no shorthand keys such as `docroot` or `cgiroot`. Every site spells
+  out its own routes, and each route names its own root in its options
+  (see Routing, above).
+* `port` and `servlets` are global, as is `realms`. A route in a site
+  names realms defined in the global `realms` key.
+* The flat keys of the single-site form of earlier versions are no
+  longer supported: if any of `hostname`, `certfile`, `keyfile`,
+  `docroot`, `cgiroot`, `ca_certs`, `titan_work_dir` or `routing` is set
+  at the top level of the blizanci section, with or without `sites`,
+  start-up is refused with one line listing the ones found. Move them
+  into an entry of `sites`; a CA given as `ca_certs` becomes an explicit
+  realm in `realms`.
 * One hostname per site. TLS clients send the name they are connecting
   to (SNI), and that picks the site and so its certificate and its
   routes. A client that sends a name that is not a site, or sends no
@@ -351,8 +359,10 @@ and each is one line in the log):
     key /srv/b/key.pem are not a matching pair
     blizanci: site b.example: the required key certfile is missing
     blizanci: port 0 is not a TCP port number (1 to 65535)
-    blizanci: the sites key cannot be combined with the single-site
-    keys hostname, certfile; use one or the other
+    blizanci: the single-site keys hostname, certfile are no longer
+    supported; move them into an entry of the sites key
+    blizanci: no sites are configured; the sites key must list at least
+    one
 
 Other problems reported this way include a hostname that is not a
 string, a site configured twice, an unreadable or undecodable
