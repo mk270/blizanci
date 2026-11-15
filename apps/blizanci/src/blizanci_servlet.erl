@@ -190,6 +190,24 @@
 %% connection. A worker that never reports leaves the client waiting
 %% for the connection's own timeout.
 %%
+%% === Who runs what ===
+%%
+%% <pre>
+%% callback              layer    process                  when
+%% default_options/0     1 module route builder            config, apply
+%% validate_options/1    1 module route builder            config, apply
+%% start/0               1 module blizanci_servlets        start, apply
+%% stop/0                1 module blizanci_servlets        stop, apply
+%% request/4             1 module connection               each request
+%% serve/4               2 proc   container (new, linked)  after defer
+%% handle_client_data/2  3 gway   container                later input
+%% cancel/1              3 gway   container                conn closing
+%% </pre>
+%%
+%% == Known limits ==
+%%
+%% This section describes the current behaviour, which may change.
+%%
 %% There are thus two reply paths, as the code stands. CGI-style
 %% workers (blizanci_cgi) report with gateway_exit/2, and
 %% <code>handle_client_data/2</code> returns <code>none</code>.
@@ -209,19 +227,6 @@
 %% documented as invalid, not endorsed: the gateway_result() type is
 %% wider than either use.
 %%
-%% === Who runs what ===
-%%
-%% <pre>
-%% callback              layer    process                  when
-%% default_options/0     1 module route builder            config, apply
-%% validate_options/1    1 module route builder            config, apply
-%% start/0               1 module blizanci_servlets        start, apply
-%% stop/0                1 module blizanci_servlets        stop, apply
-%% request/4             1 module connection               each request
-%% serve/4               2 proc   container (new, linked)  after defer
-%% handle_client_data/2  3 gway   container                later input
-%% cancel/1              3 gway   container                conn closing
-%% </pre>
 %% @end
 
 -module(blizanci_servlet).

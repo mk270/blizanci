@@ -36,6 +36,20 @@
 % The servlet has an analogous protocol for communicating back to the
 % connection handler.
 %
+% For each request the module resolves the script under the route's
+% cgiroot (a path that resolves outside it, does not exist, or uses any
+% character beyond letters, digits and ". _ - /" is answered with
+% file_not_found), and runs it as an external process with an
+% environment built from scratch for that request (see the note on
+% environment variables below). At most ?MAX_CGI (5) scripts run at once;
+% if no slot is free the request fails with gateway_busy. A script's
+% output over ?MAX_CGI_OUTPUT_BYTES (10 MiB) kills it and fails the
+% request with cgi_output_too_large. A script that must stop is killed
+% with SIGKILL; it is started in its own process group, with erlexec's
+% kill_group option. Its stderr is logged, truncated to
+% ?MAX_STDERR_LOG_BYTES (512 bytes). This module sets no time limit of its
+% own on a running script.
+%
 %% @end
 
 -module(blizanci_cgi).

@@ -2,8 +2,12 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-% The main code path consists in transforming data and handing it off
-% down the call chain (always towards the bottom of the file) as follows:
+% This module is the second half of the request path: from the parsed
+% request line to the servlet. The first half, from TLS data arriving
+% at the connection process to the call of handle_line/4 below, is in
+% blizanci_connection. The entry point here is handle_line/4. The main
+% code path consists in transforming data and handing it off down the
+% call chain (always towards the bottom of the file) as follows:
 %
 %   handle_line(...):
 %     check the line is valid UTF-8, and parse it into a URL (the path
@@ -21,17 +25,19 @@
 %   handle_path(...):
 %     strip out multiple leading slashes from path component of URL
 %
-%
-%   [the processing is handed off to a servlet, which through callbacks then
-%    does something like the following:]
-%
-%
 %   handle_file(...):
 %     percent-decode the path (via blizanci_urlpath), then strip out
 %     requests involving ".."
 %
-%   [what the servlet then does with the path, e.g. serve_file/2 in
-%    blizanci_static, is outside this module.]
+%   handle_decoded(...):
+%     refuse a decoded path containing ".."
+%
+%   serve(...):
+%     pass the request to blizanci_router:route/4
+%
+%   [the processing is handed off to a servlet, which through callbacks then
+%    does something with the path, e.g. serve_file/2 in blizanci_static;
+%    that is outside this module.]
 %
 % Every handle_* function in the chain above, starting with handle_line,
 % returns a response of type gemini_response().
