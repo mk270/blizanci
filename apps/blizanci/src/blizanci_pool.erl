@@ -2,34 +2,34 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @doc
-%% Shared `ppool' pool lifecycle helpers for the servlets that queue
-%% work onto a worker pool (`blizanci_cgi', `blizanci_titan').
-%% @end
-
 -module(blizanci_pool).
+
+-moduledoc """
+Shared `ppool` pool lifecycle helpers for the servlets that queue
+work onto a worker pool (`blizanci_cgi`, `blizanci_titan`).
+""".
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
 -export([start/3, stop/1, cancel/2, enqueue/2]).
 
-%% @doc
-%% Start the named pool, of at most Max workers of Module. A pool that is
-%% already running under the name is left alone and is `ok'.
-%%
-%% The arguments are checked here, before ppool is called, in the order
-%% name, limit, module: Queue must be an atom (other than `undefined'),
-%% Max an integer of at least 1, and Module an atom. A bad one gives
-%% `{error, {invalid_name, Queue}}', `{error, {invalid_limit, Max}}' or
-%% `{error, {invalid_module, Module}}' (ppool's own error shapes), and
-%% nothing is started or touched. This is deliberate defence in depth:
-%% the spec below is not enforced at run time, and the limits may one
-%% day come from configuration rather than being constants.
-%%
-%% Any other refusal by ppool (or a name held by some other registered
-%% process) is returned as `{error, Reason}', Reason being ppool's,
-%% unchanged.
-%% @end
+-doc """
+Start the named pool, of at most Max workers of Module. A pool that is
+already running under the name is left alone and is `ok`.
+
+The arguments are checked here, before ppool is called, in the order
+name, limit, module: Queue must be an atom (other than `undefined`),
+Max an integer of at least 1, and Module an atom. A bad one gives
+`{error, {invalid_name, Queue}}`, `{error, {invalid_limit, Max}}` or
+`{error, {invalid_module, Module}}` (ppool's own error shapes), and
+nothing is started or touched. This is deliberate defence in depth:
+the spec below is not enforced at run time, and the limits may one
+day come from configuration rather than being constants.
+
+Any other refusal by ppool (or a name held by some other registered
+process) is returned as `{error, Reason}`, Reason being ppool's,
+unchanged.
+""".
 -spec start(Queue, Max, Module) -> Result
               when Queue  :: atom(),
                    Max    :: pos_integer(),
@@ -64,11 +64,11 @@ stop(Queue) ->
     end.
 
 
-%% @doc
-%% Cancel a queued/running worker, e.g. because the client connection
-%% has gone away. QuitMsg is the gen_cast message the worker's own
-%% handle_cast/2 expects, to shut itself down cleanly.
-%% @end
+-doc """
+Cancel a queued/running worker, e.g. because the client connection
+has gone away. QuitMsg is the gen_cast message the worker's own
+handle_cast/2 expects, to shut itself down cleanly.
+""".
 -spec cancel(Pid, QuitMsg) -> Result
               when Pid     :: pid(),
                    QuitMsg :: atom(),

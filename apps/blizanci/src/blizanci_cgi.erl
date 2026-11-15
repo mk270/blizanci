@@ -2,57 +2,56 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @doc
-% This module is called by the servlet to run CGI scripts. It communicates
-% with three other processes:
-%
-% 1) the servlet. The servlet's Pid is stored in the process state, as
-%    "parent", though strictly-speaking the parent is the queue-manager
-%    referred to in 2). Each blizanci_cgi process is related to a different
-%    servlet process. The servlet uses code in this module to attempt to
-%    submit a new job to the ppool queue, which may fail. If it succeeds,
-%    then the queue-manager creates a process which calls blizanci_cgi:init/1.
-%
-% 2) the ppool queue-manager. Each blizanci_cgi process is managed by the
-%    *same* ppool queue-manager process
-%
-% 3) the erlexec process. Each blizanci_cgi process tries to start a
-%    external UNIX process via the erlexec application. The Pid of the
-%    the erlexec manager process, and the Pid of the created UNIX process
-%    are both stored in the blizanci_cgi process's state. There is one
-%    erlexec manager process for each blizanci_cgi process, and the latter
-%    should expect to receive a set of out-of-band info messages from the
-%    former advising of subprocess outputs and termination.
-%
-% Once the external UNIX process has terminated, the servlet is told the
-% result, which may be:
-%
-%   {gateway_output, binary()}
-% | {gateway_error, cgi_error()}
-%
-% This is done by calling blizanci_servlet_container:gateway_exit/2
-% (an asynchronous cast, which is safe if the servlet has gone).
-%
-% The servlet has an analogous protocol for communicating back to the
-% connection handler.
-%
-% For each request the module resolves the script under the route's
-% cgiroot (a path that resolves outside it, does not exist, or uses any
-% character beyond letters, digits and ". _ - /" is answered with
-% file_not_found), and runs it as an external process with an
-% environment built from scratch for that request (see the note on
-% environment variables below). At most ?MAX_CGI (5) scripts run at once;
-% if no slot is free the request fails with gateway_busy. A script's
-% output over ?MAX_CGI_OUTPUT_BYTES (10 MiB) kills it and fails the
-% request with cgi_output_too_large. A script that must stop is killed
-% with SIGKILL; it is started in its own process group, with erlexec's
-% kill_group option. Its stderr is logged, truncated to
-% ?MAX_STDERR_LOG_BYTES (512 bytes). This module sets no time limit of its
-% own on a running script.
-%
-%% @end
-
 -module(blizanci_cgi).
+
+-moduledoc """
+This module is called by the servlet to run CGI scripts. It communicates
+with three other processes:
+
+1) the servlet. The servlet's Pid is stored in the process state, as
+   "parent", though strictly-speaking the parent is the queue-manager
+   referred to in 2). Each blizanci_cgi process is related to a different
+   servlet process. The servlet uses code in this module to attempt to
+   submit a new job to the ppool queue, which may fail. If it succeeds,
+   then the queue-manager creates a process which calls blizanci_cgi:init/1.
+
+2) the ppool queue-manager. Each blizanci_cgi process is managed by the
+   *same* ppool queue-manager process
+
+3) the erlexec process. Each blizanci_cgi process tries to start a
+   external UNIX process via the erlexec application. The Pid of the
+   the erlexec manager process, and the Pid of the created UNIX process
+   are both stored in the blizanci_cgi process's state. There is one
+   erlexec manager process for each blizanci_cgi process, and the latter
+   should expect to receive a set of out-of-band info messages from the
+   former advising of subprocess outputs and termination.
+
+Once the external UNIX process has terminated, the servlet is told the
+result, which may be:
+
+  {gateway_output, binary()}
+| {gateway_error, cgi_error()}
+
+This is done by calling blizanci_servlet_container:gateway_exit/2
+(an asynchronous cast, which is safe if the servlet has gone).
+
+The servlet has an analogous protocol for communicating back to the
+connection handler.
+
+For each request the module resolves the script under the route's
+cgiroot (a path that resolves outside it, does not exist, or uses any
+character beyond letters, digits and ". _ - /" is answered with
+file_not_found), and runs it as an external process with an
+environment built from scratch for that request (see the note on
+environment variables below). At most ?MAX_CGI (5) scripts run at once;
+if no slot is free the request fails with gateway_busy. A script's
+output over ?MAX_CGI_OUTPUT_BYTES (10 MiB) kills it and fails the
+request with cgi_output_too_large. A script that must stop is killed
+with SIGKILL; it is started in its own process group, with erlexec's
+kill_group option. Its stderr is logged, truncated to
+?MAX_STDERR_LOG_BYTES (512 bytes). This module sets no time limit of its
+own on a running script.
+""".
 -behaviour(blizanci_servlet).
 
 -include("blizanci_types.hrl").
@@ -191,9 +190,7 @@ valid_prefix(Prefix) ->
     lists:prefix("/", Prefix) andalso lists:suffix("/", Prefix).
 
 % Called by the ppool queue manager; passes the arguments straight through
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 -spec start_link(Args) -> Result
               when Args   :: term(),
                    Result :: {ok, Pid :: pid()} |
@@ -207,9 +204,7 @@ start_link(Args) ->
 
 % Must be called by the application on initialisation; establishes the
 % ppool queue for which most of this module is a set of callbacks.
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 -spec start() -> Result
               when Result :: 'ok' | {'error', term()}.
 start() ->
@@ -246,10 +241,10 @@ request(_Path, _Req, _ServerConfig, _RouteOpts) ->
     defer.
 
 
-%% @doc
-%% Validate that a proper CGI request has been received, and if so, submit
-%% a job to the queue. Called by the servlet.
-%% @end
+-doc """
+Validate that a proper CGI request has been received, and if so, submit
+a job to the queue. Called by the servlet.
+""".
 -spec serve(Matches, Req, ServerConfig, RouteOpts) -> Result
               when Matches      :: path_matches(),
                    Req          :: request_details(),
@@ -354,9 +349,7 @@ enqueue_cgi(Args, Env) ->
 
 % Called by the queue runner. The second argument to ppool:run is
 % passed in as the first argument to this function.
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 init({Parent, {CmdLine, Options}}) ->
     process_flag(trap_exit, true),
     % The parent (the servlet container) is not linked to us, so watch it:
@@ -375,17 +368,13 @@ init({Parent, {CmdLine, Options}}) ->
     {ok, State}.
 
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 handle_cast(cgi_quit, State) ->
     stop_script(State),
     {stop, normal, State};
@@ -414,9 +403,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 terminate(normal, _State) ->
     ok;
 terminate(Reason, _State) ->
@@ -424,9 +411,7 @@ terminate(Reason, _State) ->
     ok.
 
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 

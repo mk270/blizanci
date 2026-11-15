@@ -2,26 +2,27 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @doc
-%% This module deals with sanitising a proplist of OS environment
-%% variables such that it's appropriate for creating a new UNIX
-%% subprocess via the erlexec port.
-%% @end
-
 -module(blizanci_osenv).
+
+-moduledoc """
+This module deals with sanitising a proplist of OS environment
+variables such that it's appropriate for creating a new UNIX
+subprocess via the erlexec port.
+""".
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
 -export([sanitise/1]).
 
 
-%% @doc Sanitise the system environment variables.
-%%
-%% erlexec expects environment variables to be strings, not binaries;
-%% the function tries to massage the various reasonable input values
-%% (such as integers and binaries) into acceptable strings. It crashes
-%% on unreasonable input.
-%% @end
+-doc """
+Sanitise the system environment variables.
+
+erlexec expects environment variables to be strings, not binaries;
+the function tries to massage the various reasonable input values
+(such as integers and binaries) into acceptable strings. It crashes
+on unreasonable input.
+""".
 -spec sanitise(Env) -> Result
               when Env    :: [{string(), term()}],
                    Result :: env_list().

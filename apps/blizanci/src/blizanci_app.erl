@@ -2,9 +2,9 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @hidden
-
 -module(blizanci_app).
+
+-moduledoc false.
 
 -behaviour(application).
 

@@ -2,35 +2,34 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @doc
-%% Percent-decoding of the path of a request URL, and the reverse for
-%% redirects.
-%%
-%% This is the one place where a request path is decoded. The rules:
-%%
-%% <ul>
-%% <li>The path is split on "/" first, and each segment is decoded on its
-%%     own, so an escaped "/" cannot create a new separator (it is
-%%     refused).</li>
-%% <li>Every "%" must be followed by two hex digits, in either case;
-%%     otherwise the path is malformed.</li>
-%% <li>Decoding happens exactly once: "%2520" gives the text "%20".</li>
-%% <li>The result may contain only printable ASCII (16#20 to 16#7E). NUL,
-%%     other control characters, DEL and every non-ASCII byte are refused,
-%%     whether they were written raw or as escapes, valid UTF-8 or not.
-%%     (A decoded name is therefore also a valid name in any file name
-%%     encoding.) This is a deliberate policy: names stay in a closed
-%%     character set, so invisible, bidirectional and look-alike
-%%     characters cannot appear.</li>
-%% <li>A decoded segment may not be "." or "..".</li>
-%% </ul>
-%%
-%% A decoded path is returned as `{decoded_path, Bin}', so that it is
-%% distinguishable from a raw one. Callers outside this module may unwrap
-%% it (and the request layer does).
-%% @end
-
 -module(blizanci_urlpath).
+
+-moduledoc """
+Percent-decoding of the path of a request URL, and the reverse for
+redirects.
+
+This is the one place where a request path is decoded. The rules:
+
+- The path is split on "/" first, and each segment is decoded on its
+  own, so an escaped "/" cannot create a new separator (it is
+  refused).
+- Every "%" must be followed by two hex digits, in either case;
+  otherwise the path is malformed.
+- Decoding happens exactly once: "%2520" gives the text "%20".
+- The result may contain only printable ASCII (16#20 to 16#7E). NUL,
+  other control characters, DEL and every non-ASCII byte are refused,
+  whether they were written raw or as escapes, valid UTF-8 or not.
+  (A decoded name is therefore also a valid name in any file name
+  encoding.) This is a deliberate policy: names stay in a closed
+  character set, so invisible, bidirectional and look-alike
+  characters cannot appear.
+- A decoded segment may not be "." or "..".
+
+
+A decoded path is returned as `{decoded_path, Bin}`, so that it is
+distinguishable from a raw one. Callers outside this module may unwrap
+it (and the request layer does).
+""".
 
 -export([decode_path/1, split_titan/1, encode_path/1]).
 
@@ -44,12 +43,12 @@
 -define(MAX_PRINTABLE, 16#7E). % tilde
 
 
-%% @doc
-%% Decode the (already normalised, leading-slash-free) path of a request.
-%% A malformed escape is `request_not_parsed'; a path that decodes to
-%% something not allowed is `bad_filename'. These are the names of the
-%% Gemini status codes (see blizanci_status).
-%% @end
+-doc """
+Decode the (already normalised, leading-slash-free) path of a request.
+A malformed escape is `request_not_parsed`; a path that decodes to
+something not allowed is `bad_filename`. These are the names of the
+Gemini status codes (see blizanci_status).
+""".
 -spec decode_path(Path) -> Result
               when Path   :: binary(),
                    Result :: {ok, decoded()}
@@ -142,13 +141,13 @@ add_byte(Byte, Rest, Acc) ->
     decode_segment(Rest, <<Acc/binary, Byte>>).
 
 
-%% @doc
-%% A Titan path carries its parameters after the first ";" of the raw
-%% path ("name;size=3;mime=..."). Split the raw path there, before any
-%% decoding, so that an escaped ";" in the name can never be mistaken for
-%% the start of the parameters. Returns the file part and the parameters
-%% (everything after the ";", still raw), or `none' if there is no ";".
-%% @end
+-doc """
+A Titan path carries its parameters after the first ";" of the raw
+path ("name;size=3;mime=..."). Split the raw path there, before any
+decoding, so that an escaped ";" in the name can never be mistaken for
+the start of the parameters. Returns the file part and the parameters
+(everything after the ";", still raw), or `none` if there is no ";".
+""".
 -spec split_titan(Fragment) -> Result
               when Fragment :: binary(),
                    Result   :: {binary(), binary() | none}.
@@ -159,12 +158,12 @@ split_titan(Fragment) when is_binary(Fragment) ->
     end.
 
 
-%% @doc
-%% The reverse of decode_path/1, for a path that is going into a URL (as
-%% in a redirect): each segment is percent-encoded, so that spaces, "%",
-%% "?", "#" and so on in a name survive, and the segments are joined with
-%% "/". Decoding the result gives the path back.
-%% @end
+-doc """
+The reverse of decode_path/1, for a path that is going into a URL (as
+in a redirect): each segment is percent-encoded, so that spaces, "%",
+"?", "#" and so on in a name survive, and the segments are joined with
+"/". Decoding the result gives the path back.
+""".
 -spec encode_path(Path) -> Result
               when Path   :: binary(),
                    Result :: binary().

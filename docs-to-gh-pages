@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Generate the edoc documentation and commit it to the local gh-pages
+# Generate the ex_doc documentation and commit it to the local gh-pages
 # branch, creating that branch if it does not exist yet. The working
 # tree and the current branch are not touched: the branch is checked
 # out in a temporary git worktree. Nothing is pushed; do that by hand
@@ -13,10 +13,10 @@ ROOT=$PWD
 
 DOCDIR=apps/blizanci/doc
 
-# edoc picks up the overview page from the application's doc directory
-mkdir -p "$DOCDIR"
-cp doc/overview.edoc "$DOCDIR/"
-rebar3 edoc
+# rebar3_ex_doc (see rebar.config) writes the HTML to the application's
+# doc directory; the overview page is doc/overview.md.
+rm -rf "$DOCDIR"
+rebar3 ex_doc
 
 WORKTREE=$(mktemp -d)
 cleanup () {
@@ -37,7 +37,6 @@ cd "$WORKTREE"
 # Replace the previous contents, so that pages for removed modules go.
 git rm -rq --ignore-unmatch .
 cp -a "$ROOT/$DOCDIR/." .
-rm -f overview.edoc
 git add -A
 
 if git diff --cached --quiet; then

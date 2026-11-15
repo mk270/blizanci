@@ -2,7 +2,6 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @hidden
 %% Owns the lifecycle of the declared servlets' shared resources. A
 %% servlet is a module implementing the blizanci_servlet behaviour; its
 %% start/0 sets up whatever the module needs in order to serve requests
@@ -28,6 +27,8 @@
 %% It is supervised after the table owner and before the listener.
 
 -module(blizanci_servlets).
+
+-moduledoc false.
 -behaviour(gen_server).
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").

@@ -2,64 +2,55 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @doc
-%% The configuration of a blizanci instance: built from the application
-%% environment (sys.config) by from_app_env/0, or from explicit values by
-%% the builder functions (new/2, site/3, add_route/2 and so on).
-%%
-%% At start-up from_app_env/0 builds the configuration and validates it,
-%% reporting every problem found in one pass as a list (see
-%% describe_error/1 for the one-line text of each); a bad configuration
-%% stops the application starting. A site's certificate and private key
-%% must be a matching pair, or the site is refused; a pair whose key type
-%% cannot be compared is accepted with a warning. The configuration is
-%% held in an ETS table owned by blizanci_conf_serv, the single source of
-%% truth, which is read by the TLS sni_fun and by each connection, and
-%% which apply/1 replaces while the server runs. See blizanci_conf_serv
-%% for the detail.
-%%
-%% Configuration items:
-%%
-%% <dl>
-%%   <dt><code>{port, Port::integer()}</code></dt>
-%%   <dd>the port to listen on (defaults to 1965); 1 to 65535, so 0 is
-%%       refused</dd>
-%%   <dt><code>{realms, [{Name::binary(), [CACertPath::string()]}]}</code>
-%%   </dt>
-%%   <dd>authentication realms: named sets of CA certificates, global to
-%%       all sites, used for verifying client certificates. A set may be
-%%       the empty list. A file may hold several certificates (a
-%%       bundle), all of which are trusted. The files are read when the
-%%       route is built; a change to one takes effect only on apply/1 or
-%%       a restart. A route names a realm as <code>{private, {realm,
-%%       Name}}</code> or a list of those.</dd>
-%%   <dt><code>{servlets, [Module::atom()]}</code></dt>
-%%   <dd>the servlets which routes may use (defaults to blizanci_static,
-%%       blizanci_cgi and blizanci_titan)</dd>
-%%   <dt><code>{sites, [{Hostname::string(), [Option]}]}</code></dt>
-%%   <dd>the sites served on the port, at least one. A site takes
-%%       <code>certfile</code> (the path to the site's certificate),
-%%       <code>keyfile</code> (the path to its private key) and
-%%       <code>routing</code> only, all three required; there is no
-%%       default routing table. The hostname is folded to lower case; a
-%%       name given twice is an error. A site's certificate and key must
-%%       be a matching pair. The routing table is an ordered list, first
-%%       match wins; see blizanci_router:prepare/3 and the README,
-%%       Routing, for the formats of its entries.</dd>
-%% </dl>
-%%
-%% The flat keys of the single-site form of earlier versions (hostname,
-%% certfile, keyfile, docroot, cgiroot, ca_certs, titan_work_dir and
-%% routing, at the top level) are no longer supported: if any is set,
-%% with or without sites, start-up is refused with one error naming
-%% them.
-%%
-%% Relative paths are allowed in all configuration items, including the
-%% docroot and cgiroot options of routing entries.
-%%
-%% @end
-
 -module(blizanci_config).
+
+-moduledoc """
+The configuration of a blizanci instance: built from the application
+environment (sys.config) by from_app_env/0, or from explicit values by
+the builder functions (new/2, site/3, add_route/2 and so on).
+
+At start-up from_app_env/0 builds the configuration and validates it,
+reporting every problem found in one pass as a list (see
+describe_error/1 for the one-line text of each); a bad configuration
+stops the application starting. A site's certificate and private key
+must be a matching pair, or the site is refused; a pair whose key type
+cannot be compared is accepted with a warning. The configuration is
+held in an ETS table owned by blizanci_conf_serv, the single source of
+truth, which is read by the TLS sni_fun and by each connection, and
+which apply/1 replaces while the server runs. See blizanci_conf_serv
+for the detail.
+
+Configuration items:
+
+- `{port, Port::integer()}`: the port to listen on (defaults to 1965);
+  1 to 65535, so 0 is refused.
+- `{realms, [{Name::binary(), [CACertPath::string()]}]}`: authentication
+  realms: named sets of CA certificates, global to all sites, used for
+  verifying client certificates. A set may be the empty list. A file may
+  hold several certificates (a bundle), all of which are trusted. The
+  files are read when the route is built; a change to one takes effect
+  only on apply/1 or a restart. A route names a realm as
+  `{private, {realm, Name}}` or a list of those.
+- `{servlets, [Module::atom()]}`: the servlets which routes may use
+  (defaults to blizanci_static, blizanci_cgi and blizanci_titan).
+- `{sites, [{Hostname::string(), [Option]}]}`: the sites served on the
+  port, at least one. A site takes `certfile` (the path to the site's
+  certificate), `keyfile` (the path to its private key) and `routing`
+  only, all three required; there is no default routing table. The
+  hostname is folded to lower case; a name given twice is an error. A
+  site's certificate and key must be a matching pair. The routing table
+  is an ordered list, first match wins; see blizanci_router:prepare/3
+  and the README, Routing, for the formats of its entries.
+
+The flat keys of the single-site form of earlier versions (hostname,
+certfile, keyfile, docroot, cgiroot, ca_certs, titan_work_dir and
+routing, at the top level) are no longer supported: if any is set,
+with or without sites, start-up is refused with one error naming
+them.
+
+Relative paths are allowed in all configuration items, including the
+docroot and cgiroot options of routing entries.
+""".
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -736,9 +727,9 @@ find_site(Hostname, Sites) ->
 -spec ssl_opts(Port) -> Result
               when Port   :: integer(),
                    Result :: [{atom(), term()}].
-%% @doc
-%% Generate the options required for ranch to initialise SSL
-%% @end
+-doc """
+Generate the options required for ranch to initialise SSL
+""".
 ssl_opts(Port) ->
     VerifyFn = fun (ClientCert, Ev, Init) ->
                    blizanci_x509:verify_cert(ClientCert, Ev, Init) end,
@@ -781,26 +772,26 @@ ssl_opts(Port) ->
 
 -spec tls_versions() -> Result
               when Result :: [ssl:protocol_version()].
-%% @doc
-%% The TLS versions blizanci offers, most preferred first: 1.3 and 1.2.
-%% This is the one place the list is set. Cipher suites and the other
-%% TLS options are OTP's defaults.
-%% @end
+-doc """
+The TLS versions blizanci offers, most preferred first: 1.3 and 1.2.
+This is the one place the list is set. Cipher suites and the other
+TLS options are OTP's defaults.
+""".
 tls_versions() ->
     ['tlsv1.3', 'tlsv1.2'].
 
 -spec site_wants_client_cert(Routes) -> Result
               when Routes :: [route()],
                    Result :: boolean().
-%% @doc
-%% Whether a site with these routes should ask the client for a
-%% certificate during the TLS handshake: true if any route, gemini or
-%% titan, is restricted or private, false if every route is public
-%% (or there are none). The path is not known at handshake time, so one
-%% such route means every client is asked. A site that does not ask
-%% never has a certificate sent to it, which matters in TLS 1.2, where
-%% the client certificate travels unencrypted.
-%% @end
+-doc """
+Whether a site with these routes should ask the client for a
+certificate during the TLS handshake: true if any route, gemini or
+titan, is restricted or private, false if every route is public
+(or there are none). The path is not known at handshake time, so one
+such route means every client is asked. A site that does not ask
+never has a certificate sent to it, which matters in TLS 1.2, where
+the client certificate travels unencrypted.
+""".
 site_wants_client_cert(Routes) ->
     lists:any(fun(#route{auth_policy = public}) -> false;
                  (#route{}) -> true
@@ -819,9 +810,9 @@ site_tls_opts(#site{certfile = Cert, keyfile = Key, routing = Routes}) ->
 -spec proto_opts(Port) -> Result
               when Port   :: integer(),
                    Result :: [{atom(), term()}].
-%% @doc
-%% Generate the options required for ranch to initialise the TCP listener
-%% @end
+-doc """
+Generate the options required for ranch to initialise the TCP listener
+""".
 proto_opts(Port) ->
     [{port, Port}].
 

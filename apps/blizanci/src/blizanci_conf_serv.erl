@@ -2,7 +2,6 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% @hidden
 %% Owns the configuration table of the running instance: its port,
 %% the servlet modules it declares, and its sites.
 %%
@@ -62,6 +61,8 @@
 %% before anything else starts, and is stopped last.
 
 -module(blizanci_conf_serv).
+
+-moduledoc false.
 -behaviour(gen_server).
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").

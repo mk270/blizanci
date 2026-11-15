@@ -2,43 +2,45 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-% The authorisation policies of a route are:
-%
-% private: certificate must be signed by one of the listed CAs
-% restricted: certificate must be presented
-% public: no certificate requirement
-%
-% A private route names authentication realms: {private, Realm} or
-% {private, [Realm]}.  A realm is a named set of CA files, defined once
-% for the whole server (see add_realm/3) and decoded then.  The route's
-% realms are resolved when it is built, and it holds the certificates;
-% nothing is looked up per request.
-%
-% A failed check gives the client one of these statuses (see
-% blizanci_status).  No client certificate (on a restricted or private
-% route): 60.  A certificate outside its validity period, expired or
-% not yet valid: 62; this is checked before the policy, so it applies
-% to restricted routes too, and a certificate that cannot be decoded at
-% all is likewise 62.  On a private route, a certificate that none of
-% the route's CAs signed: 61.
-%
-% The older form, {private, Files}, lists CA files directly and is the
-% one that old-format 5-tuple routes still use; new-format {mount, ...}
-% and {regex, ...} routes accept only realm policies.  The CA files of
-% such a route are read ONCE, when the route is built
-% (valid_authz_policy/1), and every certificate found in each file is
-% decoded and kept in the route's policy: {private, Files, Certs}.  A
-% request is checked against those decoded certificates and does no file
-% I/O, so a CA file that is later deleted, damaged or made unreadable
-% does not affect a running route.  The consequence is that a changed CA
-% file takes effect only when the route is rebuilt (blizanci_config:
-% apply/1) or the server is restarted.
-%
-% A CA file may be a bundle: the client certificate is accepted if it is
-% signed by ANY certificate in ANY of the route's files, so trust extends
-% to every certificate in a file, not just the first.
-
 -module(blizanci_auth).
+
+-moduledoc """
+The authorisation policies of a route are:
+
+- `private`: certificate must be signed by one of the listed CAs
+- `restricted`: certificate must be presented
+- `public`: no certificate requirement
+
+A private route names authentication realms: `{private, Realm}` or
+`{private, [Realm]}`.  A realm is a named set of CA files, defined once
+for the whole server (see add_realm/3) and decoded then.  The route's
+realms are resolved when it is built, and it holds the certificates;
+nothing is looked up per request.
+
+A failed check gives the client one of these statuses (see
+blizanci_status).  No client certificate (on a restricted or private
+route): 60.  A certificate outside its validity period, expired or
+not yet valid: 62; this is checked before the policy, so it applies
+to restricted routes too, and a certificate that cannot be decoded at
+all is likewise 62.  On a private route, a certificate that none of
+the route's CAs signed: 61.
+
+The older form, `{private, Files}`, lists CA files directly and is the
+one that old-format 5-tuple routes still use; new-format `{mount, ...}`
+and `{regex, ...}` routes accept only realm policies.  The CA files of
+such a route are read ONCE, when the route is built
+(valid_authz_policy/1), and every certificate found in each file is
+decoded and kept in the route's policy: `{private, Files, Certs}`.  A
+request is checked against those decoded certificates and does no file
+I/O, so a CA file that is later deleted, damaged or made unreadable
+does not affect a running route.  The consequence is that a changed CA
+file takes effect only when the route is rebuilt (blizanci_config:
+apply/1) or the server is restarted.
+
+A CA file may be a bundle: the client certificate is accepted if it is
+signed by ANY certificate in ANY of the route's files, so trust extends
+to every certificate in a file, not just the first.
+""".
 -include_lib("eunit/include/eunit.hrl").
 -include("blizanci_types.hrl").
 
@@ -48,9 +50,11 @@
 
 -define(MAX_REALM_NAME, 64).
 
-%% @doc Derive the authorisation policy of a given routing table entry
-%% @returns {ok, public | restricted | private} | {error, atom()}
-%% @end
+-doc """
+Derive the authorisation policy of a given routing table entry
+
+Returns `{ok, public | restricted | private} | {error, atom()}`.
+""".
 -spec authorisation_policy(Options) -> Result
               when Options :: map(),
                    Result  :: {'ok', authorisation()} | {'error', term()}.
@@ -60,8 +64,9 @@ authorisation_policy(Options) when is_map(Options) ->
     valid_authz_policy(Auth).
 
 
-%% @doc Check if the argument represents a valid authorisation policy
-%% @end
+-doc """
+Check if the argument represents a valid authorisation policy
+""".
 -spec valid_authz_policy(Policy) -> Result
               when Policy :: term(),
                    Result :: {ok, authorisation()} | {error, term()}.
@@ -69,9 +74,10 @@ valid_authz_policy(Policy) ->
     valid_authz_policy(Policy, #{}).
 
 
-%% @doc As valid_authz_policy/1, resolving any realms against a realm
-%% table (see realm_table/1).
-%% @end
+-doc """
+As valid_authz_policy/1, resolving any realms against a realm
+table (see realm_table/1).
+""".
 -spec valid_authz_policy(Policy, Realms) -> Result
               when Policy :: term(),
                    Realms :: realm_table(),
@@ -126,9 +132,10 @@ resolve_realms(_, _, _) ->
     {error, invalid_authz_policy}.
 
 
-%% @doc The one way to make a realm: a non-empty, case-sensitive name of
-%% printable ASCII, at most 64 characters.
-%% @end
+-doc """
+The one way to make a realm: a non-empty, case-sensitive name of
+printable ASCII, at most 64 characters.
+""".
 -spec realm(Name) -> Result
               when Name   :: term(),
                    Result :: {ok, realm()} | {error, term()}.
@@ -143,10 +150,11 @@ realm(Name) ->
     {error, {invalid_realm_name, Name}}.
 
 
-%% @doc Add a realm to a realm table, reading and decoding its CA files
-%% now.  A realm may have no files; a private route on it
-%% authorises nobody.
-%% @end
+-doc """
+Add a realm to a realm table, reading and decoding its CA files
+now.  A realm may have no files; a private route on it
+authorises nobody.
+""".
 -spec add_realm(Realms, Name, Files) -> Result
               when Realms :: realm_table(),
                    Name   :: term(),
@@ -169,9 +177,10 @@ add_realm(Realms, Name, Files) ->
     end.
 
 
-%% @doc Build a realm table from a list of {Name, Files}, as in the
-%% sys.config key realms.
-%% @end
+-doc """
+Build a realm table from a list of {Name, Files}, as in the
+sys.config key realms.
+""".
 -spec realm_table(Defs) -> Result
               when Defs   :: term(),
                    Result :: {ok, realm_table()} | {error, term()}.
@@ -199,10 +208,12 @@ load_ca_files([File | Rest], Acc) ->
     end.
 
 
-%% @doc Check if a route's authorisation policy permits a given request
-%% @param AuthPolicy the authorisation policy associated with the route
-%% @param Request the Gemini request
-%% @end
+-doc """
+Check if a route's authorisation policy permits a given request
+
+- `AuthPolicy`: the authorisation policy associated with the route
+- `Request`: the Gemini request
+""".
 -spec authorised(AuthPolicy, Request) -> Result
               when AuthPolicy :: authorisation(),
                    Request    :: request_details(),
@@ -234,12 +245,13 @@ cert_authorised(AuthPolicy, {ok, DerCert}) ->
     end.
 
 
-%% @doc Check a certificate, already known to be within its validity
-%% period, against the policy's issuer requirements (if any). DerCert
-%% is the raw certificate (not the decoded #'OTPCertificate'{} form),
-%% since that's what public_key:pkix_verify/2 (via
-%% blizanci_x509:verify_signed_by/2) requires.
-%% @end
+-doc """
+Check a certificate, already known to be within its validity
+period, against the policy's issuer requirements (if any). DerCert
+is the raw certificate (not the decoded #'OTPCertificate'{} form),
+since that's what public_key:pkix_verify/2 (via
+blizanci_x509:verify_signed_by/2) requires.
+""".
 -spec cert_authorised_policy(Authorisation, DerCert) -> Result
               when Authorisation :: authorisation(),
                    DerCert       :: public_key:der_encoded(),
@@ -255,12 +267,13 @@ cert_authorised_policy({private, _Files, Issuers}, DerCert) ->
     end.
 
 
-%% @doc Check that DerCert was cryptographically signed by the private
-%% key of one of the issuer certificates -- see
-%% blizanci_x509:verify_signed_by/2 for why this isn't just
-%% public_key:pkix_is_issuer/2 (a name comparison, not a signature
-%% check).
-%% @end
+-doc """
+Check that DerCert was cryptographically signed by the private
+key of one of the issuer certificates -- see
+blizanci_x509:verify_signed_by/2 for why this isn't just
+public_key:pkix_is_issuer/2 (a name comparison, not a signature
+check).
+""".
 -spec cert_issued_by_any(DerCert, Issuers) -> Result
               when DerCert :: public_key:der_encoded(),
                    Issuers :: [#'OTPCertificate'{}],

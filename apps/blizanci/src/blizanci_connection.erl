@@ -2,32 +2,36 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-% This module is the first half of the request path: from TLS data
-% arriving at the connection process (start_link/3 is the ranch entry
-% point) to the call of blizanci_request:handle_line/4; see
-% blizanci_request for the rest. The main code path consists in
-% transforming data and handing it off down the call chain (always
-% towards the bottom of the file) as follows:
-%
-%   handle_info({ssl, ...}):
-%     new data from TLS, add it to buffer
-%
-%   handle_ssl(...):
-%     calls handle_request/2, turns any exception into a 40 response,
-%     re-activates the socket and sends the response
-%
-%   handle_request(...):
-%     extract line from buffer if one is complete
-%
-%   blizanci_request:handle_line(...):
-%     decode URL from line (i.e., Unicode, RFC-3986 percent escaping);
-%     the rest of the request pipeline continues in that module
-%
-% Once a servlet has been started, further client data is instead
-% passed to it by handle_request/2 via
-% blizanci_servlet_container:handle_client_data/2.
-
 -module(blizanci_connection).
+
+-moduledoc """
+This module is the first half of the request path: from TLS data
+arriving at the connection process (start_link/3 is the ranch entry
+point) to the call of blizanci_request:handle_line/4; see
+blizanci_request for the rest. The main code path consists in
+transforming data and handing it off down the call chain (always
+towards the bottom of the file) as follows:
+
+```
+handle_info({ssl, ...}):
+  new data from TLS, add it to buffer
+
+handle_ssl(...):
+  calls handle_request/2, turns any exception into a 40 response,
+  re-activates the socket and sends the response
+
+handle_request(...):
+  extract line from buffer if one is complete
+
+blizanci_request:handle_line(...):
+  decode URL from line (i.e., Unicode, RFC-3986 percent escaping);
+  the rest of the request pipeline continues in that module
+```
+
+Once a servlet has been started, further client data is instead
+passed to it by handle_request/2 via
+blizanci_servlet_container:handle_client_data/2.
+""".
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
 
@@ -97,9 +101,7 @@ servlet_result(Pid, Result) when is_pid(Pid) ->
 %% gen_server.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 init({Ref, Transport, Opts}) ->
     ok = proc_lib:init_ack({ok, self()}),
     %% This process owns the flag: it is linked to its servlet and must
@@ -127,9 +129,7 @@ init({Ref, Transport, Opts}) ->
                        connection_timeout),
     gen_server:enter_loop(?MODULE, [], State).
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 handle_info({ssl, Socket, Payload}, State) ->
     handle_ssl(Socket, Payload, State);
 handle_info({tcp_closed, _Socket}, State) ->
@@ -195,15 +195,11 @@ handle_info(Msg, State) ->
 
 %% TBD: respond + error_code + self ! finis.. etc ought to be factored into
 %%      a library
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 handle_cast({servlet_result, {servlet_failed, Result}}, State) ->
     respond({error_code, Result}, State),
     self() ! finished,
@@ -217,16 +213,12 @@ handle_cast({servlet_result, {servlet_complete, Output}}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 terminate(_Reason, State) ->
     close_session(State),
     ok.
 
-%% @doc
-%% @hidden
-%% @end
+-doc false.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
