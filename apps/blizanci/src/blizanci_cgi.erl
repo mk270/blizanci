@@ -5,52 +5,9 @@
 -module(blizanci_cgi).
 
 -moduledoc """
-This module is called by the servlet to run CGI scripts. It communicates
-with three other processes:
+A servlet that runs CGI scripts, in a ppool queue, via erlexec.
 
-1) the servlet. The servlet's Pid is stored in the process state, as
-   "parent", though strictly-speaking the parent is the queue-manager
-   referred to in 2). Each blizanci_cgi process is related to a different
-   servlet process. The servlet uses code in this module to attempt to
-   submit a new job to the ppool queue, which may fail. If it succeeds,
-   then the queue-manager creates a process which calls blizanci_cgi:init/1.
-
-2) the ppool queue-manager. Each blizanci_cgi process is managed by the
-   *same* ppool queue-manager process
-
-3) the erlexec process. Each blizanci_cgi process tries to start a
-   external UNIX process via the erlexec application. The Pid of the
-   the erlexec manager process, and the Pid of the created UNIX process
-   are both stored in the blizanci_cgi process's state. There is one
-   erlexec manager process for each blizanci_cgi process, and the latter
-   should expect to receive a set of out-of-band info messages from the
-   former advising of subprocess outputs and termination.
-
-Once the external UNIX process has terminated, the servlet is told the
-result, which may be:
-
-  {gateway_output, binary()}
-| {gateway_error, cgi_error()}
-
-This is done by calling blizanci_servlet_container:gateway_exit/2
-(an asynchronous cast, which is safe if the servlet has gone).
-
-The servlet has an analogous protocol for communicating back to the
-connection handler.
-
-For each request the module resolves the script under the route's
-cgiroot (a path that resolves outside it, does not exist, or uses any
-character beyond letters, digits and ". _ - /" is answered with
-file_not_found), and runs it as an external process with an
-environment built from scratch for that request (see the note on
-environment variables below). At most ?MAX_CGI (5) scripts run at once;
-if no slot is free the request fails with gateway_busy. A script's
-output over ?MAX_CGI_OUTPUT_BYTES (10 MiB) kills it and fails the
-request with cgi_output_too_large. A script that must stop is killed
-with SIGKILL; it is started in its own process group, with erlexec's
-kill_group option. Its stderr is logged, truncated to
-?MAX_STDERR_LOG_BYTES (512 bytes). This module sets no time limit of its
-own on a running script.
+See the manual chapter [CGI](cgi.md).
 """.
 -behaviour(blizanci_servlet).
 
@@ -103,51 +60,12 @@ own on a running script.
 % A note re environment variables.
 %
 % The CGI child's environment is built from scratch on each request
-% (erlexec's {env, [clear | Env]} option -- see enqueue_cgi/2), rather
-% than inherited from the Erlang VM's own OS environment, so nothing
-% other than what's listed below ever reaches the CGI script.
-%
-% The preserved variables, constant across all requests (copied from
-% the Erlang VM's own environment at request time, if set -- see
-% preserved_env/0), are:
-%
-%   $HOME
-%   $USER
-%   $PATH
-%   $LOGNAME
-%   $SHELL
-%
-% On a per-request basis, the following variables are set:
-%
-%   $PATH_TRANSLATED
-%   $PATH_INFO
-%   $QUERY_STRING
-%   $SCRIPT_NAME
-%   $SERVER_NAME
-%   $SERVER_PORT
-%   $SERVER_PROTOCOL
-%   $REMOTE_USER  (this latter one is only set if a client cert is proferred)
-%
-% No other environment variables get passed through to the CGI runner.
-% In particular, variables inherited at startup from the UNIX environment
-% are not passed through unless on the "preserved" list above.
-%
-%
-% In the Gemini App Guide, it is suggested that the following variables
-% be made available:
-%
-%   $SCRIPT_NAME
-%   $PATH_INFO
-%   $QUERY_STRING
-%   $REMOTE_ADDR
-%   $AUTH_TYPE
-%   $TLS_CLIENT_HASH
-%   $TLS_CLIENT_SUBJECT
-%   $TLS_CLIENT_ISSUER
-%
-% Note that these above are not exactly the variables currently supported
-%
-% See gemini://geminiprotocol.net/docs/app-guide.gmi
+% (erlexec's {env, [clear | Env]} option -- see enqueue_cgi/2), not
+% inherited from the Erlang VM's own OS environment.  The variables
+% that are preserved (?ALLOWED_ENV, below) and those set per request
+% (see make_environment/1) are listed in the manual chapter 'CGI'
+% (doc/manual/cgi.gmi), as are the variables the Gemini App Guide
+% suggests.
 
 -define(ALLOWED_ENV,
         ["HOME",

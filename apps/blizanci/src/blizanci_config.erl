@@ -9,47 +9,7 @@ The configuration of a blizanci instance: built from the application
 environment (sys.config) by from_app_env/0, or from explicit values by
 the builder functions (new/2, site/3, add_route/2 and so on).
 
-At start-up from_app_env/0 builds the configuration and validates it,
-reporting every problem found in one pass as a list (see
-describe_error/1 for the one-line text of each); a bad configuration
-stops the application starting. A site's certificate and private key
-must be a matching pair, or the site is refused; a pair whose key type
-cannot be compared is accepted with a warning. The configuration is
-held in an ETS table owned by blizanci_conf_serv, the single source of
-truth, which is read by the TLS sni_fun and by each connection, and
-which apply/1 replaces while the server runs. See blizanci_conf_serv
-for the detail.
-
-Configuration items:
-
-- `{port, Port::integer()}`: the port to listen on (defaults to 1965);
-  1 to 65535, so 0 is refused.
-- `{realms, [{Name::binary(), [CACertPath::string()]}]}`: authentication
-  realms: named sets of CA certificates, global to all sites, used for
-  verifying client certificates. A set may be the empty list. A file may
-  hold several certificates (a bundle), all of which are trusted. The
-  files are read when the route is built; a change to one takes effect
-  only on apply/1 or a restart. A route names a realm as
-  `{private, {realm, Name}}` or a list of those.
-- `{servlets, [Module::atom()]}`: the servlets which routes may use
-  (defaults to blizanci_static, blizanci_cgi and blizanci_titan).
-- `{sites, [{Hostname::string(), [Option]}]}`: the sites served on the
-  port, at least one. A site takes `certfile` (the path to the site's
-  certificate), `keyfile` (the path to its private key) and `routing`
-  only, all three required; there is no default routing table. The
-  hostname is folded to lower case; a name given twice is an error. A
-  site's certificate and key must be a matching pair. The routing table
-  is an ordered list, first match wins; see blizanci_router:prepare/3
-  and the README, Routing, for the formats of its entries.
-
-The flat keys of the single-site form of earlier versions (hostname,
-certfile, keyfile, docroot, cgiroot, ca_certs, titan_work_dir and
-routing, at the top level) are no longer supported: if any is set,
-with or without sites, start-up is refused with one error naming
-them.
-
-Relative paths are allowed in all configuration items, including the
-docroot and cgiroot options of routing entries.
+See the manual chapter [Configuration](configuration.md).
 """.
 -include("blizanci_types.hrl").
 -include_lib("eunit/include/eunit.hrl").

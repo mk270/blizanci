@@ -5,18 +5,10 @@
 -module(blizanci_titan).
 
 -moduledoc """
-A servlet accepting Titan uploads into a route's docroot. Its
-request/4 always defers: the upload body arrives after the request
-line, and is passed to a worker process (run in a ppool queue, and
-also a gen_server) via handle_client_data/2. The data is staged in
-the route's work_dir and moved to its place under the docroot once
-complete; a request of size 0 deletes the resource instead.
+A servlet accepting Titan uploads into a route's docroot, staged in
+the route's work_dir.
 
-The Titan protocol, for uploading to Gemini servers, is specified at
-`gemini://transjovian.org/titan/The%20Titan%20Specification`.
-In it the "size" parameter is mandatory, "mime" is optional (default
-text/gemini) and "token" is optional. A request with size=0 deletes
-the resource.
+See the manual chapter [Titan and static files](titan-and-static.md).
 """.
 -behaviour(blizanci_servlet).
 

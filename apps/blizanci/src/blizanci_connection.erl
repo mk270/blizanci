@@ -5,32 +5,11 @@
 -module(blizanci_connection).
 
 -moduledoc """
-This module is the first half of the request path: from TLS data
-arriving at the connection process (start_link/3 is the ranch entry
-point) to the call of blizanci_request:handle_line/4; see
-blizanci_request for the rest. The main code path consists in
-transforming data and handing it off down the call chain (always
-towards the bottom of the file) as follows:
+The first half of the request path: from TLS data arriving at the
+connection process (start_link/3, the ranch entry point) to the call
+of blizanci_request:handle_line/4.
 
-```
-handle_info({ssl, ...}):
-  new data from TLS, add it to buffer
-
-handle_ssl(...):
-  calls handle_request/2, turns any exception into a 40 response,
-  re-activates the socket and sends the response
-
-handle_request(...):
-  extract line from buffer if one is complete
-
-blizanci_request:handle_line(...):
-  decode URL from line (i.e., Unicode, RFC-3986 percent escaping);
-  the rest of the request pipeline continues in that module
-```
-
-Once a servlet has been started, further client data is instead
-passed to it by handle_request/2 via
-blizanci_servlet_container:handle_client_data/2.
+See the manual chapter [Request handling](request-handling.md).
 """.
 -behaviour(gen_server).
 -behaviour(ranch_protocol).

@@ -329,7 +329,7 @@ old_format_routes_warning_test() ->
           ?assertMatch([{warning, "routing: site test.example: 2 routes "
                          "use the old tuple "
                          "format {Proto, Regex, Module, Auth, Opts}; "
-                         "translated, behaviour unchanged (see README, "
+                         "translated, behaviour unchanged (see manual, "
                          "Routing)"}],
                        routing_warnings(logged()))
       end).
