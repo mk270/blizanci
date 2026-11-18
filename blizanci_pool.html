@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.3">
+    <meta name="project" content="blizanci v7.2.0">
+
+
+    <title>blizanci_pool — blizanci v7.2.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
+
+    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-Y2MUTVIN.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="manual.html" class="sidebar-projectName" translate="no">
+blizanci
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v7.2.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of blizanci</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">blizanci_pool</span> 
+      <small class="app-vsn" translate="no">(blizanci v7.2.0)</small>
+
+    </h1>
+
+
+
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>Shared <code class="inline">ppool</code> pool lifecycle helpers for the servlets that queue
+work onto a worker pool (<code class="inline">blizanci_cgi</code>, <code class="inline">blizanci_titan</code>).</p>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h2>
+<div class="summary-types summary">
+  <h3>
+    <a href="#types">Types</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:cgi_error/0" data-no-tooltip="" translate="no">cgi_error()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:gateway_result/0" data-no-tooltip="" translate="no">gateway_result()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:gemini_response/0" data-no-tooltip="" translate="no">gemini_response()</a>
+
+      </div>
+
+    </div>
+
+</div>
+<div class="summary-functions summary">
+  <h3>
+    <a href="#functions">Functions</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#cancel/2" data-no-tooltip="" translate="no">cancel(Pid, QuitMsg)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Cancel a queued/running worker, e.g. because the client connection
+has gone away. QuitMsg is the gen_cast message the worker's own
+handle_cast/2 expects, to shut itself down cleanly.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#cancel_dead_test/0" data-no-tooltip="" translate="no">cancel_dead_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#cancel_live_test/0" data-no-tooltip="" translate="no">cancel_live_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#enqueue/2" data-no-tooltip="" translate="no">enqueue(Queue, Job)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#enqueue_no_pool_test/0" data-no-tooltip="" translate="no">enqueue_no_pool_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#enqueue_test/0" data-no-tooltip="" translate="no">enqueue_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#restart_test/0" data-no-tooltip="" translate="no">restart_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start/3" data-no-tooltip="" translate="no">start(Queue, Max, Module)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Start the named pool, of at most Max workers of Module. A pool that is
+already running under the name is left alone and is <code class="inline">ok</code>.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_invalid_limit_test/0" data-no-tooltip="" translate="no">start_invalid_limit_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_invalid_module_test/0" data-no-tooltip="" translate="no">start_invalid_module_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_invalid_name_test/0" data-no-tooltip="" translate="no">start_invalid_name_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_invalid_order_test/0" data-no-tooltip="" translate="no">start_invalid_order_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_invalid_when_running_test/0" data-no-tooltip="" translate="no">start_invalid_when_running_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_name_taken_test/0" data-no-tooltip="" translate="no">start_name_taken_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_test/0" data-no-tooltip="" translate="no">start_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_twice_test/0" data-no-tooltip="" translate="no">start_twice_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#stop/1" data-no-tooltip="" translate="no">stop(Queue)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#stop_missing_test/0" data-no-tooltip="" translate="no">stop_missing_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#stop_test/0" data-no-tooltip="" translate="no">stop_test()</a>
+
+      </div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#types">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Types</span>
+    </h2>
+
+    <div class="types-list">
+<section class="detail" id="t:cgi_error/0">
+
+  <div class="detail-header">
+    <a href="#t:cgi_error/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cgi_error()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> cgi_error() ::
+          cgi_exec_error | cgi_output_too_large | file_not_found | gateway_busy | unimplemented |
+          cert_not_parsed | cert_unsupported_encoding.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:gateway_result/0">
+
+  <div class="detail-header">
+    <a href="#t:gateway_result/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gateway_result()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> gateway_result() ::
+          {gateway_output, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          {gateway_finished, <a href="#t:gemini_response/0">gemini_response</a>()} |
+          {gateway_error, <a href="#t:cgi_error/0">cgi_error</a>()} |
+          {gateway_started, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:gemini_response/0">
+
+  <div class="detail-header">
+    <a href="#t:gemini_response/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gemini_response()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> gemini_response() ::
+          {file, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          {error_code, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()} |
+          {redirect, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          hangup | none |
+          {init_servlet, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} |
+          {servlet_output, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          {success, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h2>
+
+    <div class="functions-list">
+<section class="detail" id="cancel/2">
+
+  <div class="detail-header">
+    <a href="#cancel/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cancel(Pid, QuitMsg)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> cancel(Pid, QuitMsg) -> Result when Pid :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>(), QuitMsg :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), Result :: ok.</pre>
+
+      </div>
+
+<p>Cancel a queued/running worker, e.g. because the client connection
+has gone away. QuitMsg is the gen_cast message the worker's own
+handle_cast/2 expects, to shut itself down cleanly.</p>
+  </section>
+</section>
+<section class="detail" id="cancel_dead_test/0">
+
+  <div class="detail-header">
+    <a href="#cancel_dead_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cancel_dead_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="cancel_live_test/0">
+
+  <div class="detail-header">
+    <a href="#cancel_live_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cancel_live_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="enqueue/2">
+
+  <div class="detail-header">
+    <a href="#enqueue/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">enqueue(Queue, Job)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> enqueue(Queue, Job) -> Result when Queue :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), Job :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(), Result :: <a href="#t:gateway_result/0">gateway_result</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="enqueue_no_pool_test/0">
+
+  <div class="detail-header">
+    <a href="#enqueue_no_pool_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">enqueue_no_pool_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="enqueue_test/0">
+
+  <div class="detail-header">
+    <a href="#enqueue_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">enqueue_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="restart_test/0">
+
+  <div class="detail-header">
+    <a href="#restart_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">restart_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="start/3">
+
+  <div class="detail-header">
+    <a href="#start/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start(Queue, Max, Module)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> start(Queue, Max, Module) -> Result
+               when
+                   Queue :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(),
+                   Max :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
+                   Module :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:module/0">module</a>(),
+                   Result :: ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Start the named pool, of at most Max workers of Module. A pool that is
+already running under the name is left alone and is <code class="inline">ok</code>.</p><p>The arguments are checked here, before ppool is called, in the order
+name, limit, module: Queue must be an atom (other than <code class="inline">undefined</code>),
+Max an integer of at least 1, and Module an atom. A bad one gives
+<code class="inline">{error, {invalid_name, Queue}}</code>, <code class="inline">{error, {invalid_limit, Max}}</code> or
+<code class="inline">{error, {invalid_module, Module}}</code> (ppool's own error shapes), and
+nothing is started or touched. This is deliberate defence in depth:
+the spec below is not enforced at run time, and the limits may one
+day come from configuration rather than being constants.</p><p>Any other refusal by ppool (or a name held by some other registered
+process) is returned as <code class="inline">{error, Reason}</code>, Reason being ppool's,
+unchanged.</p>
+  </section>
+</section>
+<section class="detail" id="start_invalid_limit_test/0">
+
+  <div class="detail-header">
+    <a href="#start_invalid_limit_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_invalid_limit_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="start_invalid_module_test/0">
+
+  <div class="detail-header">
+    <a href="#start_invalid_module_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_invalid_module_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="start_invalid_name_test/0">
+
+  <div class="detail-header">
+    <a href="#start_invalid_name_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_invalid_name_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="start_invalid_order_test/0">
+
+  <div class="detail-header">
+    <a href="#start_invalid_order_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_invalid_order_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="start_invalid_when_running_test/0">
+
+  <div class="detail-header">
+    <a href="#start_invalid_when_running_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_invalid_when_running_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="start_name_taken_test/0">
+
+  <div class="detail-header">
+    <a href="#start_name_taken_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_name_taken_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="start_test/0">
+
+  <div class="detail-header">
+    <a href="#start_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="start_twice_test/0">
+
+  <div class="detail-header">
+    <a href="#start_twice_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_twice_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="stop/1">
+
+  <div class="detail-header">
+    <a href="#stop/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">stop(Queue)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> stop(Queue) -> Result when Queue :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), Result :: ok.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="stop_missing_test/0">
+
+  <div class="detail-header">
+    <a href="#stop_missing_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">stop_missing_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="stop_test/0">
+
+  <div class="detail-header">
+    <a href="#stop_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">stop_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+
+              <a href="blizanci.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.3) for the
+
+            <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

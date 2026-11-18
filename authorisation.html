@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.3">
+    <meta name="project" content="blizanci v7.2.0">
+
+
+    <title>Authorisation — blizanci v7.2.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
+
+    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-Y2MUTVIN.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="manual.html" class="sidebar-projectName" translate="no">
+blizanci
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v7.2.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-extra" id="main" data-type="extras">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of blizanci</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>Authorisation</h1>
+
+
+
+  </div>
+
+
+<p>Every route has an authorisation policy, the Auth element of the route tuple (see the Routing chapter). The policy is checked by the module blizanci_auth before the servlet is called.</p><ul><li><a href="routing.html">Routing</a></li></ul><h2 id="policies" class="section-heading"><a href="#policies" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Policies</span></h2><p>The Auth element of a route is one of:</p><ul><li>public: anyone may request it; no certificate requirement</li><li>restricted: the client must present a certificate; which one does not matter</li><li>{private, {realm, Name}}: the client's certificate must be signed by a CA certificate of the named realm</li><li>{private, [{realm, Name1}, {realm, Name2}]}: as above, for any of the realms in the list</li></ul><p>Realm names are binaries, e.g. {realm, &lt;&lt;&quot;staff&quot;&gt;&gt;}; see Realms, below. A realm is looked up when the route is built, at start-up (or at blizanci_config:apply/1), not per request: the route's realms are resolved then, and the route holds the certificates, so nothing is looked up per request. A realm that is not defined is an error naming the route and the realm. Mounts and regex routes accept only these realm policies; a {private, CAFiles} (a list of file names, even an empty one) in them is an error that says to define a realm.</p><h2 id="failures" class="section-heading"><a href="#failures" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Failures</span></h2><p>A failed check gives the client one of these statuses (see blizanci_status):</p><ul><li>60, certificate required: no client certificate on a restricted or private route.</li><li>62: a certificate outside its validity period, expired or not yet valid. This is checked before the policy, so it applies to restricted routes too, and a certificate that cannot be decoded at all is likewise 62.</li><li>61, certificate unauthorised: on a private route, a certificate that none of the route's CAs signed.</li></ul><h2 id="realms" class="section-heading"><a href="#realms" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Realms</span></h2><p>A realm is a named set of CA certificates, and nothing more. Realms are global: defined once, in the top-level realms key, and shared by all sites (see blizanci_auth:add_realm/3, which decodes the files when the realm is defined):</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="4709861595-1">{</span><span class="ss">realms</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="4709861595-2">[</span><span class="p" data-group-id="4709861595-3">{</span><span class="p" data-group-id="4709861595-4">&lt;&lt;</span><span class="s">&quot;staff&quot;</span><span class="p" data-group-id="4709861595-4">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="4709861595-5">[</span><span class="s">&quot;ssl/staff-ca1.pem&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;ssl/staff-ca2.pem&quot;</span><span class="p" data-group-id="4709861595-5">]</span><span class="p" data-group-id="4709861595-3">}</span><span class="p" data-group-id="4709861595-2">]</span><span class="p" data-group-id="4709861595-1">}</span></code></pre><p>A client certificate is accepted for a route if it is signed by any certificate in any file of any realm the route names. A CA file may be a bundle: trust extends to every certificate in a file, not just the first. Names are case-sensitive binaries of 1 to 64 printable ASCII characters. The files are read, and must hold a certificate, when the table is built; a change to a CA file takes effect only at blizanci_config:apply/1 or on restart.</p><p>A realm may have an empty file list. A private route on it then authorises nobody: a client sending no certificate gets status 60 (certificate required), and one sending a valid certificate gets 61 (certificate unauthorised). No warning is logged.</p><h2 id="the-older-private-files-form" class="section-heading"><a href="#the-older-private-files-form" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">The older {private, Files} form</span></h2><p>The older form, {private, Files}, lists CA files directly and is the one that old-format 5-tuple routes still use; new-format mount and regex routes accept only realm policies. The CA files of such a route are read ONCE, when the route is built (blizanci_auth:valid_authz_policy/1), and every certificate found in each file is decoded and kept in the route's policy: {private, Files, Certs}. A request is checked against those decoded certificates and does no file I/O, so a CA file that is later deleted, damaged or made unreadable does not affect a running route. The consequence is that a changed CA file takes effect only when the route is rebuilt (blizanci_config:apply/1) or the server is restarted.</p><p>As with realms, a CA file may be a bundle: the client certificate is accepted if it is signed by ANY certificate in ANY of the route's files.</p>
+
+</div>
+
+<div class="bottom-actions" id="bottom-actions">
+  <div class="bottom-actions-item">
+
+      <a href="routing.html" class="bottom-actions-button" rel="prev">
+        <span class="subheader">
+          ← Previous Page
+        </span>
+        <span class="title">
+Routing
+        </span>
+      </a>
+
+  </div>
+  <div class="bottom-actions-item">
+
+      <a href="servlets.html" class="bottom-actions-button" rel="next">
+        <span class="subheader">
+          Next Page →
+        </span>
+        <span class="title">
+Servlets
+        </span>
+      </a>
+
+  </div>
+</div>
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+
+                (<a href="https://preview.hex.pm/preview/blizanci/7.2.0/show/doc/manual/md/authorisation.md">current file</a>)
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+
+              <a href="blizanci.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.3) for the
+
+            <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

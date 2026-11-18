@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.3">
+    <meta name="project" content="blizanci v7.2.0">
+
+
+    <title>API Reference — blizanci v7.2.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
+
+    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-Y2MUTVIN.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="manual.html" class="sidebar-projectName" translate="no">
+blizanci
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v7.2.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-extra" id="main" data-type="extras">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of blizanci</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>API Reference <small class="app-vsn">blizanci v#7.2.0</small></h1>
+
+
+  </div>
+
+    <section class="details-list">
+      <h2 id="modules" class="section-heading">Modules</h2>
+      <div class="summary">
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_auth.html" translate="no">blizanci_auth</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>The authorisation policies of a route (public, restricted, private)
+and the checking of a client certificate against them.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_cgi.html" translate="no">blizanci_cgi</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>A servlet that runs CGI scripts, in a ppool queue, via erlexec.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_config.html" translate="no">blizanci_config</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>The configuration of a blizanci instance: built from the application
+environment (sys.config) by from_app_env/0, or from explicit values by
+the builder functions (new/2, site/3, add_route/2 and so on).</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_connection.html" translate="no">blizanci_connection</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>The first half of the request path: from TLS data arriving at the
+connection process (start_link/3, the ranch entry point) to the call
+of blizanci_request:handle_line/4.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_log.html" translate="no">blizanci_log</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Runtime log-level control for blizanci.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_osenv.html" translate="no">blizanci_osenv</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>This module deals with sanitising a proplist of OS environment
+variables such that it's appropriate for creating a new UNIX
+subprocess via the erlexec port.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_path.html" translate="no">blizanci_path</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_pool.html" translate="no">blizanci_pool</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Shared <code class="inline">ppool</code> pool lifecycle helpers for the servlets that queue
+work onto a worker pool (<code class="inline">blizanci_cgi</code>, <code class="inline">blizanci_titan</code>).</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_request.html" translate="no">blizanci_request</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>The second half of the request path: from the parsed request line
+(handle_line/4) to the servlet.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_router.html" translate="no">blizanci_router</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_servlet.html" translate="no">blizanci_servlet</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>The servlet contract: what a module must provide to serve routes.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_servlet_container.html" translate="no">blizanci_servlet_container</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>The process side of the servlet contract (see blizanci_servlet): runs
+a servlet's request/4 and, if it defers, a container process for its
+serve/4.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_static.html" translate="no">blizanci_static</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>A servlet serving static files from a route's docroot. Its request/4
+answers immediately, never deferring to a servlet process: a request
+for a regular file yields a <code class="inline">{file, MimeType, Path}</code> response, a request
+for a directory is redirected to that directory's index file, and
+anything else (including paths that escape the docroot) is a
+file_not_found. Paths are canonicalised and confined by blizanci_path.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_status.html" translate="no">blizanci_status</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_test_support.html" translate="no">blizanci_test_support</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_titan.html" translate="no">blizanci_titan</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>A servlet accepting Titan uploads into a route's docroot, staged in
+the route's work_dir.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_tmpdir.html" translate="no">blizanci_tmpdir</a>
+
+  </div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_urlpath.html" translate="no">blizanci_urlpath</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Percent-decoding of the path of a request URL, and the reverse for
+redirects. This is the one place where a request path is decoded.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="blizanci_x509.html" translate="no">blizanci_x509</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>This module handles most of the certificate-related functionality.</p></div>
+
+</div>
+
+      </div>
+    </section>
+
+
+</div>
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+
+              <a href="blizanci.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.3) for the
+
+            <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

@@ -1,91 +1,1034 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-<html>
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<title>Module blizanci_servlet_container</title>
-<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
-</head>
-<body bgcolor="white">
-<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<hr>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.3">
+    <meta name="project" content="blizanci v7.2.0">
 
-<h1>Module blizanci_servlet_container</h1>
-<ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul> 
-This module provides a mechanism for dynamic content generation for 
-Gemini requests.
 
-<p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
+    <title>blizanci_servlet_container — blizanci v7.2.0</title>
 
-<h2><a name="description">Description</a></h2><p> 
-This module provides a mechanism for dynamic content generation for 
-Gemini requests. Currently it is somewhat hardwired to use CGI to 
-fulfil these.</p>
+    <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
 
- <p>One blizanci_servlet_container process is generated per deferred 
-request. This is done by calling blizanci_servlet_container:request/5, 
-which has the side-effect of caching the caller's Pid and passing it to 
-the servlet process it creates.</p>
+    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-Y2MUTVIN.js"></script>
 
- <p>On completion of the request, which may well not be synchronous, results 
-may be communicated back to the Gemini parent (the original caller) by 
-sending a message in the following form:</p>
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
 
-    <p>{servlet_failed, ErrorCode :: atom()}  
-| {servlet_complete, Output :: binary()}</p>
+<div class="body-wrapper">
 
- <p>It is likely unnecessary for a handler module to provide substantive 
-implementations of both Module:serve/4 and Module:request/4. This is 
-because a handler module will likely behave wholly synchronously or 
-wholly asychronously.</p>
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
 
- A synchrononous handler module should have a substantive implementation
- of Module:request/4 which returns a gemini response marked with the
- atom 'immediate'; this means its implementation of Module:serve/4 will
- never be called and may be left as a stub. Conversely, an asychronous
- handler module would have a trivial implementation of Module:request/4,
- returning the atom 'defer', and the substantive implementation would be
- afforded via its Module:serve/4 implementation instead.
+<nav id="sidebar" class="sidebar">
 
-<h2><a name="index">Function Index</a></h2>
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#cancel-1">cancel/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#gateway_exit-2">gateway_exit/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#request-5">request/5</a></td><td>Called by the router to dispatch a request to a specific handler.</td></tr>
-</table>
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
 
-<h2><a name="functions">Function Details</a></h2>
+      <div>
+        <a href="manual.html" class="sidebar-projectName" translate="no">
+blizanci
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v7.2.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
 
-<h3 class="function"><a name="cancel-1">cancel/1</a></h3>
-<div class="spec">
-<p><tt>cancel(X1::<a href="#type-servlet_proc">servlet_proc()</a>) -&gt; ok</tt><br></p>
-<p> </p>
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of blizanci</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">blizanci_servlet_container</span> 
+      <small class="app-vsn" translate="no">(blizanci v7.2.0)</small>
+
+    </h1>
+
+
+
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>The process side of the servlet contract (see blizanci_servlet): runs
+a servlet's request/4 and, if it defers, a container process for its
+serve/4.</p><p>See the manual chapter <a href="servlets.html">Servlets</a>.</p>
+    </section>
+
 </div>
 
-<h3 class="function"><a name="gateway_exit-2">gateway_exit/2</a></h3>
-<div class="spec">
-<p><tt>gateway_exit(Pid::pid(), Result::<a href="#type-gateway_result">gateway_result()</a>) -&gt; ok</tt><br></p>
-<p> </p>
+  <section id="summary" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h2>
+<div class="summary-types summary">
+  <h3>
+    <a href="#types">Types</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:authorisation/0" data-no-tooltip="" translate="no">authorisation()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:cgi_error/0" data-no-tooltip="" translate="no">cgi_error()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:gateway_result/0" data-no-tooltip="" translate="no">gateway_result()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:gemini_response/0" data-no-tooltip="" translate="no">gemini_response()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:mp/0" data-no-tooltip="" translate="no">mp()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:path_matches/0" data-no-tooltip="" translate="no">path_matches()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:raw_peer_cert/0" data-no-tooltip="" translate="no">raw_peer_cert()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:realm/0" data-no-tooltip="" translate="no">realm()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:request_details/0" data-no-tooltip="" translate="no">request_details()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:route/0" data-no-tooltip="" translate="no">route()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:selector/0" data-no-tooltip="" translate="no">selector()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:server_config/0" data-no-tooltip="" translate="no">server_config()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:servlet_proc/0" data-no-tooltip="" translate="no">servlet_proc()</a>
+
+      </div>
+
+    </div>
+
+</div>
+<div class="summary-functions summary">
+  <h3>
+    <a href="#functions">Functions</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#callbacks_test_/0" data-no-tooltip="" translate="no">callbacks_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#cancel/1" data-no-tooltip="" translate="no">cancel(Proc)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#cancel_test_/0" data-no-tooltip="" translate="no">cancel_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#gateway_exit/2" data-no-tooltip="" translate="no">gateway_exit(Pid, GWResult)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#gateway_exit_test_/0" data-no-tooltip="" translate="no">gateway_exit_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#handle_client_data/2" data-no-tooltip="" translate="no">handle_client_data(Pid, Payload)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#handle_client_data_test_/0" data-no-tooltip="" translate="no">handle_client_data_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#init_refusal_test_/0" data-no-tooltip="" translate="no">init_refusal_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#request/5" data-no-tooltip="" translate="no">request(Module, Matches, Request, ServerConfig, RouteOpts)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Called by the router, in the connection process, to dispatch a
+request to a specific handler.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#request_immediate_test_/0" data-no-tooltip="" translate="no">request_immediate_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#serve_error_test_/0" data-no-tooltip="" translate="no">serve_error_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#serve_finished_test_/0" data-no-tooltip="" translate="no">serve_finished_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#serve_started_test_/0" data-no-tooltip="" translate="no">serve_started_test_()</a>
+
+      </div>
+
+    </div>
+
 </div>
 
-<h3 class="function"><a name="request-5">request/5</a></h3>
-<div class="spec">
-<p><tt>request(Module::module(), Matches::<a href="#type-path_matches">path_matches()</a>, Request::any(), ServerConfig::<a href="#type-server_config">server_config()</a>, RouteOpts::any()) -&gt; <a href="#type-gemini_response">gemini_response()</a></tt><br></p>
-<p><tt>Module</tt>: the module implementing the handler<br>
-<tt>Matches</tt>: a list of binary key-value pairs representing the manner in which the request matched the pattern associated with the route<br>
-<tt>Request</tt>: the request<br>
-<tt>ServerConfig</tt>: the configuration for the Gemini server<br>
-<tt>RouteOpts</tt>: <p>the configuration to be passed to the servlet module</p>
- 
-  The function calls Module:request(Matches, Request, Config), which may
-  return either an immediate Gemini response or the atom 'defer'. Where it
-  is indicated that the response will be deferred, a new process is started
-  and Module:serve(Matches, Req, Config) is called. This sets things up
-  for the results of the request to be notified back to the caller
-  (of request/5), which is a ranch handler for the Gemini protocol.<br>
-</p>
-</div><p>Called by the router to dispatch a request to a specific handler.</p>
-<hr>
+  </section>
 
-<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc</i></p>
-</body>
+
+  <section id="types" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#types">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Types</span>
+    </h2>
+
+    <div class="types-list">
+<section class="detail" id="t:authorisation/0">
+
+  <div class="detail-header">
+    <a href="#t:authorisation/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">authorisation()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> authorisation() ::
+          public | restricted |
+          {private,
+           [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>()] | [<a href="#t:realm/0">realm</a>()],
+           [#'OTPCertificate'{tbsCertificate :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                              signatureAlgorithm :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                              signature :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}]}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:cgi_error/0">
+
+  <div class="detail-header">
+    <a href="#t:cgi_error/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cgi_error()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> cgi_error() ::
+          cgi_exec_error | cgi_output_too_large | file_not_found | gateway_busy | unimplemented |
+          cert_not_parsed | cert_unsupported_encoding.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:gateway_result/0">
+
+  <div class="detail-header">
+    <a href="#t:gateway_result/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gateway_result()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> gateway_result() ::
+          {gateway_output, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          {gateway_finished, <a href="#t:gemini_response/0">gemini_response</a>()} |
+          {gateway_error, <a href="#t:cgi_error/0">cgi_error</a>()} |
+          {gateway_started, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:gemini_response/0">
+
+  <div class="detail-header">
+    <a href="#t:gemini_response/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gemini_response()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> gemini_response() ::
+          {file, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          {error_code, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()} |
+          {redirect, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          hangup | none |
+          {init_servlet, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} |
+          {servlet_output, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          {success, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:mp/0">
+
+  <div class="detail-header">
+    <a href="#t:mp/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">mp()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> mp() :: {re_pattern, _, _, _, _}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:path_matches/0">
+
+  <div class="detail-header">
+    <a href="#t:path_matches/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">path_matches()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> path_matches() :: #{<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:raw_peer_cert/0">
+
+  <div class="detail-header">
+    <a href="#t:raw_peer_cert/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">raw_peer_cert()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> raw_peer_cert() :: {ok, <a href="https://www.erlang.org/doc/apps/public_key/public_key.html#t:der_encoded/0">public_key:der_encoded</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:realm/0">
+
+  <div class="detail-header">
+    <a href="#t:realm/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">realm()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> realm() :: {realm, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:request_details/0">
+
+  <div class="detail-header">
+    <a href="#t:request_details/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">request_details()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> request_details() ::
+          #{client_cert := <a href="#t:raw_peer_cert/0">raw_peer_cert</a>(),
+            query := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            rest_of_input := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            scheme := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            host := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            port := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
+            path := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:route/0">
+
+  <div class="detail-header">
+    <a href="#t:route/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">route()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> route() ::
+          #route{proto :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(),
+                 selector :: <a href="#t:selector/0">selector</a>(),
+                 module :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:module/0">module</a>(),
+                 auth_policy :: <a href="#t:authorisation/0">authorisation</a>(),
+                 options :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:selector/0">
+
+  <div class="detail-header">
+    <a href="#t:selector/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">selector()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> selector() :: {mount, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} | {regex, <a href="#t:mp/0">mp</a>()} | {legacy, <a href="#t:mp/0">mp</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:server_config/0">
+
+  <div class="detail-header">
+    <a href="#t:server_config/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">server_config()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> server_config() :: #server_config{hostname :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), port :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(), routing :: [<a href="#t:route/0">route</a>()]}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:servlet_proc/0">
+
+  <div class="detail-header">
+    <a href="#t:servlet_proc/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">servlet_proc()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> servlet_proc() :: {proc, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | no_proc.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h2>
+
+    <div class="functions-list">
+<section class="detail" id="callbacks_test_/0">
+
+  <div class="detail-header">
+    <a href="#callbacks_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">callbacks_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="cancel/1">
+
+  <div class="detail-header">
+    <a href="#cancel/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cancel(Proc)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> cancel(Proc) -> Result when Proc :: <a href="#t:servlet_proc/0">servlet_proc</a>(), Result :: ok.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="cancel_test_/0">
+
+  <div class="detail-header">
+    <a href="#cancel_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cancel_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="gateway_exit/2">
+
+  <div class="detail-header">
+    <a href="#gateway_exit/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gateway_exit(Pid, GWResult)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> gateway_exit(Pid, GWResult) -> Result
+                      when Pid :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>(), GWResult :: <a href="#t:gateway_result/0">gateway_result</a>(), Result :: ok.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="gateway_exit_test_/0">
+
+  <div class="detail-header">
+    <a href="#gateway_exit_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gateway_exit_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="handle_client_data/2">
+
+  <div class="detail-header">
+    <a href="#handle_client_data/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">handle_client_data(Pid, Payload)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> handle_client_data(Pid, Payload) -> Result
+                            when Pid :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>(), Payload :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), Result :: <a href="#t:gemini_response/0">gemini_response</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="handle_client_data_test_/0">
+
+  <div class="detail-header">
+    <a href="#handle_client_data_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">handle_client_data_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="init_refusal_test_/0">
+
+  <div class="detail-header">
+    <a href="#init_refusal_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">init_refusal_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="request/5">
+
+  <div class="detail-header">
+    <a href="#request/5" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">request(Module, Matches, Request, ServerConfig, RouteOpts)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> request(Module, Matches, Request, ServerConfig, RouteOpts) -> Result
+                 when
+                     Module :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:module/0">module</a>(),
+                     Matches :: <a href="#t:path_matches/0">path_matches</a>(),
+                     Request :: <a href="#t:request_details/0">request_details</a>(),
+                     ServerConfig :: <a href="#t:server_config/0">server_config</a>(),
+                     RouteOpts :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
+                     Result :: <a href="#t:gemini_response/0">gemini_response</a>().</pre>
+
+      </div>
+
+<p>Called by the router, in the connection process, to dispatch a
+request to a specific handler.</p><ul><li><code class="inline">Module</code>: the module implementing the handler</li><li><code class="inline">Matches</code>: a map of binary keys to binary values: what each named
+group of the route's pattern captured (see blizanci_servlet)</li><li><code class="inline">Request</code>: the request</li><li><code class="inline">ServerConfig</code>: the configuration for the Gemini server</li><li><code class="inline">RouteOpts</code>: the configuration to be passed to the servlet module</li></ul><p>The function calls Module:request(Matches, Request, ServerConfig,
+RouteOpts), which may return either <code class="inline">{immediate, Response}</code> or the atom
+<code class="inline">defer</code>. Where it is indicated that the response will be deferred, a
+new container process is started, and in it Module:serve(Matches, Req,
+ServerConfig, RouteOpts) is called. This sets things up
+for the results of the request to be notified back to the caller
+(of request/5), which is a ranch handler for the Gemini protocol.
+The result here is then <code class="inline">{init_servlet, Pid}</code> (or an
+internal-server-error code if the process did not start).</p>
+  </section>
+</section>
+<section class="detail" id="request_immediate_test_/0">
+
+  <div class="detail-header">
+    <a href="#request_immediate_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">request_immediate_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="serve_error_test_/0">
+
+  <div class="detail-header">
+    <a href="#serve_error_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">serve_error_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="serve_finished_test_/0">
+
+  <div class="detail-header">
+    <a href="#serve_finished_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">serve_finished_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="serve_started_test_/0">
+
+  <div class="detail-header">
+    <a href="#serve_started_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">serve_started_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+
+              <a href="blizanci.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.3) for the
+
+            <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
 </html>

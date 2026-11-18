@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.3">
+    <meta name="project" content="blizanci v7.2.0">
+
+
+    <title>Routing — blizanci v7.2.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
+
+    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-Y2MUTVIN.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="manual.html" class="sidebar-projectName" translate="no">
+blizanci
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v7.2.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-extra" id="main" data-type="extras">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of blizanci</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>Routing</h1>
+
+
+
+  </div>
+
+
+<p>Each site has one routing table: an ordered list of routes. A request is matched against the routes for its protocol (gemini or titan) in order, and the first route that matches serves it. A route serves exactly one protocol, so a static site that also takes Titan uploads needs a gemini route and a titan route. If no route matches, the client gets &quot;not found&quot;. The table is the routing key of the site, in sys.config (see the Configuration chapter); there is no default table.</p><p>Routes are prepared by blizanci_router:prepare/3, which checks that each entry is valid. An error names the route: {bad_route, Index, Kind, Reason}, where Index is the 1-based position in the list, Kind is mount, regex, tuple (the old format) or unknown, and Reason says what is wrong. At start-up, blizanci_router:prepare_all/3 is used instead: it reports every problem at once, building every route and returning those that built along with an error for each one that did not, in order. Warnings are logged only when every route built.</p><h2 id="route-kinds" class="section-heading"><a href="#route-kinds" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Route kinds</span></h2><p>A route is one of two tagged tuples:</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="4578892460-1">{</span><span class="ss">mount</span><span class="p">,</span><span class="w"> </span><span class="n">Proto</span><span class="p">,</span><span class="w"> </span><span class="n">Path</span><span class="p">,</span><span class="w">  </span><span class="n">Module</span><span class="p">,</span><span class="w"> </span><span class="n">Auth</span><span class="p">,</span><span class="w"> </span><span class="n">Opts</span><span class="p" data-group-id="4578892460-1">}</span><span class="w">
+</span><span class="p" data-group-id="4578892460-2">{</span><span class="ss">regex</span><span class="p">,</span><span class="w"> </span><span class="n">Proto</span><span class="p">,</span><span class="w"> </span><span class="n">Re</span><span class="p">,</span><span class="w">    </span><span class="n">Module</span><span class="p">,</span><span class="w"> </span><span class="n">Auth</span><span class="p">,</span><span class="w"> </span><span class="n">Opts</span><span class="p" data-group-id="4578892460-2">}</span></code></pre><p>Proto is gemini or titan. Module is the servlet, e.g. blizanci_static, blizanci_cgi or blizanci_titan. Auth is the authorisation policy (see the Authorisation chapter), and Opts is the servlet's options map, such as #{docroot =&gt; &quot;./public_gemini&quot;}. Each route names its own root directory in Opts. Request paths here are the decoded ones, without the leading slash.</p><ul><li><a href="authorisation.html">Authorisation</a></li></ul><h2 id="mounts" class="section-heading"><a href="#mounts" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Mounts</span></h2><p>A mount selects requests by path prefix, in whole path segments. The mount &quot;/docs&quot; (or &quot;/docs/&quot;, which is the same) matches /docs, /docs/ and /docs/a.gmi, but not /docsx/a.gmi. The mount &quot;/&quot; matches everything, being the whole site.</p><p>The validator requires a mount path to be a non-empty string (or binary, UTF-8) that starts with &quot;/&quot;. It may have no empty segment (so no &quot;//&quot;), though one trailing &quot;/&quot; is allowed and ignored. It may have no &quot;.&quot; or &quot;..&quot; segment. Only printable ASCII (codes 32 to 126) is allowed: no control character and nothing non-ASCII, as a request path is always printable ASCII once decoded.</p><p>What the servlet receives:</p><ul><li>PATH, the remainder of the request path after the mount, with no leading slash. For mount /docs and request /docs/a/b.gmi, PATH is a/b.gmi; for the request /docs itself it is empty. This is the path the servlet resolves under its own root, so a mount's Opts must name the directory that corresponds to the mount, not the site's whole document root.</li><li>FULL_PATH, the full request path as the router sees it (decoded and normalised), with no leading slash: docs/a/b.gmi in the example.</li></ul><h2 id="regex-routes" class="section-heading"><a href="#regex-routes" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Regex routes</span></h2><p>A regex route selects requests with a regular expression (Erlang re, i.e. PCRE) that must match the whole request path: blizanci anchors it itself, by wrapping it in \A(?:...)\z, so &quot;docs/(?&lt;PATH&gt;.*)&quot; does not match x/docs/a.gmi. The path matched has no leading slash. The regex must have a named group PATH, which is what the servlet resolves under its root, and may not have one named FULL_PATH. Other named groups pass through to the servlet (CGI reads PATH_INFO this way). FULL_PATH is supplied as for mounts. In (?x) mode, avoid a trailing # comment, as the anchoring text is appended to the pattern and a trailing comment will not compile.</p><h2 id="old-format-routes" class="section-heading"><a href="#old-format-routes" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Old-format routes</span></h2><p>The old 5-tuple, {Proto, Regex, Module, Auth, Opts}, is still supported, and there is no plan to remove it. It is translated to the new format and behaves exactly as before: its regex is NOT anchored but searched for anywhere in the path, and it must have a PATH group. It also receives FULL_PATH (unless its own regex has a group of that name). If any route in the table uses the old format, one line is logged at start-up, at warning level:</p><pre><code class="makeup erlang" translate="no"><span class="nc">routing</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="ss">routes</span><span class="w"> </span><span class="ss">use</span><span class="w"> </span><span class="ss">the</span><span class="w"> </span><span class="ss">old</span><span class="w"> </span><span class="ss">tuple</span><span class="w"> </span><span class="ss">format</span><span class="w"> </span><span class="p" data-group-id="1897304454-1">{</span><span class="n">Proto</span><span class="p">,</span><span class="w"> </span><span class="n">Regex</span><span class="p">,</span><span class="w"> </span><span class="n">Module</span><span class="p">,</span><span class="w">
+</span><span class="n">Auth</span><span class="p">,</span><span class="w"> </span><span class="n">Opts</span><span class="p" data-group-id="1897304454-1">}</span><span class="p">;</span><span class="w"> </span><span class="ss">translated</span><span class="p">,</span><span class="w"> </span><span class="ss">behaviour</span><span class="w"> </span><span class="nf">unchanged</span><span class="w"> </span><span class="p" data-group-id="1897304454-2">(</span><span class="ss">see</span><span class="w"> </span><span class="ss">manual</span><span class="p">,</span><span class="w"> </span><span class="n">Routing</span><span class="p" data-group-id="1897304454-2">)</span></code></pre><p>(the count varies; in a multi-site configuration the line also names the site). New-format routes never trigger it. Rewrite the routes as mounts or anchored regexes to silence it; note that unanchored &quot;(?&lt;PATH&gt;private.*)&quot; also matches docs/private/x.gmi, which an anchored regex or a mount would not.</p><p>Old 5-tuple routes may still use {private, CAFiles} as their authorisation policy; see the Authorisation chapter.</p><h2 id="shadowing" class="section-heading"><a href="#shadowing" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Shadowing</span></h2><p>When the table is built, blizanci checks for routes that can never be used because an earlier route of the same protocol (gemini routes are compared only with gemini routes, titan with titan) matches every request they could. This only warns, and never refuses a table, stops start-up or changes routing. One warning is logged per shadowed route, naming it and the first route shadowing it by position and kind, and by mount path or regex, for example:</p><pre><code class="makeup erlang" translate="no"><span class="nc">routing</span><span class="p">:</span><span class="w"> </span><span class="ss">route</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p" data-group-id="6012914970-1">(</span><span class="ss">gemini</span><span class="w"> </span><span class="ss">mount</span><span class="w"> </span><span class="s">&quot;/docs&quot;</span><span class="p" data-group-id="6012914970-1">)</span><span class="w"> </span><span class="ss">is</span><span class="w"> </span><span class="ss">shadowed</span><span class="w"> </span><span class="ss">by</span><span class="w"> </span><span class="ss">route</span><span class="w"> </span><span class="mi">1</span><span class="w">
+</span><span class="p" data-group-id="6012914970-2">(</span><span class="ss">gemini</span><span class="w"> </span><span class="ss">mount</span><span class="w"> </span><span class="s">&quot;/&quot;</span><span class="p" data-group-id="6012914970-2">)</span><span class="w"> </span><span class="ow">and</span><span class="w"> </span><span class="ss">is</span><span class="w"> </span><span class="ss">never</span><span class="w"> </span><span class="ss">used</span></code></pre><p>The check can be turned off with the option warn_shadowed (default true) of blizanci_router:prepare/3. Authorisation policies are not considered. The rules are:</p><p>Mount against mount is exact: the earlier mount shadows the later if its segments are a prefix of the later one's segments, so &quot;/&quot; shadows every later mount, and so does an equal mount, but &quot;/docs&quot; does not shadow &quot;/docsx&quot;.</p><p>Whenever a regex is involved (as either route, old-format or not) overlap cannot be decided, so it is probed, and a false negative is preferred to a false positive: the check can miss a shadowed route but should not report a false one. Sample paths are derived from the later route: for a mount M, M itself, M/x and M/a/b; for a regex, the literal text its source starts with (a leading ^ skipped, the text cut short before a quantifier, and none at all if the source has a vertical bar), L, plus L followed by x, a/b and x.gmi. Only samples that the later route itself matches are kept, and with fewer than two of them nothing is reported. The earlier route is then run on every sample with the router's own selector, and the later route is reported only if the earlier one matches all of them. A partial overlap is never reported.</p><h2 id="example-a-routing-table" class="section-heading"><a href="#example-a-routing-table" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Example: a routing table</span></h2><p>A table with protected areas: /private for clients with certificates from the realm staff, and /restricted for any client with a certificate. Each mount names its own subdirectory as its root, and the more specific mounts come before &quot;/&quot;:</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="8576785455-1">{</span><span class="ss">routing</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8576785455-2">[</span><span class="w">
+  </span><span class="p" data-group-id="8576785455-3">{</span><span class="ss">mount</span><span class="p">,</span><span class="w"> </span><span class="ss">gemini</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;/cgi-bin&quot;</span><span class="p">,</span><span class="w"> </span><span class="ss">blizanci_cgi</span><span class="p">,</span><span class="w"> </span><span class="ss">public</span><span class="p">,</span><span class="w">
+   </span><span class="p" data-group-id="8576785455-4">#{</span><span class="ss">cgiroot</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="s">&quot;./cgi-bin&quot;</span><span class="p" data-group-id="8576785455-4">}</span><span class="p" data-group-id="8576785455-3">}</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="8576785455-5">{</span><span class="ss">mount</span><span class="p">,</span><span class="w"> </span><span class="ss">gemini</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;/private&quot;</span><span class="p">,</span><span class="w"> </span><span class="ss">blizanci_static</span><span class="p">,</span><span class="w">
+   </span><span class="p" data-group-id="8576785455-6">{</span><span class="ss">private</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8576785455-7">{</span><span class="ss">realm</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8576785455-8">&lt;&lt;</span><span class="s">&quot;staff&quot;</span><span class="p" data-group-id="8576785455-8">&gt;&gt;</span><span class="p" data-group-id="8576785455-7">}</span><span class="p" data-group-id="8576785455-6">}</span><span class="p">,</span><span class="w">
+   </span><span class="p" data-group-id="8576785455-9">#{</span><span class="ss">docroot</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="s">&quot;./public_gemini/private&quot;</span><span class="p" data-group-id="8576785455-9">}</span><span class="p" data-group-id="8576785455-5">}</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="8576785455-10">{</span><span class="ss">mount</span><span class="p">,</span><span class="w"> </span><span class="ss">gemini</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;/restricted&quot;</span><span class="p">,</span><span class="w"> </span><span class="ss">blizanci_static</span><span class="p">,</span><span class="w"> </span><span class="ss">restricted</span><span class="p">,</span><span class="w">
+   </span><span class="p" data-group-id="8576785455-11">#{</span><span class="ss">docroot</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="s">&quot;./public_gemini/restricted&quot;</span><span class="p" data-group-id="8576785455-11">}</span><span class="p" data-group-id="8576785455-10">}</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="8576785455-12">{</span><span class="ss">mount</span><span class="p">,</span><span class="w"> </span><span class="ss">gemini</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;/&quot;</span><span class="p">,</span><span class="w"> </span><span class="ss">blizanci_static</span><span class="p">,</span><span class="w"> </span><span class="ss">public</span><span class="p">,</span><span class="w">
+   </span><span class="p" data-group-id="8576785455-13">#{</span><span class="ss">docroot</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="s">&quot;./public_gemini&quot;</span><span class="p" data-group-id="8576785455-13">}</span><span class="p" data-group-id="8576785455-12">}</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="8576785455-14">{</span><span class="ss">mount</span><span class="p">,</span><span class="w"> </span><span class="ss">titan</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;/&quot;</span><span class="p">,</span><span class="w"> </span><span class="ss">blizanci_titan</span><span class="p">,</span><span class="w">
+   </span><span class="p" data-group-id="8576785455-15">{</span><span class="ss">private</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8576785455-16">{</span><span class="ss">realm</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="8576785455-17">&lt;&lt;</span><span class="s">&quot;staff&quot;</span><span class="p" data-group-id="8576785455-17">&gt;&gt;</span><span class="p" data-group-id="8576785455-16">}</span><span class="p" data-group-id="8576785455-15">}</span><span class="p">,</span><span class="w">
+   </span><span class="p" data-group-id="8576785455-18">#{</span><span class="ss">docroot</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="s">&quot;./public_gemini&quot;</span><span class="p">,</span><span class="w"> </span><span class="ss">work_dir</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="s">&quot;/srv/titan-work&quot;</span><span class="p" data-group-id="8576785455-18">}</span><span class="p" data-group-id="8576785455-14">}</span><span class="w">
+</span><span class="p" data-group-id="8576785455-2">]</span><span class="p" data-group-id="8576785455-1">}</span></code></pre><p>The realm staff must be defined in the top-level realms key. Relative paths are allowed in docroot, cgiroot and work_dir (a Titan work_dir must still be absolute; see the Titan chapter). Without the /private and /restricted routes, the &quot;/&quot; route would serve those directories publicly.</p><ul><li><a href="titan-and-static.html">Titan and static files</a></li></ul><h2 id="dispatch" class="section-heading"><a href="#dispatch" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Dispatch</span></h2><p>blizanci_router:route/4 takes the protocol (gemini or similar), the request path, the request and the server configuration, whose routing table is the ordered list of routes. It searches for whether the request matches any of them, and if so dispatches it to the servlet module of the route, through blizanci_servlet_container:request/5. See the Servlets chapter.</p><ul><li><a href="servlets.html">Servlets</a></li></ul>
+
+</div>
+
+<div class="bottom-actions" id="bottom-actions">
+  <div class="bottom-actions-item">
+
+      <a href="configuration.html" class="bottom-actions-button" rel="prev">
+        <span class="subheader">
+          ← Previous Page
+        </span>
+        <span class="title">
+Configuration
+        </span>
+      </a>
+
+  </div>
+  <div class="bottom-actions-item">
+
+      <a href="authorisation.html" class="bottom-actions-button" rel="next">
+        <span class="subheader">
+          Next Page →
+        </span>
+        <span class="title">
+Authorisation
+        </span>
+      </a>
+
+  </div>
+</div>
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+
+                (<a href="https://preview.hex.pm/preview/blizanci/7.2.0/show/doc/manual/md/routing.md">current file</a>)
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+
+              <a href="blizanci.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.3) for the
+
+            <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

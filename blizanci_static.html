@@ -1,60 +1,1056 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-<html>
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<title>Module blizanci_static</title>
-<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
-</head>
-<body bgcolor="white">
-<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<hr>
-
-<h1>Module blizanci_static</h1>
-<ul class="index"><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
-
-<p><b>Behaviours:</b> <a href="blizanci_servlet.html"><tt>blizanci_servlet</tt></a>.</p>
-
-<h2><a name="types">Data Types</a></h2>
-
-<h3 class="typedecl"><a name="type-options">options()</a></h3>
-<p><tt>options() = #{bare_mimetype := binary(), unknown_mimetype := binary(), docroot := string(), index := string()}</tt></p>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.3">
+    <meta name="project" content="blizanci v7.2.0">
 
 
-<h2><a name="index">Function Index</a></h2>
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#cancel-1">cancel/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#default_options-0">default_options/0</a></td><td></td></tr>
-<tr><td valign="top"><a href="#request-4">request/4</a></td><td></td></tr>
-<tr><td valign="top"><a href="#serve-4">serve/4</a></td><td></td></tr>
-</table>
+    <title>blizanci_static — blizanci v7.2.0</title>
 
-<h2><a name="functions">Function Details</a></h2>
+    <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
 
-<h3 class="function"><a name="cancel-1">cancel/1</a></h3>
-<div class="spec">
-<p><tt>cancel(X1::pid()) -&gt; ok</tt><br></p>
-<p> </p>
+    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-Y2MUTVIN.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="manual.html" class="sidebar-projectName" translate="no">
+blizanci
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v7.2.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of blizanci</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">blizanci_static</span> 
+      <small class="app-vsn" translate="no">(blizanci v7.2.0)</small>
+
+    </h1>
+
+
+
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>A servlet serving static files from a route's docroot. Its request/4
+answers immediately, never deferring to a servlet process: a request
+for a regular file yields a <code class="inline">{file, MimeType, Path}</code> response, a request
+for a directory is redirected to that directory's index file, and
+anything else (including paths that escape the docroot) is a
+file_not_found. Paths are canonicalised and confined by blizanci_path.</p>
+    </section>
+
 </div>
 
-<h3 class="function"><a name="default_options-0">default_options/0</a></h3>
-<div class="spec">
-<p><tt>default_options() -&gt; map()</tt><br></p>
-<p> </p>
+  <section id="summary" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h2>
+<div class="summary-types summary">
+  <h3>
+    <a href="#types">Types</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:authorisation/0" data-no-tooltip="" translate="no">authorisation()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:cgi_error/0" data-no-tooltip="" translate="no">cgi_error()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:gateway_result/0" data-no-tooltip="" translate="no">gateway_result()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:gemini_response/0" data-no-tooltip="" translate="no">gemini_response()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:mp/0" data-no-tooltip="" translate="no">mp()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:options/0" data-no-tooltip="" translate="no">options()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:path_matches/0" data-no-tooltip="" translate="no">path_matches()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:raw_peer_cert/0" data-no-tooltip="" translate="no">raw_peer_cert()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:realm/0" data-no-tooltip="" translate="no">realm()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:request_details/0" data-no-tooltip="" translate="no">request_details()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:route/0" data-no-tooltip="" translate="no">route()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:selector/0" data-no-tooltip="" translate="no">selector()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:server_config/0" data-no-tooltip="" translate="no">server_config()</a>
+
+      </div>
+
+    </div>
+
+</div>
+<div class="summary-functions summary">
+  <h3>
+    <a href="#functions">Functions</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#cancel/1" data-no-tooltip="" translate="no">cancel(Pid)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#default_options/0" data-no-tooltip="" translate="no">default_options()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#default_options_valid_test/0" data-no-tooltip="" translate="no">default_options_valid_test()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#handle_client_data/2" data-no-tooltip="" translate="no">handle_client_data(Pid, Binary)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#hidden_files_test_/0" data-no-tooltip="" translate="no">hidden_files_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#missing_option_refused_test_/0" data-no-tooltip="" translate="no">missing_option_refused_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#non_ascii_symlink_test_/0" data-no-tooltip="" translate="no">non_ascii_symlink_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#redirect_under_mount_test_/0" data-no-tooltip="" translate="no">redirect_under_mount_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#request/4" data-no-tooltip="" translate="no">request(Matches, Req, ServerConfig, RouteOpts)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#serve/4" data-no-tooltip="" translate="no">serve(Matches, Req, ServerConfig, RouteOpts)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start/0" data-no-tooltip="" translate="no">start()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#stop/0" data-no-tooltip="" translate="no">stop()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#validate_options/1" data-no-tooltip="" translate="no">validate_options(Opts)</a>
+
+      </div>
+
+    </div>
+
 </div>
 
-<h3 class="function"><a name="request-4">request/4</a></h3>
-<div class="spec">
-<p><tt>request(Matches::<a href="#type-path_matches">path_matches()</a>, Req::<a href="#type-request_details">request_details()</a>, ServerConfig::<a href="#type-server_config">server_config()</a>, RouteOpts::<a href="#type-options">options()</a>) -&gt; {immediate, <a href="#type-gemini_response">gemini_response()</a>} | defer</tt><br></p>
-<p> </p>
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#types">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Types</span>
+    </h2>
+
+    <div class="types-list">
+<section class="detail" id="t:authorisation/0">
+
+  <div class="detail-header">
+    <a href="#t:authorisation/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">authorisation()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> authorisation() ::
+          public | restricted |
+          {private,
+           [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>()] | [<a href="#t:realm/0">realm</a>()],
+           [#'OTPCertificate'{tbsCertificate :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                              signatureAlgorithm :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                              signature :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}]}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:cgi_error/0">
+
+  <div class="detail-header">
+    <a href="#t:cgi_error/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cgi_error()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> cgi_error() ::
+          cgi_exec_error | cgi_output_too_large | file_not_found | gateway_busy | unimplemented |
+          cert_not_parsed | cert_unsupported_encoding.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:gateway_result/0">
+
+  <div class="detail-header">
+    <a href="#t:gateway_result/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gateway_result()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> gateway_result() ::
+          {gateway_output, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          {gateway_finished, <a href="#t:gemini_response/0">gemini_response</a>()} |
+          {gateway_error, <a href="#t:cgi_error/0">cgi_error</a>()} |
+          {gateway_started, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:gemini_response/0">
+
+  <div class="detail-header">
+    <a href="#t:gemini_response/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gemini_response()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> gemini_response() ::
+          {file, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          {error_code, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()} |
+          {redirect, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          hangup | none |
+          {init_servlet, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} |
+          {servlet_output, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} |
+          {success, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:mp/0">
+
+  <div class="detail-header">
+    <a href="#t:mp/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">mp()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> mp() :: {re_pattern, _, _, _, _}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:options/0">
+
+  <div class="detail-header">
+    <a href="#t:options/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">options()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> options() ::
+          #{bare_mimetype := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            unknown_mimetype := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            docroot := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            index := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:path_matches/0">
+
+  <div class="detail-header">
+    <a href="#t:path_matches/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">path_matches()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> path_matches() :: #{<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:raw_peer_cert/0">
+
+  <div class="detail-header">
+    <a href="#t:raw_peer_cert/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">raw_peer_cert()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> raw_peer_cert() :: {ok, <a href="https://www.erlang.org/doc/apps/public_key/public_key.html#t:der_encoded/0">public_key:der_encoded</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:realm/0">
+
+  <div class="detail-header">
+    <a href="#t:realm/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">realm()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> realm() :: {realm, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:request_details/0">
+
+  <div class="detail-header">
+    <a href="#t:request_details/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">request_details()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> request_details() ::
+          #{client_cert := <a href="#t:raw_peer_cert/0">raw_peer_cert</a>(),
+            query := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            rest_of_input := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            scheme := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            host := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            port := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
+            path := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:route/0">
+
+  <div class="detail-header">
+    <a href="#t:route/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">route()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> route() ::
+          #route{proto :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(),
+                 selector :: <a href="#t:selector/0">selector</a>(),
+                 module :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:module/0">module</a>(),
+                 auth_policy :: <a href="#t:authorisation/0">authorisation</a>(),
+                 options :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:selector/0">
+
+  <div class="detail-header">
+    <a href="#t:selector/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">selector()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> selector() :: {mount, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} | {regex, <a href="#t:mp/0">mp</a>()} | {legacy, <a href="#t:mp/0">mp</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:server_config/0">
+
+  <div class="detail-header">
+    <a href="#t:server_config/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">server_config()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> server_config() :: #server_config{hostname :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), port :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(), routing :: [<a href="#t:route/0">route</a>()]}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h2>
+
+    <div class="functions-list">
+<section class="detail" id="cancel/1">
+
+  <div class="detail-header">
+    <a href="#cancel/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cancel(Pid)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> cancel(Pid) -> Result when Pid :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>(), Result :: ok.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="default_options/0">
+
+  <div class="detail-header">
+    <a href="#default_options/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">default_options()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> default_options() -> Result when Result :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="default_options_valid_test/0">
+
+  <div class="detail-header">
+    <a href="#default_options_valid_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">default_options_valid_test()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="handle_client_data/2">
+
+  <div class="detail-header">
+    <a href="#handle_client_data/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">handle_client_data(Pid, Binary)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> handle_client_data(Pid, Binary) -> Result
+                            when Pid :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>(), Binary :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), Result :: <a href="#t:gemini_response/0">gemini_response</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="hidden_files_test_/0">
+
+  <div class="detail-header">
+    <a href="#hidden_files_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">hidden_files_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="missing_option_refused_test_/0">
+
+  <div class="detail-header">
+    <a href="#missing_option_refused_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">missing_option_refused_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="non_ascii_symlink_test_/0">
+
+  <div class="detail-header">
+    <a href="#non_ascii_symlink_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">non_ascii_symlink_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="redirect_under_mount_test_/0">
+
+  <div class="detail-header">
+    <a href="#redirect_under_mount_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">redirect_under_mount_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="request/4">
+
+  <div class="detail-header">
+    <a href="#request/4" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">request(Matches, Req, ServerConfig, RouteOpts)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> request(Matches, Req, ServerConfig, RouteOpts) -> Result
+                 when
+                     Matches :: <a href="#t:path_matches/0">path_matches</a>(),
+                     Req :: <a href="#t:request_details/0">request_details</a>(),
+                     ServerConfig :: <a href="#t:server_config/0">server_config</a>(),
+                     RouteOpts :: <a href="#t:options/0">options</a>(),
+                     Result :: {immediate, <a href="#t:gemini_response/0">gemini_response</a>()} | defer.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="serve/4">
+
+  <div class="detail-header">
+    <a href="#serve/4" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">serve(Matches, Req, ServerConfig, RouteOpts)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> serve(Matches, Req, ServerConfig, RouteOpts) -> Result
+               when
+                   Matches :: <a href="#t:path_matches/0">path_matches</a>(),
+                   Req :: <a href="#t:request_details/0">request_details</a>(),
+                   ServerConfig :: <a href="#t:server_config/0">server_config</a>(),
+                   RouteOpts :: <a href="#t:options/0">options</a>(),
+                   Result :: <a href="#t:gateway_result/0">gateway_result</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="start/0">
+
+  <div class="detail-header">
+    <a href="#start/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> start() -> Result when Result :: ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="stop/0">
+
+  <div class="detail-header">
+    <a href="#stop/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">stop()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> stop() -> Result when Result :: ok.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="validate_options/1">
+
+  <div class="detail-header">
+    <a href="#validate_options/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">validate_options(Opts)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> validate_options(Opts) -> Result when Opts :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(), Result :: ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+
+              <a href="blizanci.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.3) for the
+
+            <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
 </div>
 
-<h3 class="function"><a name="serve-4">serve/4</a></h3>
-<div class="spec">
-<p><tt>serve(X1::<a href="#type-path_matches">path_matches()</a>, X2::<a href="#type-request_details">request_details()</a>, X3::<a href="#type-server_config">server_config()</a>, X4::<a href="#type-options">options()</a>) -&gt; <a href="#type-gateway_result">gateway_result()</a></tt><br></p>
-<p> </p>
-</div>
-<hr>
-
-<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc</i></p>
-</body>
+  </body>
 </html>

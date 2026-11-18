@@ -1,68 +1,978 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-<html>
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<title>Module blizanci_x509</title>
-<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
-</head>
-<body bgcolor="white">
-<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<hr>
-
-<h1>Module blizanci_x509</h1>
-<ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>  
-This module handles most of the certificate-related functionality.
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.3">
+    <meta name="project" content="blizanci v7.2.0">
 
 
-<h2><a name="description">Description</a></h2><p>  
-This module handles most of the certificate-related functionality.</p>
- 
-  Herein, RDN means "relative distinguished name".
-<h2><a name="index">Function Index</a></h2>
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#certificate_from_file-1">certificate_from_file/1</a></td><td>
-  Return the decoded certificate from a PEM-encoded file.</td></tr>
-<tr><td valign="top"><a href="#peercert_cn-1">peercert_cn/1</a></td><td>
-  Check if the connection has a valid certificate,
-  and return the issuer and subject names, or error.</td></tr>
-<tr><td valign="top"><a href="#validate_pem_file-1">validate_pem_file/1</a></td><td>
-  Check that a file containts (at least) one PEM-encoded certificate.</td></tr>
-<tr><td valign="top"><a href="#verify_cert-3">verify_cert/3</a></td><td></td></tr>
-</table>
+    <title>blizanci_x509 — blizanci v7.2.0</title>
 
-<h2><a name="functions">Function Details</a></h2>
+    <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
 
-<h3 class="function"><a name="certificate_from_file-1">certificate_from_file/1</a></h3>
-<div class="spec">
-<p><tt>certificate_from_file(Path::string()) -&gt; #'Certificate'{}</tt><br></p>
-<p> </p>
-</div><p>
-  Return the decoded certificate from a PEM-encoded file.
-  This returns only the first certificate available in the file, and likely
-  crashes when run on a file not containing any PEM-encoded certificates.</p>
+    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-Y2MUTVIN.js"></script>
 
-<h3 class="function"><a name="peercert_cn-1">peercert_cn/1</a></h3>
-<div class="spec">
-<p><tt>peercert_cn(X1::term()) -&gt; <a href="#type-client_cert">client_cert()</a></tt><br></p>
-<p> </p>
-</div><p>
-  Check if the connection has a valid certificate,
-  and return the issuer and subject names, or error.</p>
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
 
-<h3 class="function"><a name="validate_pem_file-1">validate_pem_file/1</a></h3>
-<div class="spec">
-<p><tt>validate_pem_file(Filename::string()) -&gt; {ok, string()} | {fail, atom()}</tt><br></p>
-<p> </p>
-</div><p>
-  Check that a file containts (at least) one PEM-encoded certificate.</p>
+<div class="body-wrapper">
 
-<h3 class="function"><a name="verify_cert-3">verify_cert/3</a></h3>
-<div class="spec">
-<p><tt>verify_cert(OtpCert::#'OTPCertificate'{}, Event::{bad_cert, Reason::atom() | {revoked, atom()}} | {extension, #'Extension'{}} | valid | valid_peer, InitialUserState::term()) -&gt; {valid, UserState::term()} | {fail, Reason::term()} | {unknown, UserState::term()}</tt><br></p>
-<p> </p>
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="manual.html" class="sidebar-projectName" translate="no">
+blizanci
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v7.2.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of blizanci</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">blizanci_x509</span> 
+      <small class="app-vsn" translate="no">(blizanci v7.2.0)</small>
+
+    </h1>
+
+
+
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>This module handles most of the certificate-related functionality.</p><p>Herein, RDN means &quot;relative distinguished name&quot;.</p>
+    </section>
+
 </div>
-<hr>
 
-<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc</i></p>
-</body>
+  <section id="summary" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h2>
+<div class="summary-types summary">
+  <h3>
+    <a href="#types">Types</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:cert_details/0" data-no-tooltip="" translate="no">cert_details()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:client_cert_details/0" data-no-tooltip="" translate="no">client_cert_details()</a>
+
+      </div>
+
+    </div>
+
+</div>
+<div class="summary-functions summary">
+  <h3>
+    <a href="#functions">Functions</a>
+  </h3>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#cert_key_match/2" data-no-tooltip="" translate="no">cert_key_match(CertFile, KeyFile)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check that a PEM certificate file and a PEM private key file are a
+matching pair, so that a server using them can complete a handshake.
+The certificate is the first one in its file (the leaf, when the file
+holds a chain); the key is the first private key in its file, which
+may be the same file. RSA keys match on modulus and public exponent;
+EC keys (P-256, P-384, P-521) on the public point derived from the
+private scalar, which must be on the same named curve; Ed25519 and
+Ed448 likewise. Nothing is trusted from the file's own idea of the
+public key. PKCS#1, PKCS#8 and SEC1 containers are all handled.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#cert_key_match_test_/0" data-no-tooltip="" translate="no">cert_key_match_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#certificates_from_file/1" data-no-tooltip="" translate="no">certificates_from_file(Path)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Return every certificate in a PEM-encoded file, decoded, in file order
+(a CA bundle gives all of its CAs). Other PEM entries (keys, say) are
+ignored. Does not raise. The error is a posix atom if the file cannot
+be read, 'not_a_path' if Path is not a non-empty string,
+'no_certificate_in_file' if there is no certificate entry, and
+'certificate_not_decodable' if ANY certificate entry fails to decode
+(the file is refused whole, not partly used).</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#check_cert/1" data-no-tooltip="" translate="no">check_cert(DerCert)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Decode a raw client certificate and check that the current time falls
+within its validity period (NotBefore/NotAfter).</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#check_cert_boundary_test_/0" data-no-tooltip="" translate="no">check_cert_boundary_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#check_cert_non_utc_time_test_/0" data-no-tooltip="" translate="no">check_cert_non_utc_time_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#check_cert_test_/0" data-no-tooltip="" translate="no">check_cert_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#peercert_cn/1" data-no-tooltip="" translate="no">peercert_cn(C)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check if the connection has a valid certificate,
+and return the issuer and subject names, or error.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#peercert_cn_test_/0" data-no-tooltip="" translate="no">peercert_cn_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#pem_files_test_/0" data-no-tooltip="" translate="no">pem_files_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#test_pair_files/3" data-no-tooltip="" translate="no">test_pair_files(Dir, Name, Kind)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#test_pki/0" data-no-tooltip="" translate="no">test_pki()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#test_tmp_dir/0" data-no-tooltip="" translate="no">test_tmp_dir()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#test_write_pem/3" data-no-tooltip="" translate="no">test_write_pem(Dir, Name, Entries)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#validate_ca_file/1" data-no-tooltip="" translate="no">validate_ca_file(Path)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check, without raising, that Path is the name of a readable file
+holding at least one PEM-encoded certificate, and that every
+certificate in it decodes. See certificates_from_file/1 for the
+errors.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#validate_pem_file/1" data-no-tooltip="" translate="no">validate_pem_file(Filename)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check that a file containts (at least) one PEM-encoded certificate.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#verify_cert/3" data-no-tooltip="" translate="no">verify_cert(OtpCert, Event, InitialUserState)</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#verify_cert_test_/0" data-no-tooltip="" translate="no">verify_cert_test_()</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#verify_signed_by/2" data-no-tooltip="" translate="no">verify_signed_by(DerCert, IssuerCert)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check that DerCert was actually signed by IssuerCert's private key --
+a genuine cryptographic check, not the name-comparison that
+public_key:pkix_is_issuer/2 does (that function only compares the
+Issuer field of DerCert against the Subject field of IssuerCert; it
+is meant for candidate-chain construction, not a standalone trust
+decision, and is trivially spoofable by anyone able to set those
+fields on a self-signed certificate).</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#verify_signed_by_test_/0" data-no-tooltip="" translate="no">verify_signed_by_test_()</a>
+
+      </div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#types">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Types</span>
+    </h2>
+
+    <div class="types-list">
+<section class="detail" id="t:cert_details/0">
+
+  <div class="detail-header">
+    <a href="#t:cert_details/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cert_details()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> cert_details() ::
+          #{common_name := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined, issuer_common_name := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:client_cert_details/0">
+
+  <div class="detail-header">
+    <a href="#t:client_cert_details/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">client_cert_details()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> client_cert_details() :: error | {ok, <a href="#t:cert_details/0">cert_details</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h2 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h2>
+
+    <div class="functions-list">
+<section class="detail" id="cert_key_match/2">
+
+  <div class="detail-header">
+    <a href="#cert_key_match/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cert_key_match(CertFile, KeyFile)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> cert_key_match(CertFile, KeyFile) -> Result
+                        when
+                            CertFile :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>(),
+                            KeyFile :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>(),
+                            Result :: ok | {ok, unverified, Reason} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()},
+                            Reason :: {unsupported_key_type, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>()}.</pre>
+
+      </div>
+
+<p>Check that a PEM certificate file and a PEM private key file are a
+matching pair, so that a server using them can complete a handshake.
+The certificate is the first one in its file (the leaf, when the file
+holds a chain); the key is the first private key in its file, which
+may be the same file. RSA keys match on modulus and public exponent;
+EC keys (P-256, P-384, P-521) on the public point derived from the
+private scalar, which must be on the same named curve; Ed25519 and
+Ed448 likewise. Nothing is trusted from the file's own idea of the
+public key. PKCS#1, PKCS#8 and SEC1 containers are all handled.</p><p>Result is <code class="inline">ok</code> for a verified match; <code class="inline">{ok, unverified, Reason}</code> for a
+pair the check cannot compare, where Reason is
+<code class="inline">{unsupported_key_type, Name}</code> (Name a string such as &quot;DSA&quot; or
+&quot;EC secp224r1&quot;), which is NOT a failure and the caller should warn;
+<code class="inline">{error, mismatch}</code> for a pair that provably does not match; or
+<code class="inline">{error, {certfile, Why}}</code> / <code class="inline">{error, {keyfile, Why}}</code> for a file
+problem, which names the file at fault: <code class="inline">{unreadable, Posix}</code>,
+<code class="inline">no_certificate_in_file</code> or <code class="inline">certificate_not_decodable</code> (certfile),
+<code class="inline">{unreadable, Posix}</code>, <code class="inline">no_private_key</code>, <code class="inline">encrypted_private_key</code> or
+<code class="inline">private_key_not_decodable</code> (keyfile).</p><p>The rule: each side's family is RSA, EC (any curve, Ed25519 and
+Ed448 included) or DSA when we can tell. Two different families are a
+mismatch, even if one is a family we cannot compare, so an RSA
+certificate with a DSA key is refused. Within RSA, and within EC on
+the supported curves, the keys are compared. Two EC keys on
+different named curves are a mismatch. Otherwise (DSA with DSA, the
+same unsupported EC curve, RSA-PSS or any other algorithm we do not
+know, on either side) the pair is unverified.</p>
+  </section>
+</section>
+<section class="detail" id="cert_key_match_test_/0">
+
+  <div class="detail-header">
+    <a href="#cert_key_match_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cert_key_match_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="certificates_from_file/1">
+
+  <div class="detail-header">
+    <a href="#certificates_from_file/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">certificates_from_file(Path)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> certificates_from_file(Path) -> Result
+                                when
+                                    Path :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                                    Result ::
+                                        {ok,
+                                         [#'OTPCertificate'{tbsCertificate :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                                                            signatureAlgorithm :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                                                            signature :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()},
+                                          ...]} |
+                                        {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Return every certificate in a PEM-encoded file, decoded, in file order
+(a CA bundle gives all of its CAs). Other PEM entries (keys, say) are
+ignored. Does not raise. The error is a posix atom if the file cannot
+be read, 'not_a_path' if Path is not a non-empty string,
+'no_certificate_in_file' if there is no certificate entry, and
+'certificate_not_decodable' if ANY certificate entry fails to decode
+(the file is refused whole, not partly used).</p>
+  </section>
+</section>
+<section class="detail" id="check_cert/1">
+
+  <div class="detail-header">
+    <a href="#check_cert/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">check_cert(DerCert)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> check_cert(DerCert) -> Result
+                    when
+                        DerCert :: <a href="https://www.erlang.org/doc/apps/public_key/public_key.html#t:der_encoded/0">public_key:der_encoded</a>(),
+                        Result ::
+                            {ok,
+                             #'OTPCertificate'{tbsCertificate :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                                               signatureAlgorithm :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                                               signature :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}} |
+                            {error, cert_expired} |
+                            {error, cert_not_yet_valid} |
+                            {error, cert_not_parsed}.</pre>
+
+      </div>
+
+<p>Decode a raw client certificate and check that the current time falls
+within its validity period (NotBefore/NotAfter).</p><p>As with peercert_cn/1, the input is remote-attacker-controlled, so a
+certificate we can't decode at all is reported distinctly
+(<code class="inline">cert_not_parsed</code>) from one which decodes fine but is outside its
+validity period: past NotAfter (<code class="inline">cert_expired</code>) or before NotBefore
+(<code class="inline">cert_not_yet_valid</code>).</p>
+  </section>
+</section>
+<section class="detail" id="check_cert_boundary_test_/0">
+
+  <div class="detail-header">
+    <a href="#check_cert_boundary_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">check_cert_boundary_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="check_cert_non_utc_time_test_/0">
+
+  <div class="detail-header">
+    <a href="#check_cert_non_utc_time_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">check_cert_non_utc_time_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="check_cert_test_/0">
+
+  <div class="detail-header">
+    <a href="#check_cert_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">check_cert_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="peercert_cn/1">
+
+  <div class="detail-header">
+    <a href="#peercert_cn/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">peercert_cn(C)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> peercert_cn(C) -> ClientCert when C :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(), ClientCert :: <a href="#t:client_cert_details/0">client_cert_details</a>().</pre>
+
+      </div>
+
+<p>Check if the connection has a valid certificate,
+and return the issuer and subject names, or error.</p><p>A certificate is remote-attacker-controlled input: decoding it, or
+dumping its RDNs, must never crash the calling process. Any failure
+is reported as a distinct {error, Reason}, distinguishing a
+certificate we plain couldn't decode (<code class="inline">cert_not_parsed</code>) from one
+which decoded fine but uses a directory-string encoding for an RDN
+attribute value that we don't know how to render
+(<code class="inline">cert_unsupported_encoding</code>), e.g. bmpString/universalString.</p><p>A certificate with no Common Name is not an error: the corresponding
+value in the result is the atom <code class="inline">undefined</code> (for the subject, the
+issuer, or both).</p>
+  </section>
+</section>
+<section class="detail" id="peercert_cn_test_/0">
+
+  <div class="detail-header">
+    <a href="#peercert_cn_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">peercert_cn_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="pem_files_test_/0">
+
+  <div class="detail-header">
+    <a href="#pem_files_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">pem_files_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="test_pair_files/3">
+
+  <div class="detail-header">
+    <a href="#test_pair_files/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">test_pair_files(Dir, Name, Kind)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="test_pki/0">
+
+  <div class="detail-header">
+    <a href="#test_pki/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">test_pki()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="test_tmp_dir/0">
+
+  <div class="detail-header">
+    <a href="#test_tmp_dir/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">test_tmp_dir()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="test_write_pem/3">
+
+  <div class="detail-header">
+    <a href="#test_write_pem/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">test_write_pem(Dir, Name, Entries)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="validate_ca_file/1">
+
+  <div class="detail-header">
+    <a href="#validate_ca_file/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">validate_ca_file(Path)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> validate_ca_file(Path) -> Result when Path :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(), Result :: ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Check, without raising, that Path is the name of a readable file
+holding at least one PEM-encoded certificate, and that every
+certificate in it decodes. See certificates_from_file/1 for the
+errors.</p>
+  </section>
+</section>
+<section class="detail" id="validate_pem_file/1">
+
+  <div class="detail-header">
+    <a href="#validate_pem_file/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">validate_pem_file(Filename)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> validate_pem_file(Filename) -> Result
+                           when Filename :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>(), Result :: {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>()} | {fail, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()}.</pre>
+
+      </div>
+
+<p>Check that a file containts (at least) one PEM-encoded certificate.</p>
+  </section>
+</section>
+<section class="detail" id="verify_cert/3">
+
+  <div class="detail-header">
+    <a href="#verify_cert/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">verify_cert(OtpCert, Event, InitialUserState)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> verify_cert(OtpCert, Event, InitialUserState) -> Result
+                     when
+                         OtpCert ::
+                             #'OTPCertificate'{tbsCertificate :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                                               signatureAlgorithm :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                                               signature :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()},
+                         Event ::
+                             {bad_cert, Reason :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>() | {revoked, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()}} |
+                             {extension,
+                              #'Extension'{extnID :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(), critical :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(), extnValue :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}} |
+                             valid | valid_peer,
+                         InitialUserState :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                         Result ::
+                             {valid, UserState :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()} |
+                             {fail, Reason :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()} |
+                             {unknown, UserState :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="verify_cert_test_/0">
+
+  <div class="detail-header">
+    <a href="#verify_cert_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">verify_cert_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+<section class="detail" id="verify_signed_by/2">
+
+  <div class="detail-header">
+    <a href="#verify_signed_by/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">verify_signed_by(DerCert, IssuerCert)</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> verify_signed_by(DerCert, IssuerCert) -> Result
+                          when
+                              DerCert :: <a href="https://www.erlang.org/doc/apps/public_key/public_key.html#t:der_encoded/0">public_key:der_encoded</a>(),
+                              IssuerCert ::
+                                  #'OTPCertificate'{tbsCertificate :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                                                    signatureAlgorithm :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+                                                    signature :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()},
+                              Result :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
+
+      </div>
+
+<p>Check that DerCert was actually signed by IssuerCert's private key --
+a genuine cryptographic check, not the name-comparison that
+public_key:pkix_is_issuer/2 does (that function only compares the
+Issuer field of DerCert against the Subject field of IssuerCert; it
+is meant for candidate-chain construction, not a standalone trust
+decision, and is trivially spoofable by anyone able to set those
+fields on a self-signed certificate).</p><p>Deliberately minimal: this does not require IssuerCert to be a
+&quot;proper&quot; CA certificate (no basicConstraints/keyUsage checks, unlike
+public_key:pkix_path_validation/3) -- blizanci's issuer certs are
+used the way an organisation runs its own internal CA for e.g.
+mail/VPN clients, not as web-PKI CAs, and may not carry those
+extensions.</p>
+  </section>
+</section>
+<section class="detail" id="verify_signed_by_test_/0">
+
+  <div class="detail-header">
+    <a href="#verify_signed_by_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">verify_signed_by_test_()</h1>
+
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+
+              <a href="blizanci.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.3) for the
+
+            <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
 </html>

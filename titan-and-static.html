@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.40.3">
+    <meta name="project" content="blizanci v7.2.0">
+
+
+    <title>Titan and static files — blizanci v7.2.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
+
+    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-Y2MUTVIN.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="manual.html" class="sidebar-projectName" translate="no">
+blizanci
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v7.2.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras="Pages"></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-extra" id="main" data-type="extras">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of blizanci</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>Titan and static files</h1>
+
+
+
+  </div>
+
+
+<h2 id="static-files" class="section-heading"><a href="#static-files" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Static files</span></h2><p>The module blizanci_static is a servlet serving static files from a route's docroot. Its request/4 answers immediately, never deferring to a servlet process: a request for a regular file yields a {file, MimeType, Path} response, a request for a directory is redirected to that directory's index file, and anything else (including paths that escape the docroot) is a file_not_found. Paths are canonicalised and confined by blizanci_path. Its route options are docroot, index, bare_mimetype and unknown_mimetype.</p><p>Hidden files are refused, whatever the servlet: see the section Path confinement in the Request handling chapter.</p><ul><li><a href="request-handling.html">Request handling</a></li></ul><h2 id="titan-uploads" class="section-heading"><a href="#titan-uploads" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Titan uploads</span></h2><p>The module blizanci_titan is a servlet accepting Titan uploads into a route's docroot. Its request/4 always defers: the upload body arrives after the request line, and is passed to a worker process (run in a ppool queue, and also a gen_server) via handle_client_data/2. The data is staged in the route's work_dir and moved to its place under the docroot once complete; a request of size 0 deletes the resource instead.</p><p>The Titan protocol, for uploading to Gemini servers, is specified at the URL below. In it the &quot;size&quot; parameter is mandatory, &quot;mime&quot; is optional (default text/gemini) and &quot;token&quot; is optional. A request with size=0 deletes the resource.</p><ul><li><a href="gemini://transjovian.org/titan/The%20Titan%20Specification">The Titan Specification</a></li></ul><p>A Titan route is a route like any other, with the protocol titan; a static site that also takes uploads needs a gemini route and a titan route (see the Routing chapter), and the titan route will usually be private (see the Authorisation chapter). A titan route names the docroot that uploads go into and the work_dir that stages them.</p><ul><li><a href="routing.html">Routing</a></li><li><a href="authorisation.html">Authorisation</a></li></ul><h2 id="limits" class="section-heading"><a href="#limits" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Limits</span></h2><ul><li>At most 10 uploads are processed at once (the worker pool size, MAX_TITAN).</li><li>The largest upload accepted is 10 MiB; a request declaring more is refused before any of its data is read.</li><li>A leftover temporary file in the work directory is expired once it is more than an hour old (MAX_AGE, 3600 seconds).</li><li>Hidden files are refused, as everywhere, except that a &quot;.well-known&quot; directory at the top of the upload root may be written to.</li></ul><h2 id="titan-work-directories" class="section-heading"><a href="#titan-work-directories" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Titan work directories</span></h2><p>Titan stages uploads in a work directory before installing them in the docroot. A Titan route's work_dir has no default and must be given. Start-up fails unless it is an absolute path, exists, is a directory and is on the same filesystem as the route's docroot (uploads are installed by hard link and rename). Neither the docroot nor the work directory of a Titan route may overlap a CGI root.</p>
+
+</div>
+
+<div class="bottom-actions" id="bottom-actions">
+  <div class="bottom-actions-item">
+
+      <a href="cgi.html" class="bottom-actions-button" rel="prev">
+        <span class="subheader">
+          ← Previous Page
+        </span>
+        <span class="title">
+CGI
+        </span>
+      </a>
+
+  </div>
+  <div class="bottom-actions-item">
+
+      <a href="request-handling.html" class="bottom-actions-button" rel="next">
+        <span class="subheader">
+          Next Page →
+        </span>
+        <span class="title">
+Request handling
+        </span>
+      </a>
+
+  </div>
+</div>
+    <footer class="footer">
+
+        <p>
+
+            <span class="line">
+              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+
+              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+
+                (<a href="https://preview.hex.pm/preview/blizanci/7.2.0/show/doc/manual/md/titan-and-static.md">current file</a>)
+
+            </span>
+
+          <span class="line">
+            <button class="a-main footer-button display-quick-switch" title="Go to package docs">
+              Go to package docs
+            </button>
+
+
+              <a href="blizanci.epub">
+                Download ePub version
+              </a>
+
+          </span>
+        </p>
+
+        <p class="built-using">
+          Built using
+          <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.40.3) for the
+
+            <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+        </p>
+
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>
