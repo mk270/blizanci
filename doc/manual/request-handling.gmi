@@ -1,6 +1,6 @@
 # Request handling
 
-The path of a request through the server is in two halves. The first half, from TLS data arriving at the connection process to the call of blizanci_request:handle_line/4, is in the module blizanci_connection. The second half, from the parsed request line to the servlet, is in blizanci_request, whose entry point is handle_line/4. In both, the main code path consists in transforming data and handing it off down the call chain (always towards the bottom of the file).
+The path of a request through the server is in two halves. The first half, from TLS data arriving at the connection process to the call of blizanci_request:handle_line/4, is in the module blizanci_connection. The second half, from the parsed request line to the servlet, is in blizanci_request, whose entry point is handle_line/4. In both, the main code path consists in transforming data and handing it off down the call chain.
 
 ## The connection
 

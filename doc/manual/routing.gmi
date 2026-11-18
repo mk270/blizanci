@@ -81,7 +81,7 @@ A table with protected areas: /private for clients with certificates from the re
 ]}
 ```
 
-The realm staff must be defined in the top-level realms key. Relative paths are allowed in docroot, cgiroot and work_dir (a Titan work_dir must still be absolute; see the Titan chapter). Without the /private and /restricted routes, the "/" route would serve those directories publicly.
+The realm staff must be defined in the top-level realms key. Relative paths are allowed in docroot and cgiroot; a Titan work_dir must be absolute (see the Titan chapter). Without the /private and /restricted routes, the "/" route would serve those directories publicly.
 
 => titan-and-static.gmi Titan and static files
 

@@ -59,7 +59,7 @@ config/sys.config.example is a fuller example. (The example vm.args is for a rel
 * {servlets, [Module::atom()]}: the servlets which routes may use (defaults to blizanci_static, blizanci_cgi and blizanci_titan).
 * {sites, [{Hostname::string(), [Option]}]}: the sites served on the port, at least one. See Sites, below.
 
-Relative paths are allowed in all configuration items, including the docroot and cgiroot options of routing entries.
+Relative paths are allowed in the configuration, including the docroot and cgiroot options of routing entries; the exception is the work_dir of a Titan route, which must be absolute (see the Titan chapter).
 
 => authorisation.gmi Authorisation
 

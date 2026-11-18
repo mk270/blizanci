@@ -43,7 +43,7 @@ On a per-request basis, the following variables are set:
 * SERVER_PROTOCOL
 * REMOTE_USER
 
-REMOTE_USER is set only if the client presented a certificate that has a Common Name, even where the route's policy did not require one.
+REMOTE_USER is set only if the client presented a certificate that has a Common Name, even where the route's policy did not require one. A certificate that is offered is always decoded for this, even on a public route: one that cannot be decoded, or whose Common Name uses an encoding blizanci cannot read (bmpString, for example), fails the whole request with status 62 instead of running the script without REMOTE_USER.
 
 No other environment variables get passed through to the CGI runner. In particular, variables inherited at startup from the UNIX environment are not passed through unless on the preserved list above.
 
