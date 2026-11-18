@@ -18,12 +18,15 @@ Manual
 The reference for configuration, routing, authorisation, servlets, CGI,
 Titan and the rest is the manual, in `doc/manual/`. It is written in
 Gemtext (`index.gmi` is the first chapter); Markdown copies are generated
-from it by `doc/manual/build-md.sh`, which needs the `gemtext2md` filter
-(set `GEMTEXT2MD` if it is not on the PATH). Run that script before
-`rebar3 ex_doc`, which includes the Markdown copies in the generated
-documentation. ex_doc does not work on Erlang/OTP 28.0 (it fails on
-a regular expression function); 28.4.1 is known to work. Building and running blizanci itself needs
-only OTP 27.
+from it by `doc/manual/build-md.sh`. The script downloads a pinned,
+checksummed release of the `gemtext2md` escript from
+github.com/mk270/erl_gemtext2md on first use (it needs curl and
+Erlang/OTP 27 or later on the PATH); set `GEMTEXT2MD` to use a converter
+of your own instead. Run that script before `rebar3 ex_doc`, which
+includes the Markdown copies in the generated documentation. ex_doc
+does not work on Erlang/OTP 28.0 (it fails on a regular expression
+function); 28.4.1 is known to work. Building and running blizanci
+itself needs only OTP 27.
 
 Prerequisites
 -------------

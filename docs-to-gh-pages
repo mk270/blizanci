@@ -14,7 +14,7 @@ ROOT=$PWD
 DOCDIR=apps/blizanci/doc
 
 # The manual is written in gemtext; ex_doc wants the Markdown copies,
-# so generate them first (needs gemtext2md; see doc/manual/build-md.sh).
+# so generate them first (see doc/manual/build-md.sh for what it needs).
 # rebar3_ex_doc (see rebar.config) writes the HTML to the application's
 # doc directory.
 doc/manual/build-md.sh
