@@ -4,6 +4,11 @@
 
 -module(blizanci_tmpdir).
 
+-moduledoc """
+Temporary files for Titan uploads: fresh, exclusively created files in a
+work directory, and the means of finding those that have gone stale.
+""".
+
 -include_lib("kernel/include/file.hrl").
 -include_lib("eunit/include/eunit.hrl").
 

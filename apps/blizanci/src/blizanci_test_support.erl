@@ -9,6 +9,9 @@
 %% from test/ every call would be reported as an unknown function.
 
 -module(blizanci_test_support).
+
+-moduledoc false.
+
 -include("blizanci_types.hrl").
 
 -export([tmp_path/1, test_request/1, isolated/1]).

@@ -3,6 +3,13 @@
 %% SPDX-License-Identifier: Apache-2.0
 
 -module(blizanci_status).
+
+-moduledoc """
+The table of Gemini status codes: for each error atom that a servlet or
+the server can answer with, the status code and the explanation sent to
+the client, and whether an atom names a failure (a status of 40 or more).
+""".
+
 -include_lib("eunit/include/eunit.hrl").
 -export([gemini_status/1, valid_code/1, is_error/1]).
 
