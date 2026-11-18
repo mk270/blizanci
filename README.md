@@ -76,12 +76,14 @@ Trivia
 Documentation
 -------------
 
-A work in progress at [https://mk270.github.io/blizanci/](https://mk270.github.io/blizanci/).
+The manual and the API documentation for the modules are published at
+[https://mk270.github.io/blizanci/](https://mk270.github.io/blizanci/).
+The manual's source is in `doc/manual/` (see Manual, above).
 
 Status
 ------
 
-The source code of Blizanci is largely "finished". There are no plans to add new features.
+The source code of Blizanci is largely "finished".
 
 ## Licence
 
