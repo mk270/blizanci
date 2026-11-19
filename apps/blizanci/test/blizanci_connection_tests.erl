@@ -603,7 +603,8 @@ connection_traps_exits_test_() ->
                 {Parent, PRef} = spawn_monitor(fun() ->
                     Child = proc_lib:spawn_link(fun() ->
                         process_flag(trap_exit, true),
-                        gen_server:enter_loop(blizanci_connection, [], blank_state())
+                        gen_server:enter_loop(blizanci_connection, [],
+                                              blank_state())
                     end),
                     Self ! {child, Child},
                     receive stop -> exit(Child, shutdown) end,
