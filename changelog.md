@@ -1,5 +1,16 @@
 # Blizanci Changelog
 
+## 7.3.0
+
+- Redirects omit the port when it is the default, 1965: a directory
+  request is now redirected to gemini://host/dir/index.gemini, not
+  gemini://host:1965/dir/index.gemini
+- The unit tests of blizanci_app, blizanci_auth, blizanci_log,
+  blizanci_osenv, blizanci_path, blizanci_pool, blizanci_static,
+  blizanci_status and blizanci_urlpath move from src/ to test/, so the
+  compiled modules no longer carry them (the beams of those nine are
+  about a quarter of their former size)
+
 ## 7.2.1
 
 - Manual: a Titan work_dir must be absolute, whereas docroot and cgiroot
