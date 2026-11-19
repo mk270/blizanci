@@ -12,9 +12,13 @@ See the manual chapter [Authorisation](authorisation.md).
 """.
 -include("blizanci_types.hrl").
 
--export([authorisation_policy/1, authorised/2, valid_authz_policy/1,
-         valid_authz_policy/2]).
+-export([authorisation_policy/1, authorised/2, valid_authz_policy/2]).
 -export([realm/1, add_realm/3, realm_table/1]).
+
+-ifdef(TEST).
+%% Exported for the tests in test/blizanci_auth_tests.erl.
+-export([valid_authz_policy/1]).
+-endif.
 
 -define(MAX_REALM_NAME, 64).
 

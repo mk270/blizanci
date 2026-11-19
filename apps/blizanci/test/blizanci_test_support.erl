@@ -2,11 +2,7 @@
 %%
 %% SPDX-License-Identifier: Apache-2.0
 
-%% Helpers shared by the tests that live in the source modules.
-%%
-%% It is in src/, not test/, because the test code that calls it is
-%% compiled into the source modules, and dialyzer analyses only src/:
-%% from test/ every call would be reported as an unknown function.
+%% Helpers shared by the tests in this directory.
 
 -module(blizanci_test_support).
 

@@ -12,12 +12,12 @@ work directory, and the means of finding those that have gone stale.
 -include_lib("kernel/include/file.hrl").
 -include("blizanci_tmpdir.hrl").
 
--export([tmp_file_name/0, create/1, create/2, stale/2]).
+-export([create/1, stale/2]).
 -export_type([name_fun/0]).
 
 -ifdef(TEST).
 %% Exported for the tests in test/blizanci_tmpdir_tests.erl.
--export([is_temp_name/1, older_than/2]).
+-export([is_temp_name/1, older_than/2, tmp_file_name/0, create/2]).
 -endif.
 
 -type filepath() :: binary() | string().

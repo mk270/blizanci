@@ -17,12 +17,13 @@ See the manual chapter [Configuration](configuration.md).
          realm/1, add_realm/3, realms/0, realms/1,
          global/2, site/3, add_route/2, insert_route/3, routes/1,
          new/2, validate/1, validate_all/1, apply/1, ascii_lowercase/1,
-         describe_error/1, tls_versions/0, site_wants_client_cert/1]).
+         describe_error/1]).
 
 -ifdef(TEST).
 %% Exported for the tests in test/blizanci_config_tests.erl.
 -export([describe_route_error/1, problems_site/1, realms_from_env/1,
-         ssl_opts/1, test_site/3]).
+         ssl_opts/1, test_site/3, tls_versions/0,
+         site_wants_client_cert/1]).
 -endif.
 
 % The default port: the one assigned to Gemini.
