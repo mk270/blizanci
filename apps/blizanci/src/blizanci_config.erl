@@ -391,9 +391,10 @@ apply(Config = #config{global = #global{port = Port, servlets = Servlets},
     end.
 
 
-% A one-line, human-readable account of an error from make_site/4 or
-% from_app_env/0, or from starting the supervision tree (a servlet that
-% will not start), for the log at start-up.
+% A one-line, human-readable account of an error from the builder
+% functions (site/3 and so on) or from_app_env/0, or from starting the
+% supervision tree (a servlet that will not start), for the log at
+% start-up.
 -spec describe_error(Error) -> Result
               when Error  :: term(),
                    Result :: string().
