@@ -175,7 +175,12 @@ any(X) -> erlang:binary_to_term(erlang:term_to_binary(X)).
 isolated(Fun) ->
     Self = self(),
     Ref = make_ref(),
-    {Pid, MRef} = spawn_monitor(fun() -> Self ! {Ref, Fun()} end),
+    % this process stands in for the connection, which traps exits from
+    % its start, so that a container's exit reaches it as a message
+    {Pid, MRef} = spawn_monitor(fun() ->
+                                    process_flag(trap_exit, true),
+                                    Self ! {Ref, Fun()}
+                                end),
     receive
         {Ref, Result} ->
             erlang:demonitor(MRef, [flush]),
@@ -771,16 +776,17 @@ client_data_as_script_finishes_test() ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% handle_cast/2 (the servlet's report), terminate/2, servlet_result/2
 
-%% Report a servlet result as the container does; the trap_exit flag is
-%% left alone, a finished message is queued, and the client is sent
-%% the response.
+%% Report a servlet result as the container does; the result is whether
+%% the trap_exit flag was changed (it should not be), and whether a
+%% finished message was queued; the client is sent the response.
 report(Result) ->
     with_client(fun(S) ->
+        {trap_exit, Before} = process_info(self(), trap_exit),
         {noreply, _} = handle_cast({servlet_result, Result},
                                    conn_state(S)),
-        {trap_exit, TE} = process_info(self(), trap_exit),
+        {trap_exit, After} = process_info(self(), trap_exit),
         Finished = receive finished -> true after 1000 -> false end,
-        {TE, Finished}
+        {Before =/= After, Finished}
     end).
 
 handle_call_test_() ->

@@ -197,9 +197,9 @@ pem_files_test_() ->
           ?_assertEqual({ok, Both}, validate_pem_file(Both)),
           % any PEM entry will do: it need not be a certificate
           ?_assertEqual({ok, KeyFile}, validate_pem_file(KeyFile)),
-          ?_assertEqual({fail, not_a_cert}, validate_pem_file(Empty)),
-          ?_assertEqual({fail, not_a_cert}, validate_pem_file(Text)),
-          ?_assertEqual({fail, couldnt_open_pem_file},
+          ?_assertEqual({error, not_a_cert}, validate_pem_file(Empty)),
+          ?_assertEqual({error, not_a_cert}, validate_pem_file(Text)),
+          ?_assertEqual({error, couldnt_open_pem_file},
                         validate_pem_file(Missing)),
           ?_assertEqual({ok, [CAOtp]}, certificates_from_file(CAFile)),
           % every certificate is returned, in file order

@@ -75,33 +75,27 @@ handle_parsed_url(URI, _Config, _Cert, _Rest)
   when not is_map_key(scheme, URI) ->
     {error_code, request_not_parsed};
 handle_parsed_url(URI, Config, Cert, Rest) ->
-    try
-        ReqHost = maps:get(host, URI, <<>>),
-        Path    = maps:get(path, URI, <<"/">>),
-        Scheme  = maps:get(scheme, URI),
-        ReqPort = maps:get(port, URI, Config#server_config.port),
-        ReqPath = case Path of
-                      <<>> -> <<"/">>;
-                      P -> P
-                  end,
+    ReqHost = maps:get(host, URI, <<>>),
+    Path    = maps:get(path, URI, <<"/">>),
+    Scheme  = maps:get(scheme, URI),
+    ReqPort = maps:get(port, URI, Config#server_config.port),
+    ReqPath = case Path of
+                  <<>> -> <<"/">>;
+                  P -> P
+              end,
 
-        SchemeLC  = blizanci_config:ascii_lowercase(Scheme),
-        ReqHostLC = blizanci_config:ascii_lowercase(ReqHost),
+    SchemeLC  = blizanci_config:ascii_lowercase(Scheme),
+    ReqHostLC = blizanci_config:ascii_lowercase(ReqHost),
 
-        Query = maps:get(query, URI, <<>>),
-        #{ scheme        => SchemeLC,
-           host          => ReqHostLC,
-           port          => ReqPort,
-           path          => ReqPath,
-           query         => Query,
-           client_cert   => Cert,
-           rest_of_input => Rest
-         }
-    of
-        Matches -> handle_url(Matches, Config)
-    catch
-        _ -> {error_code, request_not_parsed}
-    end.
+    Query = maps:get(query, URI, <<>>),
+    handle_url(#{ scheme        => SchemeLC,
+                  host          => ReqHostLC,
+                  port          => ReqPort,
+                  path          => ReqPath,
+                  query         => Query,
+                  client_cert   => Cert,
+                  rest_of_input => Rest
+                }, Config).
 
 
 % Handle a request whose URL has been broken up thus:

@@ -331,7 +331,7 @@ Check that a file containts (at least) one PEM-encoded certificate.
 """.
 -spec validate_pem_file(Filename) -> Result
               when Filename :: string(),
-                   Result   :: {ok, string()} | {fail, atom()}.
+                   Result   :: {ok, string()} | {error, atom()}.
 
 validate_pem_file(Filename) ->
     case file:read_file(Filename) of
@@ -339,12 +339,12 @@ validate_pem_file(Filename) ->
             case public_key:pem_decode(PemBin) of
                 [] ->
                     logger:warning("File ~p not a PEM cert.", [Filename]),
-                    {fail, not_a_cert};
+                    {error, not_a_cert};
                 _ -> {ok, Filename}
             end;
         _ ->
             logger:warning("Couldn't open ~p", [Filename]),
-            {fail, couldnt_open_pem_file}
+            {error, couldnt_open_pem_file}
     end.
 
 

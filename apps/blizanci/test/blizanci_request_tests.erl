@@ -319,10 +319,12 @@ percent_tests(Base) ->
 
 % Run a request that starts a Titan servlet, and wait for that servlet
 % to finish: it has done its deletion by then. Done in a process of its
-% own, as the request leaves it trapping exits.
+% own that traps exits, as the connection does, so that the servlet's
+% exit does not take it down.
 deleted_by(Request) ->
     blizanci_test_support:isolated(
       fun() ->
+          process_flag(trap_exit, true),
           {init_servlet, Pid} = Request(),
           Ref = erlang:monitor(process, Pid),
           receive {'DOWN', Ref, process, Pid, _} -> ok

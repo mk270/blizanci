@@ -111,7 +111,12 @@ any(X) -> erlang:binary_to_term(erlang:term_to_binary(X)).
 isolated(Fun) ->
     Self = self(),
     Ref = make_ref(),
-    {Pid, MRef} = spawn_monitor(fun() -> Self ! {Ref, Fun()} end),
+    % this process stands in for the connection, which traps exits from
+    % its start, so that a container's exit reaches it as a message
+    {Pid, MRef} = spawn_monitor(fun() ->
+                                    process_flag(trap_exit, true),
+                                    Self ! {Ref, Fun()}
+                                end),
     receive
         {Ref, Result} ->
             erlang:demonitor(MRef, [flush]),

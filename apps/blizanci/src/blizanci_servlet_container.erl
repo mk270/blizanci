@@ -132,7 +132,6 @@ request(Module, Matches, Request, ServerConfig, RouteOpts) ->
 
 defer_request(Module, Matches, Req, ServerConfig, RouteOpts) ->
     Args = [self(), Module, Matches, Req, ServerConfig, RouteOpts],
-    process_flag(trap_exit, true),
     %% No timeout on completion: the connection's fixed deadline covers it
     %% (see TIMEOUT_MS in blizanci_connection).
     case proc_lib:start_link(?MODULE, init, [Args], ?START_TIMEOUT_MS) of

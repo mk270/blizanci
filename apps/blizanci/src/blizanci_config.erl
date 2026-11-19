@@ -1026,9 +1026,9 @@ site_build_errors(Why, _Hostname, _Cert, _Key) ->
                    Problems :: [term()].
 file_problems(Hostname, Cert, Key) ->
     [ {bad_certfile, Hostname, Why}
-      || {fail, Why} <- [blizanci_x509:validate_pem_file(Cert)] ]
+      || {error, Why} <- [blizanci_x509:validate_pem_file(Cert)] ]
     ++ [ {bad_keyfile, Hostname, Why}
-         || {fail, Why} <- [blizanci_x509:validate_pem_file(Key)] ].
+         || {error, Why} <- [blizanci_x509:validate_pem_file(Key)] ].
 
 
 % An error found building the site, named by the site, unless it is that
