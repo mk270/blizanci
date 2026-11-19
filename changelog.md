@@ -1,5 +1,14 @@
 # Blizanci Changelog
 
+## 7.4.1
+
+- Document blizanci_router:prepare_all/3 as the function start-up uses,
+  and prepare/1,2,3 as the one-shot variant, in the router docs and the
+  manual's Routing chapter; say that no configuration key sets
+  warn_shadowed; add direct tests of prepare_all/3
+- Manual: say where the rules of blizanci_path:confine/2 are written
+  down, without relying on a link
+
 ## 7.4.0
 
 - Move the unit tests of the remaining modules from src/ to test/
