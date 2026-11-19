@@ -33,6 +33,10 @@ See the manual chapter [Request handling](request-handling.md).
 %% types / constants / enums / config
 -define(EMPTY_BUF, <<>>).
 -define(PROTO, <<"gemini">>).
+
+% The port a Gemini URL has when none is written; a URL we build leaves
+% it out, as the specification makes the two forms equivalent.
+-define(DEFAULT_PORT, 1965).
 -define(CRLF, <<"\r\n">>).
 
 % How long a client has to complete the whole exchange, in milliseconds,
@@ -575,10 +579,13 @@ construct_local_url(Config, Path) ->
 % segment at a time; otherwise a name containing a space, "%", "?" or "#"
 % would make a malformed or misleading URL.
 construct_url(Scheme, Hostname, Port, Path) ->
-    uri_string:recompose(#{ scheme => Scheme,
-                            host => Hostname,
-                            port => Port,
-                            path => blizanci_urlpath:encode_path(Path) }).
+    Parts = #{ scheme => Scheme,
+               host => Hostname,
+               path => blizanci_urlpath:encode_path(Path) },
+    uri_string:recompose(case Port of
+                             ?DEFAULT_PORT -> Parts;
+                             _ -> Parts#{ port => Port }
+                         end).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -588,14 +595,18 @@ construct_url(Scheme, Hostname, Port, Path) ->
 %% A redirect's location is the decoded path, encoded again.
 construct_url_test_() ->
     U = fun(Path) -> construct_url(<<"gemini">>, <<"h">>, 1965, Path) end,
-    [?_assertEqual(<<"gemini://h:1965/dir1/index.gemini">>,
+    [?_assertEqual(<<"gemini://h/dir1/index.gemini">>,
                    U(<<"dir1/index.gemini">>)),
-     ?_assertEqual(<<"gemini://h:1965/sp%20ace/index.gemini">>,
+     ?_assertEqual(<<"gemini://h/sp%20ace/index.gemini">>,
                    U(<<"sp ace/index.gemini">>)),
-     ?_assertEqual(<<"gemini://h:1965/100%25/index.gemini">>,
+     ?_assertEqual(<<"gemini://h/100%25/index.gemini">>,
                    U(<<"100%/index.gemini">>)),
-     ?_assertEqual(<<"gemini://h:1965/x%3Fy%23z/index.gemini">>,
+     ?_assertEqual(<<"gemini://h/x%3Fy%23z/index.gemini">>,
                    U(<<"x?y#z/index.gemini">>)),
+     % the default port is left out; any other is kept
+     ?_assertEqual(<<"gemini://h:1966/dir1/index.gemini">>,
+                   construct_url(<<"gemini">>, <<"h">>, 1966,
+                                 <<"dir1/index.gemini">>)),
      % what the client receives decodes back to the path
      ?_test(begin
                 Path = <<"a b/100%/x?y#z;w/index.gemini">>,
@@ -866,7 +877,7 @@ respond_test_() ->
                    end)),
      % a redirect's path is turned into a URL of this server
      ?_assertEqual({finished,
-                    <<"31 gemini://h:1965/dir1/index.gemini\r\n">>},
+                    <<"31 gemini://h/dir1/index.gemini\r\n">>},
                    with_client(fun(S) ->
                        respond({redirect, <<"dir1/index.gemini">>},
                                conn_state(S))
