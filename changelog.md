@@ -1,5 +1,24 @@
 # Blizanci Changelog
 
+## 7.4.0
+
+- Move the unit tests of the remaining modules from src/ to test/
+  (cgi, config, conf_serv, connection, request, router,
+  servlet_container, servlets, sup, titan, tmpdir and x509), and
+  blizanci_test_support with them, so the compiled modules no longer
+  carry test code; export the functions the tests need only when TEST is
+  defined, and move shared records and macros to headers
+  (blizanci_cgi.hrl, blizanci_titan.hrl, blizanci_tmpdir.hrl,
+  blizanci_conf_serv.hrl, blizanci_sup.hrl,
+  blizanci_servlet_container.hrl)
+- Export tls_versions/0 and site_wants_client_cert/1 (blizanci_config),
+  tmp_file_name/0 and create/2 (blizanci_tmpdir) and
+  valid_authz_policy/1 (blizanci_auth) only in test builds
+- Remove blizanci_auth:authorisation_policy/1 and
+  blizanci_x509:validate_ca_file/1, which nothing used
+- Add common_test to the dialyzer PLT, so that the test-profile run
+  (rebar3 as test dialyzer) reports no warnings
+
 ## 7.3.0
 
 - Redirects omit the port when it is the default, 1965: a directory
