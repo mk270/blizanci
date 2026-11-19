@@ -2,7 +2,7 @@
 
 Each site has one routing table: an ordered list of routes. A request is matched against the routes for its protocol (gemini or titan) in order, and the first route that matches serves it. A route serves exactly one protocol, so a static site that also takes Titan uploads needs a gemini route and a titan route. If no route matches, the client gets "not found". The table is the routing key of the site, in sys.config (see the Configuration chapter); there is no default table.
 
-Routes are prepared by blizanci_router:prepare/3, which checks that each entry is valid. An error names the route: {bad_route, Index, Kind, Reason}, where Index is the 1-based position in the list, Kind is mount, regex, tuple (the old format) or unknown, and Reason says what is wrong. At start-up, blizanci_router:prepare_all/3 is used instead: it reports every problem at once, building every route and returning those that built along with an error for each one that did not, in order. Warnings are logged only when every route built.
+At start-up the table is prepared by blizanci_router:prepare_all/3, which checks that each entry is valid and reports every problem at once: it builds every route and returns those that built along with an error for each one that did not, in order. An error names the route: {bad_route, Index, Kind, Reason}, where Index is the 1-based position in the list, Kind is mount, regex, tuple (the old format) or unknown, and Reason says what is wrong. Warnings are logged only when every route built. The one-shot variant, blizanci_router:prepare/3, is for a caller that builds a table by hand: it stops at the first bad route and also checks the upload directories of Titan routes against the CGI roots, which at start-up is done separately on the routes that prepare_all/3 returns.
 
 ## Route kinds
 
@@ -54,7 +54,7 @@ routing: route 2 (gemini mount "/docs") is shadowed by route 1
 (gemini mount "/") and is never used
 ```
 
-The check can be turned off with the option warn_shadowed (default true) of blizanci_router:prepare/3. Authorisation policies are not considered. The rules are:
+No configuration key turns the check off, so a running server always makes it; a caller of blizanci_router:prepare/3 or prepare_all/3 can turn it off with the option warn_shadowed (default true). Authorisation policies are not considered. The rules are:
 
 Mount against mount is exact: the earlier mount shadows the later if its segments are a prefix of the later one's segments, so "/" shadows every later mount, and so does an equal mount, but "/docs" does not shadow "/docsx".
 

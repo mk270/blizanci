@@ -46,7 +46,8 @@
                           site => string() }.
 
 -doc """
-Check that a routing table entry is valid.
+Check that a routing table is valid, stopping at the first bad route.
+See prepare/3.
 """.
 -spec prepare(RouteInfo) -> Result
               when RouteInfo :: [route_info()],
@@ -70,10 +71,13 @@ prepare(RouteInfo, Realms) ->
 
 
 -doc """
-As prepare/2, with options.  Routes are one ordered list, first match
-wins.  An error names the route: {bad_route, Index, Kind, Reason},
-where Index is the 1-based position in the list, Kind is mount, regex,
-tuple (the old format) or unknown, and Reason says what is wrong.
+As prepare/2, with options.  This is the one-shot variant: it stops at
+the first bad route and also runs check_upload_dirs/1.  Start-up uses
+prepare_all/3, which reports every problem at once.  Routes are one
+ordered list, first match wins.  An error names the route:
+{bad_route, Index, Kind, Reason}, where Index is the 1-based position
+in the list, Kind is mount, regex, tuple (the old format) or unknown,
+and Reason says what is wrong.
 
 Old-format routes are translated, not refused.  If there are any,
 one warning is logged saying how many.  New-format routes never
@@ -83,8 +87,9 @@ A table that validated is also checked for shadowed routes, which can
 never be reached because an earlier route of the same protocol
 matches every request they could.  One warning is logged for each.
 This only warns, and can be turned off with the option warn_shadowed
-(default true).  The rules are in the manual chapter 'Routing',
-section 'Shadowing'.
+(default true; prepare_all/3 takes it too, but no configuration key
+sets it, so a running server always warns).  The rules are in the
+manual chapter 'Routing', section 'Shadowing'.
 """.
 -spec prepare(RouteInfo, Realms, Opts) -> Result
               when RouteInfo :: [route_info()],
@@ -108,12 +113,14 @@ prepare(RouteInfo, Realms, Opts) ->
 
 
 -doc """
-As prepare/3, but for start-up validation, which reports every
-problem at once: every route is built, and the routes that built are
-returned along with an error, {bad_route, Index, Kind, Reason}, for
-each one that did not, in order. Warnings are logged only when every
-route built. The upload directory check of prepare/3 is not made;
-see check_upload_dirs/1, which the caller runs on the routes.
+Prepare a site's routing table at start-up, reporting every problem at
+once: every route is built, and the routes that built are returned
+along with an error, {bad_route, Index, Kind, Reason}, for each one
+that did not, in order. Warnings are logged only when every route
+built. This is what start-up uses; prepare/3 is the one-shot variant
+that stops at the first error. The upload directory check that
+prepare/3 makes is not made here; see check_upload_dirs/1, which the
+caller runs on the routes.
 """.
 -spec prepare_all(RouteInfo, Realms, Opts) -> Result
               when RouteInfo :: [route_info()],

@@ -9,7 +9,7 @@
 
 -import(blizanci_router,
         [build_route/2, build_route/5, check_upload_dirs/1, prepare/1,
-         prepare/3, route/4, route_match/2]).
+         prepare/3, prepare_all/3, route/4, route_match/2]).
 
 %% Fixture, under a fresh temporary directory:
 %%   Base/cgi  Base/cgi-up  Base/up  Base/work  Base/cgi/inner
@@ -629,3 +629,55 @@ path_options_refused_test_() ->
 % An improper list (built so that dialyzer does not object).
 improper() ->
     lists:foldl(fun(X, Acc) -> [X | Acc] end, tail, [$a]).
+
+%% prepare_all/3 is what start-up uses: every route is built and every
+%% problem is reported, not only the first (prepare/1 stops there).
+prepare_all_test_() ->
+    A = fun(Routes) -> prepare_all(Routes, #{}, #{}) end,
+    [% nothing wrong: every route, in order, and no errors
+     ?_assertMatch({[#route{selector = {mount, <<"a">>}},
+                     #route{selector = {mount, <<"b">>}}], []},
+                   A([mount("/a"), mount("/b")])),
+     ?_assertEqual({[], []}, A([])),
+     % the routes that built come back in order, with an error for each
+     % one that did not, positioned in the whole list
+     ?_assertMatch({[#route{selector = {mount, <<"a">>}},
+                     #route{selector = {mount, <<"c">>}}],
+                    [{bad_route, 2, mount,
+                      {invalid_mount, "nope", not_absolute}},
+                     {bad_route, 4, regex,
+                      {route_without_path_group, "x", _}}]},
+                   A([mount("/a"), mount("nope"), mount("/c"),
+                      regex("x")])),
+     % everything wrong: no routes, one error each
+     ?_assertMatch({[], [{bad_route, 1, mount, _},
+                         {bad_route, 2, unknown, invalid_route}]},
+                   A([mount("nope"), {mount, gemini, "/x"}])),
+     % prepare/1, the one-shot variant, stops at the first error
+     ?_assertMatch({error, {bad_route, 2, mount, _}},
+                   prepare([mount("/a"), mount("nope"), regex("x")]))].
+
+%% Warnings are logged only when every route built, name the site when
+%% there is one, and warn_shadowed can switch the shadowing one off.
+prepare_all_warnings_test_() ->
+    Logs = fun(Routes, Opts) ->
+               [ T || {warning, T} <- with_log(
+                          fun() -> prepare_all(Routes, #{}, Opts) end) ]
+           end,
+    Shadowed = [mount("/"), mount("/docs")],
+    [?_assertEqual(["routing: route 2 (gemini mount \"/docs\") is "
+                    "shadowed by route 1 (gemini mount \"/\") and is "
+                    "never used"],
+                   Logs(Shadowed, #{})),
+     ?_assertEqual(["routing: site a.example: route 2 (gemini mount "
+                    "\"/docs\") is shadowed by route 1 (gemini mount "
+                    "\"/\") and is never used"],
+                   Logs(Shadowed, #{ site => "a.example" })),
+     % a route that failed to build: no warnings at all
+     ?_assertEqual([], Logs(Shadowed ++ [mount("nope")], #{})),
+     ?_assertEqual([], Logs(Shadowed, #{ warn_shadowed => false })),
+     % the old tuple format is counted and warned of once
+     ?_assertEqual(["routing: 2 routes use the old tuple format "
+                    "{Proto, Regex, Module, Auth, Opts}; translated, "
+                    "behaviour unchanged (see manual, Routing)"],
+                   Logs([old("(?<PATH>a)"), old("(?<PATH>b)")], #{}))].

@@ -50,7 +50,7 @@ route(Proto, Regex, Module, AuthPolicy, Opts) ->
 % Build and validate one route given as a tuple in either format: {mount,
 % Proto, Path, Module, Auth, Opts}, {regex, Proto, Re, Module, Auth,
 % Opts} or the old {Proto, Regex, Module, Auth, Opts} (see
-% blizanci_router:prepare/3 for the rules). No warning for the old one.
+% the manual chapter Routing for the rules). No warning for the old one.
 -spec route(RouteInfo, Realms) -> Result
               when RouteInfo :: tuple(),
                    Realms    :: realm_table(),
