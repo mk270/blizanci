@@ -1,5 +1,14 @@
 # Blizanci Changelog
 
+## 7.5.0
+
+- Return {error, Reason} instead of {fail, Reason} from
+  blizanci_x509:validate_pem_file/1 (breaking for library callers that
+  match on the old shape)
+- Remove a dead `catch` from blizanci_request:handle_parsed_url/4, and a
+  redundant trap_exit from blizanci_servlet_container:defer_request/5;
+  the connection already traps exits for its whole life
+
 ## 7.4.2
 
 - Explain in comments why the connection has one fixed 30-second deadline
