@@ -15,9 +15,10 @@ default_options() -> #{}.
 
 validate_options(_Opts) -> ok.
 
-request(_Matches, _Req, _Config, _Opts) -> {gateway_error, not_found}.
+request(_Matches, _Req, _Config, _Opts) -> defer.
 
-serve(_Matches, _Req, _Config, _Opts) -> {gateway_error, not_found}.
+serve(_Matches, _Req, _Config, _Opts) ->
+    {gateway_error, file_not_found}.
 
 handle_client_data(_Pid, _Payload) -> none.
 
