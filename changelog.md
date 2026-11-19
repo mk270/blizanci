@@ -1,5 +1,14 @@
 # Blizanci Changelog
 
+## 7.4.2
+
+- Explain in comments why the connection has one fixed 30-second deadline
+  and no separate timeout on a servlet's completion, replacing a TBD
+- Explain in a comment on blizanci_osenv:sanitise_kv/2 the erlexec
+  empty-string bug that makes empty environment values pass as binaries
+- Drop comments that pointed at a file outside the repository, and update
+  the stale note in the Common Test suite about the supervision tree
+
 ## 7.4.1
 
 - Document blizanci_router:prepare_all/3 as the function start-up uses,
