@@ -12,43 +12,14 @@ See the manual chapter [Authorisation](authorisation.md).
 """.
 -include("blizanci_types.hrl").
 
--export([authorisation_policy/1, authorised/2, valid_authz_policy/2]).
+-export([authorised/2, valid_authz_policy/2]).
 -export([realm/1, add_realm/3, realm_table/1]).
-
--ifdef(TEST).
-%% Exported for the tests in test/blizanci_auth_tests.erl.
--export([valid_authz_policy/1]).
--endif.
 
 -define(MAX_REALM_NAME, 64).
 
 -doc """
-Derive the authorisation policy of a given routing table entry
-
-Returns `{ok, public | restricted | private} | {error, atom()}`.
-""".
--spec authorisation_policy(Options) -> Result
-              when Options :: map(),
-                   Result  :: {'ok', authorisation()} | {'error', term()}.
-
-authorisation_policy(Options) when is_map(Options) ->
-    #{ authorisation := Auth } = Options,
-    valid_authz_policy(Auth).
-
-
--doc """
-Check if the argument represents a valid authorisation policy
-""".
--spec valid_authz_policy(Policy) -> Result
-              when Policy :: term(),
-                   Result :: {ok, authorisation()} | {error, term()}.
-valid_authz_policy(Policy) ->
-    valid_authz_policy(Policy, #{}).
-
-
--doc """
-As valid_authz_policy/1, resolving any realms against a realm
-table (see realm_table/1).
+Check if the argument represents a valid authorisation policy,
+resolving any realms against a realm table (see realm_table/1).
 """.
 -spec valid_authz_policy(Policy, Realms) -> Result
               when Policy :: term(),

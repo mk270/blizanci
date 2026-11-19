@@ -6,9 +6,11 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--import(blizanci_auth, [authorisation_policy/1, authorised/2, realm/1,
-                        realm_table/1, valid_authz_policy/1,
+-import(blizanci_auth, [authorised/2, realm/1, realm_table/1,
                         valid_authz_policy/2]).
+
+valid_authz_policy(Policy) ->
+    valid_authz_policy(Policy, #{}).
 
 % The certificates come from blizanci_x509:test_pki/0 (see the comment
 % there): a CA ("Test CA", file ca.pem) and an unrelated CA ("Other CA",
@@ -30,7 +32,7 @@ policy_test_() ->
      % the CA files of a private policy must be a list
      ?_assertEqual({error, invalid_authz_policy},
                    apply(blizanci_auth, valid_authz_policy,
-                         [{private, not_a_list}]))].
+                         [{private, not_a_list}, #{}]))].
 
 % The CA files of a private policy are checked when the policy is
 % validated (that is, when the route is built), not on the first request.
@@ -84,22 +86,9 @@ policy_private_ca_files_test_() ->
            % a CA must be a string, not a binary or anything else
            ?_assertEqual(Bad(list_to_binary(CA), not_a_path),
                          apply(blizanci_auth, valid_authz_policy,
-                               [{private, [list_to_binary(CA)]}])),
+                               [{private, [list_to_binary(CA)]}, #{}])),
            ?_assertEqual(Bad("", not_a_path), Valid([""]))]
       end).
-
-authorisation_policy_test_() ->
-    [?_assertEqual({ok, restricted},
-                   authorisation_policy(#{ authorisation => restricted })),
-     ?_assertMatch({ok, {private, [], []}},
-                   authorisation_policy(
-                     #{ authorisation => {private, []},
-                        other => option })),
-     ?_assertEqual({error, invalid_authz_policy},
-                   authorisation_policy(#{ authorisation => nonsense })),
-     % the option is required
-     ?_assertError({badmatch, _},
-                   apply(blizanci_auth, authorisation_policy, [#{}]))].
 
 % A complete request, as the router would pass it, carrying the client's
 % certificate (or the lack of one).

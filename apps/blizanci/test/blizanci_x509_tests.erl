@@ -11,7 +11,7 @@
         [cert_key_match/2, certificates_from_file/1, check_cert/1,
          peercert_cn/1, test_cert/5, test_cn/1, test_pair_files/3,
          test_pem_cert/1, test_pki/0, test_tmp_dir/0, test_utc/1,
-         test_write_pem/3, validate_ca_file/1, validate_pem_file/1,
+         test_write_pem/3, validate_pem_file/1,
          verify_cert/3, verify_signed_by/2]).
 
 pki_fixture(Tests) ->
@@ -220,10 +220,7 @@ pem_files_test_() ->
                         certificates_from_file(Mixed)),
           ?_assertEqual({error, not_a_path}, certificates_from_file("")),
           ?_assertEqual({error, not_a_path},
-                        certificates_from_file(<<"/x">>)),
-          ?_assertEqual(ok, validate_ca_file(Both)),
-          ?_assertEqual({error, certificate_not_decodable},
-                        validate_ca_file(Mixed))]
+                        certificates_from_file(<<"/x">>))]
      end}.
 
 % The key-pair check, on keys of every supported type.

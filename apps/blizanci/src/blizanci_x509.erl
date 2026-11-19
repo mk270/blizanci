@@ -13,8 +13,7 @@ Herein, RDN means "relative distinguished name".
 
 -export([peercert_cn/1]).
 -export([verify_cert/3]).
--export([validate_pem_file/1, certificates_from_file/1,
-         validate_ca_file/1]).
+-export([validate_pem_file/1, certificates_from_file/1]).
 -export([check_cert/1]).
 -export([cert_key_match/2]).
 -export([verify_signed_by/2]).
@@ -326,22 +325,6 @@ decode_all([Der | Rest], Acc) ->
         _:_ -> {error, certificate_not_decodable}
     end.
 
-
--doc """
-Check, without raising, that Path is the name of a readable file
-holding at least one PEM-encoded certificate, and that every
-certificate in it decodes. See certificates_from_file/1 for the
-errors.
-""".
--spec validate_ca_file(Path) -> Result
-              when Path   :: term(),
-                   Result :: 'ok' | {'error', term()}.
-
-validate_ca_file(Path) ->
-    case certificates_from_file(Path) of
-        {ok, _} -> ok;
-        {error, _} = Error -> Error
-    end.
 
 -doc """
 Check that a file containts (at least) one PEM-encoded certificate.
