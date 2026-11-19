@@ -19,18 +19,11 @@ See the manual chapter [Configuration](configuration.md).
          new/2, validate/1, validate_all/1, apply/1, ascii_lowercase/1,
          describe_error/1, tls_versions/0, site_wants_client_cert/1]).
 
-% A site record with no check on its files, for tests of everything but
-% the files themselves; site/3 refuses a certificate and key that do not
-% match.
 -ifdef(TEST).
 %% Exported for the tests in test/blizanci_config_tests.erl.
 -export([describe_route_error/1, problems_site/1, realms_from_env/1,
-         ssl_opts/1]).
+         ssl_opts/1, test_site/3]).
 -endif.
-
-%% The tests still in src/blizanci_conf_serv.erl and src/blizanci_sup.erl
-%% call this, in every build: guard it with ifdef(TEST) when they move.
--export([test_site/3]).
 
 % The default port: the one assigned to Gemini.
 -define(PORT, 1965).
@@ -1141,6 +1134,11 @@ realm_defs([Other | Rest], Table, Failed, Errors) ->
     realm_defs(Rest, Table, Failed ++ [all],
                Errors ++ [{realms, {invalid_realm, Other}}]).
 
+-ifdef(TEST).
+% A site record with no check on its files, for tests of everything but
+% the files themselves; site/3 refuses a certificate and key that do not
+% match.
 test_site(Hostname, Cert, Key) ->
     #site{hostname = erlang:list_to_binary(Hostname), certfile = Cert,
           keyfile = Key, routing = []}.
+-endif.
