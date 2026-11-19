@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.40.3">
-    <meta name="project" content="blizanci v7.2.0">
+    <meta name="project" content="blizanci v7.5.0">
 
 
-    <title>blizanci_router — blizanci v7.2.0</title>
+    <title>blizanci_router — blizanci v7.5.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
 
-    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="dist/sidebar_items-CF424743.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-Y2MUTVIN.js"></script>
 
@@ -37,7 +37,7 @@
 blizanci
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v7.2.0
+          v7.5.0
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@ blizanci
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">blizanci_router</span> 
-      <small class="app-vsn" translate="no">(blizanci v7.2.0)</small>
+      <small class="app-vsn" translate="no">(blizanci v7.5.0)</small>
 
     </h1>
 
@@ -291,67 +291,12 @@ resolving symbolic links, so an alias doesn't get round it.</p></div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#full_path_test_/0" data-no-tooltip="" translate="no">full_path_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#mount_matching_test_/0" data-no-tooltip="" translate="no">mount_matching_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#mount_validation_test_/0" data-no-tooltip="" translate="no">mount_validation_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#old_format_warning_test_/0" data-no-tooltip="" translate="no">old_format_warning_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#path_group_test_/0" data-no-tooltip="" translate="no">path_group_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#path_options_converted_test_/0" data-no-tooltip="" translate="no">path_options_converted_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#path_options_refused_test_/0" data-no-tooltip="" translate="no">path_options_refused_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
         <a href="#prepare/1" data-no-tooltip="" translate="no">prepare(RouteInfo)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Check that a routing table entry is valid.</p></div>
+        <div class="summary-synopsis"><p>Check that a routing table is valid, stopping at the first bad route.
+See prepare/3.</p></div>
 
     </div>
 
@@ -371,10 +316,13 @@ resolving symbolic links, so an alias doesn't get round it.</p></div>
 
       </div>
 
-        <div class="summary-synopsis"><p>As prepare/2, with options.  Routes are one ordered list, first match
-wins.  An error names the route: {bad_route, Index, Kind, Reason},
-where Index is the 1-based position in the list, Kind is mount, regex,
-tuple (the old format) or unknown, and Reason says what is wrong.</p></div>
+        <div class="summary-synopsis"><p>As prepare/2, with options.  This is the one-shot variant: it stops at
+the first bad route and also runs check_upload_dirs/1.  Start-up uses
+prepare_all/3, which reports every problem at once.  Routes are one
+ordered list, first match wins.  An error names the route:
+{bad_route, Index, Kind, Reason}, where Index is the 1-based position
+in the list, Kind is mount, regex, tuple (the old format) or unknown,
+and Reason says what is wrong.</p></div>
 
     </div>
 
@@ -384,20 +332,14 @@ tuple (the old format) or unknown, and Reason says what is wrong.</p></div>
 
       </div>
 
-        <div class="summary-synopsis"><p>As prepare/3, but for start-up validation, which reports every
-problem at once: every route is built, and the routes that built are
-returned along with an error, {bad_route, Index, Kind, Reason}, for
-each one that did not, in order. Warnings are logged only when every
-route built. The upload directory check of prepare/3 is not made;
-see check_upload_dirs/1, which the caller runs on the routes.</p></div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#regex_anchoring_test_/0" data-no-tooltip="" translate="no">regex_anchoring_test_()</a>
-
-      </div>
+        <div class="summary-synopsis"><p>Prepare a site's routing table at start-up, reporting every problem at
+once: every route is built, and the routes that built are returned
+along with an error, {bad_route, Index, Kind, Reason}, for each one
+that did not, in order. Warnings are logged only when every route
+built. This is what start-up uses; prepare/3 is the one-shot variant
+that stops at the first error. The upload directory check that
+prepare/3 makes is not made here; see check_upload_dirs/1, which the
+caller runs on the routes.</p></div>
 
     </div>
 
@@ -408,70 +350,6 @@ see check_upload_dirs/1, which the caller runs on the routes.</p></div>
       </div>
 
         <div class="summary-synopsis"><p>Route a Gemini request to a handler.</p></div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#route_error_position_test_/0" data-no-tooltip="" translate="no">route_error_position_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#route_order_test_/0" data-no-tooltip="" translate="no">route_order_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#shadow_mounts_test_/0" data-no-tooltip="" translate="no">shadow_mounts_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#shadow_option_test_/0" data-no-tooltip="" translate="no">shadow_option_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#shadow_protocol_test_/0" data-no-tooltip="" translate="no">shadow_protocol_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#shadow_regex_test_/0" data-no-tooltip="" translate="no">shadow_regex_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#translation_test_/0" data-no-tooltip="" translate="no">translation_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#upload_dirs_test_/0" data-no-tooltip="" translate="no">upload_dirs_test_()</a>
-
-      </div>
 
     </div>
 
@@ -1012,132 +890,6 @@ the cgiroot of any CGI route. Directories are compared after
 resolving symbolic links, so an alias doesn't get round it.</p>
   </section>
 </section>
-<section class="detail" id="full_path_test_/0">
-
-  <div class="detail-header">
-    <a href="#full_path_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">full_path_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="mount_matching_test_/0">
-
-  <div class="detail-header">
-    <a href="#mount_matching_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">mount_matching_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="mount_validation_test_/0">
-
-  <div class="detail-header">
-    <a href="#mount_validation_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">mount_validation_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="old_format_warning_test_/0">
-
-  <div class="detail-header">
-    <a href="#old_format_warning_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">old_format_warning_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="path_group_test_/0">
-
-  <div class="detail-header">
-    <a href="#path_group_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">path_group_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="path_options_converted_test_/0">
-
-  <div class="detail-header">
-    <a href="#path_options_converted_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">path_options_converted_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="path_options_refused_test_/0">
-
-  <div class="detail-header">
-    <a href="#path_options_refused_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">path_options_refused_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
 <section class="detail" id="prepare/1">
 
   <div class="detail-header">
@@ -1160,7 +912,8 @@ resolving symbolic links, so an alias doesn't get round it.</p>
 
       </div>
 
-<p>Check that a routing table entry is valid.</p>
+<p>Check that a routing table is valid, stopping at the first bad route.
+See prepare/3.</p>
   </section>
 </section>
 <section class="detail" id="prepare/2">
@@ -1217,17 +970,21 @@ resolving symbolic links, so an alias doesn't get round it.</p>
 
       </div>
 
-<p>As prepare/2, with options.  Routes are one ordered list, first match
-wins.  An error names the route: {bad_route, Index, Kind, Reason},
-where Index is the 1-based position in the list, Kind is mount, regex,
-tuple (the old format) or unknown, and Reason says what is wrong.</p><p>Old-format routes are translated, not refused.  If there are any,
+<p>As prepare/2, with options.  This is the one-shot variant: it stops at
+the first bad route and also runs check_upload_dirs/1.  Start-up uses
+prepare_all/3, which reports every problem at once.  Routes are one
+ordered list, first match wins.  An error names the route:
+{bad_route, Index, Kind, Reason}, where Index is the 1-based position
+in the list, Kind is mount, regex, tuple (the old format) or unknown,
+and Reason says what is wrong.</p><p>Old-format routes are translated, not refused.  If there are any,
 one warning is logged saying how many.  New-format routes never
 trigger it.</p><p>A table that validated is also checked for shadowed routes, which can
 never be reached because an earlier route of the same protocol
 matches every request they could.  One warning is logged for each.
 This only warns, and can be turned off with the option warn_shadowed
-(default true).  The rules are in the manual chapter 'Routing',
-section 'Shadowing'.</p>
+(default true; prepare_all/3 takes it too, but no configuration key
+sets it, so a running server always warns).  The rules are in the
+manual chapter 'Routing', section 'Shadowing'.</p>
   </section>
 </section>
 <section class="detail" id="prepare_all/3">
@@ -1256,30 +1013,14 @@ section 'Shadowing'.</p>
 
       </div>
 
-<p>As prepare/3, but for start-up validation, which reports every
-problem at once: every route is built, and the routes that built are
-returned along with an error, {bad_route, Index, Kind, Reason}, for
-each one that did not, in order. Warnings are logged only when every
-route built. The upload directory check of prepare/3 is not made;
-see check_upload_dirs/1, which the caller runs on the routes.</p>
-  </section>
-</section>
-<section class="detail" id="regex_anchoring_test_/0">
-
-  <div class="detail-header">
-    <a href="#regex_anchoring_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">regex_anchoring_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
+<p>Prepare a site's routing table at start-up, reporting every problem at
+once: every route is built, and the routes that built are returned
+along with an error, {bad_route, Index, Kind, Reason}, for each one
+that did not, in order. Warnings are logged only when every route
+built. This is what start-up uses; prepare/3 is the one-shot variant
+that stops at the first error. The upload directory check that
+prepare/3 makes is not made here; see check_upload_dirs/1, which the
+caller runs on the routes.</p>
   </section>
 </section>
 <section class="detail" id="route/4">
@@ -1315,150 +1056,6 @@ the Request matches any of these routes, and if so dispatches it to the
 appropriate handler module.</p><ul><li><code class="inline">Proto</code>: the atom <code class="inline">gemini</code> or similar</li><li><code class="inline">Path</code>: the Path in the Gemini request</li><li><code class="inline">Request</code>: the Gemini request</li><li><code class="inline">Config</code>: the server configuration, including the routing table</li></ul>
   </section>
 </section>
-<section class="detail" id="route_error_position_test_/0">
-
-  <div class="detail-header">
-    <a href="#route_error_position_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">route_error_position_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="route_order_test_/0">
-
-  <div class="detail-header">
-    <a href="#route_order_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">route_order_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="shadow_mounts_test_/0">
-
-  <div class="detail-header">
-    <a href="#shadow_mounts_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">shadow_mounts_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="shadow_option_test_/0">
-
-  <div class="detail-header">
-    <a href="#shadow_option_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">shadow_option_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="shadow_protocol_test_/0">
-
-  <div class="detail-header">
-    <a href="#shadow_protocol_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">shadow_protocol_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="shadow_regex_test_/0">
-
-  <div class="detail-header">
-    <a href="#shadow_regex_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">shadow_regex_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="translation_test_/0">
-
-  <div class="detail-header">
-    <a href="#translation_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">translation_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="upload_dirs_test_/0">
-
-  <div class="detail-header">
-    <a href="#upload_dirs_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">upload_dirs_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
 
     </div>
   </section>
@@ -1468,9 +1065,9 @@ appropriate handler module.</p><ul><li><code class="inline">Proto</code>: the at
         <p>
 
             <span class="line">
-              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+              <a href="https://hex.pm/packages/blizanci/7.5.0">Hex Package</a>
 
-              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+              <a href="https://preview.hex.pm/preview/blizanci/7.5.0">Hex Preview</a>
 
             </span>
 

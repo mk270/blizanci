@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.40.3">
-    <meta name="project" content="blizanci v7.2.0">
+    <meta name="project" content="blizanci v7.5.0">
 
 
-    <title>blizanci_log — blizanci v7.2.0</title>
+    <title>blizanci_log — blizanci v7.5.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
 
-    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="dist/sidebar_items-CF424743.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-Y2MUTVIN.js"></script>
 
@@ -37,7 +37,7 @@
 blizanci
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v7.2.0
+          v7.5.0
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@ blizanci
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">blizanci_log</span> 
-      <small class="app-vsn" translate="no">(blizanci v7.2.0)</small>
+      <small class="app-vsn" translate="no">(blizanci v7.5.0)</small>
 
     </h1>
 
@@ -138,14 +138,6 @@ blizanci
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#bad_level_test/0" data-no-tooltip="" translate="no">bad_level_test()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
         <a href="#level/0" data-no-tooltip="" translate="no">level()</a>
 
       </div>
@@ -166,43 +158,11 @@ blizanci
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#level_round_trip_test/0" data-no-tooltip="" translate="no">level_round_trip_test()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#levels_restored_test/0" data-no-tooltip="" translate="no">levels_restored_test()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
         <a href="#module_level/2" data-no-tooltip="" translate="no">module_level(Module, Level)</a>
 
       </div>
 
         <div class="summary-synopsis"><p>Override the log level for a specific module.</p></div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#module_level_test/0" data-no-tooltip="" translate="no">module_level_test()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#other_handlers_untouched_test/0" data-no-tooltip="" translate="no">other_handlers_untouched_test()</a>
-
-      </div>
 
     </div>
 
@@ -267,24 +227,6 @@ blizanci
     </h2>
 
     <div class="functions-list">
-<section class="detail" id="bad_level_test/0">
-
-  <div class="detail-header">
-    <a href="#bad_level_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">bad_level_test()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
 <section class="detail" id="level/0">
 
   <div class="detail-header">
@@ -336,42 +278,6 @@ increasing severity: <code class="inline">debug</code>, <code class="inline">inf
 <code class="inline">critical</code>, <code class="inline">alert</code>, <code class="inline">emergency</code>.</p>
   </section>
 </section>
-<section class="detail" id="level_round_trip_test/0">
-
-  <div class="detail-header">
-    <a href="#level_round_trip_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">level_round_trip_test()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="levels_restored_test/0">
-
-  <div class="detail-header">
-    <a href="#levels_restored_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">levels_restored_test()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
 <section class="detail" id="module_level/2">
 
   <div class="detail-header">
@@ -396,42 +302,6 @@ increasing severity: <code class="inline">debug</code>, <code class="inline">inf
 <p>Override the log level for a specific module.</p><p>Module-level overrides take precedence over the primary level, allowing
 temporary debug logging for one module without increasing global
 verbosity.  Clear the override with <a href="#reset_module_level/1"><code class="inline">reset_module_level/1</code></a>.</p>
-  </section>
-</section>
-<section class="detail" id="module_level_test/0">
-
-  <div class="detail-header">
-    <a href="#module_level_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">module_level_test()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="other_handlers_untouched_test/0">
-
-  <div class="detail-header">
-    <a href="#other_handlers_untouched_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">other_handlers_untouched_test()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
   </section>
 </section>
 <section class="detail" id="reset_module_level/1">
@@ -467,9 +337,9 @@ verbosity.  Clear the override with <a href="#reset_module_level/1"><code class=
         <p>
 
             <span class="line">
-              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+              <a href="https://hex.pm/packages/blizanci/7.5.0">Hex Package</a>
 
-              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+              <a href="https://preview.hex.pm/preview/blizanci/7.5.0">Hex Preview</a>
 
             </span>
 

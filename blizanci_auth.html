@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.40.3">
-    <meta name="project" content="blizanci v7.2.0">
+    <meta name="project" content="blizanci v7.5.0">
 
 
-    <title>blizanci_auth — blizanci v7.2.0</title>
+    <title>blizanci_auth — blizanci v7.5.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
 
-    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="dist/sidebar_items-CF424743.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-Y2MUTVIN.js"></script>
 
@@ -37,7 +37,7 @@
 blizanci
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v7.2.0
+          v7.5.0
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@ blizanci
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">blizanci_auth</span> 
-      <small class="app-vsn" translate="no">(blizanci v7.2.0)</small>
+      <small class="app-vsn" translate="no">(blizanci v7.5.0)</small>
 
     </h1>
 
@@ -183,93 +183,11 @@ authorises nobody.</p></div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#authorisation_policy/1" data-no-tooltip="" translate="no">authorisation_policy(Options)</a>
-
-      </div>
-
-        <div class="summary-synopsis"><p>Derive the authorisation policy of a given routing table entry</p></div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#authorisation_policy_test_/0" data-no-tooltip="" translate="no">authorisation_policy_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
         <a href="#authorised/2" data-no-tooltip="" translate="no">authorised(AuthPolicy, Request)</a>
 
       </div>
 
         <div class="summary-synopsis"><p>Check if a route's authorisation policy permits a given request</p></div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#authorised_private_bundle_test_/0" data-no-tooltip="" translate="no">authorised_private_bundle_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#authorised_private_no_file_reads_test_/0" data-no-tooltip="" translate="no">authorised_private_no_file_reads_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#authorised_private_test_/0" data-no-tooltip="" translate="no">authorised_private_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#authorised_public_test_/0" data-no-tooltip="" translate="no">authorised_public_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#authorised_restricted_test_/0" data-no-tooltip="" translate="no">authorised_restricted_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#policy_private_ca_files_test_/0" data-no-tooltip="" translate="no">policy_private_ca_files_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#policy_realm_test_/0" data-no-tooltip="" translate="no">policy_realm_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#policy_test_/0" data-no-tooltip="" translate="no">policy_test_()</a>
-
-      </div>
 
     </div>
 
@@ -286,14 +204,6 @@ printable ASCII, at most 64 characters.</p></div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#realm_constructor_test_/0" data-no-tooltip="" translate="no">realm_constructor_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
         <a href="#realm_table/1" data-no-tooltip="" translate="no">realm_table(Defs)</a>
 
       </div>
@@ -305,30 +215,12 @@ sys.config key realms.</p></div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#realm_table_test_/0" data-no-tooltip="" translate="no">realm_table_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#valid_authz_policy/1" data-no-tooltip="" translate="no">valid_authz_policy(Policy)</a>
-
-      </div>
-
-        <div class="summary-synopsis"><p>Check if the argument represents a valid authorisation policy</p></div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
         <a href="#valid_authz_policy/2" data-no-tooltip="" translate="no">valid_authz_policy(Policy, Realms)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>As valid_authz_policy/1, resolving any realms against a realm
-table (see realm_table/1).</p></div>
+        <div class="summary-synopsis"><p>Check if the argument represents a valid authorisation policy,
+resolving any realms against a realm table (see realm_table/1).</p></div>
 
     </div>
 
@@ -528,49 +420,6 @@ now.  A realm may have no files; a private route on it
 authorises nobody.</p>
   </section>
 </section>
-<section class="detail" id="authorisation_policy/1">
-
-  <div class="detail-header">
-    <a href="#authorisation_policy/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">authorisation_policy(Options)</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-      <div class="specs">
-
-          <pre translate="no"><span class="attribute">-spec</span> authorisation_policy(Options) -> Result
-                              when Options :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(), Result :: {ok, <a href="#t:authorisation/0">authorisation</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
-
-      </div>
-
-<p>Derive the authorisation policy of a given routing table entry</p><p>Returns <code class="inline">{ok, public | restricted | private} | {error, atom()}</code>.</p>
-  </section>
-</section>
-<section class="detail" id="authorisation_policy_test_/0">
-
-  <div class="detail-header">
-    <a href="#authorisation_policy_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">authorisation_policy_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
 <section class="detail" id="authorised/2">
 
   <div class="detail-header">
@@ -599,150 +448,6 @@ authorises nobody.</p>
 <p>Check if a route's authorisation policy permits a given request</p><ul><li><code class="inline">AuthPolicy</code>: the authorisation policy associated with the route</li><li><code class="inline">Request</code>: the Gemini request</li></ul>
   </section>
 </section>
-<section class="detail" id="authorised_private_bundle_test_/0">
-
-  <div class="detail-header">
-    <a href="#authorised_private_bundle_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">authorised_private_bundle_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="authorised_private_no_file_reads_test_/0">
-
-  <div class="detail-header">
-    <a href="#authorised_private_no_file_reads_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">authorised_private_no_file_reads_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="authorised_private_test_/0">
-
-  <div class="detail-header">
-    <a href="#authorised_private_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">authorised_private_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="authorised_public_test_/0">
-
-  <div class="detail-header">
-    <a href="#authorised_public_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">authorised_public_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="authorised_restricted_test_/0">
-
-  <div class="detail-header">
-    <a href="#authorised_restricted_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">authorised_restricted_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="policy_private_ca_files_test_/0">
-
-  <div class="detail-header">
-    <a href="#policy_private_ca_files_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">policy_private_ca_files_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="policy_realm_test_/0">
-
-  <div class="detail-header">
-    <a href="#policy_realm_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">policy_realm_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="policy_test_/0">
-
-  <div class="detail-header">
-    <a href="#policy_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">policy_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
 <section class="detail" id="realm/1">
 
   <div class="detail-header">
@@ -766,24 +471,6 @@ authorises nobody.</p>
 
 <p>The one way to make a realm: a non-empty, case-sensitive name of
 printable ASCII, at most 64 characters.</p>
-  </section>
-</section>
-<section class="detail" id="realm_constructor_test_/0">
-
-  <div class="detail-header">
-    <a href="#realm_constructor_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">realm_constructor_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
   </section>
 </section>
 <section class="detail" id="realm_table/1">
@@ -811,49 +498,6 @@ printable ASCII, at most 64 characters.</p>
 sys.config key realms.</p>
   </section>
 </section>
-<section class="detail" id="realm_table_test_/0">
-
-  <div class="detail-header">
-    <a href="#realm_table_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">realm_table_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="valid_authz_policy/1">
-
-  <div class="detail-header">
-    <a href="#valid_authz_policy/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">valid_authz_policy(Policy)</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-      <div class="specs">
-
-          <pre translate="no"><span class="attribute">-spec</span> valid_authz_policy(Policy) -> Result
-                            when Policy :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(), Result :: {ok, <a href="#t:authorisation/0">authorisation</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
-
-      </div>
-
-<p>Check if the argument represents a valid authorisation policy</p>
-  </section>
-</section>
 <section class="detail" id="valid_authz_policy/2">
 
   <div class="detail-header">
@@ -879,8 +523,8 @@ sys.config key realms.</p>
 
       </div>
 
-<p>As valid_authz_policy/1, resolving any realms against a realm
-table (see realm_table/1).</p>
+<p>Check if the argument represents a valid authorisation policy,
+resolving any realms against a realm table (see realm_table/1).</p>
   </section>
 </section>
 
@@ -892,9 +536,9 @@ table (see realm_table/1).</p>
         <p>
 
             <span class="line">
-              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+              <a href="https://hex.pm/packages/blizanci/7.5.0">Hex Package</a>
 
-              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+              <a href="https://preview.hex.pm/preview/blizanci/7.5.0">Hex Preview</a>
 
             </span>
 

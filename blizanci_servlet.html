@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.40.3">
-    <meta name="project" content="blizanci v7.2.0">
+    <meta name="project" content="blizanci v7.5.0">
 
 
-    <title>blizanci_servlet — blizanci v7.2.0</title>
+    <title>blizanci_servlet — blizanci v7.5.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
 
-    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="dist/sidebar_items-CF424743.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-Y2MUTVIN.js"></script>
 
@@ -37,7 +37,7 @@
 blizanci
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v7.2.0
+          v7.5.0
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@ blizanci
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">blizanci_servlet</span> <small>behaviour</small>
-      <small class="app-vsn" translate="no">(blizanci v7.2.0)</small>
+      <small class="app-vsn" translate="no">(blizanci v7.5.0)</small>
 
     </h1>
 
@@ -233,6 +233,10 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
+        <div class="summary-synopsis"><p>Called for asynchronous shutdown, e.g., when the client has hung up the
+TCP connection. The callee should validate that that Pid provided still
+relates to a running process, and promptly terminate.</p></div>
+
     </div>
 
     <div class="summary-row">
@@ -240,6 +244,9 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
         <a href="#c:default_options/0" data-no-tooltip="" translate="no">default_options()</a>
 
       </div>
+
+        <div class="summary-synopsis"><p>Called during configuration; allows the servlet to provide a map of
+default options for any route with which it is associated.</p></div>
 
     </div>
 
@@ -249,6 +256,11 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
+        <div class="summary-synopsis"><p>Called with further data sent by the client after its request line
+(e.g., a Titan upload body), for a servlet that started a process
+via serve/4. Returns the response to send to the client, or <code class="inline">none</code>
+if more data is awaited.</p></div>
+
     </div>
 
     <div class="summary-row">
@@ -256,6 +268,11 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
         <a href="#c:request/4" data-no-tooltip="" translate="no">request/4</a>
 
       </div>
+
+        <div class="summary-synopsis"><p>Called by blizanci_servlet_container:request/5, in the connection
+process and <em>before</em> any servlet process is created, once per
+matched and authorised request. Answers the client at once, or
+defers to serve/4.</p></div>
 
     </div>
 
@@ -265,6 +282,9 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
+        <div class="summary-synopsis"><p>Serve the request asynchronously, in the process started for it (the
+container). The result is one of</p></div>
+
     </div>
 
     <div class="summary-row">
@@ -272,6 +292,12 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
         <a href="#c:start/0" data-no-tooltip="" translate="no">start()</a>
 
       </div>
+
+        <div class="summary-synopsis"><p>Called at application start, to set up any pool/resource the servlet
+needs; see stop/0. Returns <code class="inline">{error, Reason}</code> if it cannot (e.g. a pool
+that will not start); the servlet is then not started, and neither
+are any of the others in the same start-up or configuration change.
+(An exception is treated alike, with Reason <code class="inline">{Class, Term}</code>.)</p></div>
 
     </div>
 
@@ -281,6 +307,13 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
+        <div class="summary-synopsis"><p>Called at application shutdown; the counterpart to start/0. Allows
+the servlet to tear down any pool/resource it set up there, so
+nothing is left running (e.g. leaked ppool pools) across a
+stop/start cycle in the same VM. Should return <code class="inline">ok</code>; any other return
+value, or an exception, is logged as a warning and ignored, and the
+remaining servlets are still stopped.</p></div>
+
     </div>
 
     <div class="summary-row">
@@ -288,6 +321,11 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
         <a href="#c:validate_options/1" data-no-tooltip="" translate="no">validate_options/1</a>
 
       </div>
+
+        <div class="summary-synopsis"><p>Called during configuration, once per route, with that route's
+options already merged with default_options/0 -- lets the servlet
+reject a bad configuration (e.g. a non-existent root directory)
+at startup, rather than have it surface as a per-request failure.</p></div>
 
     </div>
 
@@ -658,7 +696,9 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
-
+<p>Called for asynchronous shutdown, e.g., when the client has hung up the
+TCP connection. The callee should validate that that Pid provided still
+relates to a running process, and promptly terminate.</p>
   </section>
 </section>
 <section class="detail" id="c:default_options/0">
@@ -682,7 +722,8 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
-
+<p>Called during configuration; allows the servlet to provide a map of
+default options for any route with which it is associated.</p>
   </section>
 </section>
 <section class="detail" id="c:handle_client_data/2">
@@ -706,7 +747,10 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
-
+<p>Called with further data sent by the client after its request line
+(e.g., a Titan upload body), for a servlet that started a process
+via serve/4. Returns the response to send to the client, or <code class="inline">none</code>
+if more data is awaited.</p>
   </section>
 </section>
 <section class="detail" id="c:request/4">
@@ -731,7 +775,10 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
-
+<p>Called by blizanci_servlet_container:request/5, in the connection
+process and <em>before</em> any servlet process is created, once per
+matched and authorised request. Answers the client at once, or
+defers to serve/4.</p>
   </section>
 </section>
 <section class="detail" id="c:serve/4">
@@ -755,7 +802,17 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
-
+<p>Serve the request asynchronously, in the process started for it (the
+container). The result is one of:</p><ul><li><code class="inline">{gateway_finished, Response}</code>: the servlet is done; Response goes to
+the client as it stands;</li><li><code class="inline">{gateway_error, Reason}</code>: the request failed; a Reason that
+blizanci_status knows (e.g., file_not_found, gateway_busy) is
+sent to the client as that status, any other is an internal
+error;</li><li><code class="inline">{gateway_started, Pid}</code>: the work continues in Pid, which will
+report its outcome later with
+blizanci_servlet_container:gateway_exit/2, passing
+<code class="inline">{gateway_output, Binary}</code> or <code class="inline">{gateway_error, Reason}</code>. (That
+report is an obligation, but not a callback; a worker that
+answers via handle_client_data/2 instead does not make it.)</li></ul>
   </section>
 </section>
 <section class="detail" id="c:start/0">
@@ -779,7 +836,11 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
-
+<p>Called at application start, to set up any pool/resource the servlet
+needs; see stop/0. Returns <code class="inline">{error, Reason}</code> if it cannot (e.g. a pool
+that will not start); the servlet is then not started, and neither
+are any of the others in the same start-up or configuration change.
+(An exception is treated alike, with Reason <code class="inline">{Class, Term}</code>.)</p>
   </section>
 </section>
 <section class="detail" id="c:stop/0">
@@ -803,7 +864,12 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
-
+<p>Called at application shutdown; the counterpart to start/0. Allows
+the servlet to tear down any pool/resource it set up there, so
+nothing is left running (e.g. leaked ppool pools) across a
+stop/start cycle in the same VM. Should return <code class="inline">ok</code>; any other return
+value, or an exception, is logged as a warning and ignored, and the
+remaining servlets are still stopped.</p>
   </section>
 </section>
 <section class="detail" id="c:validate_options/1">
@@ -827,7 +893,10 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
 
       </div>
 
-
+<p>Called during configuration, once per route, with that route's
+options already merged with default_options/0 -- lets the servlet
+reject a bad configuration (e.g. a non-existent root directory)
+at startup, rather than have it surface as a per-request failure.</p>
   </section>
 </section>
 
@@ -839,9 +908,9 @@ process contract, and the gateway contract.</p><p>See the manual chapter <a href
         <p>
 
             <span class="line">
-              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+              <a href="https://hex.pm/packages/blizanci/7.5.0">Hex Package</a>
 
-              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+              <a href="https://preview.hex.pm/preview/blizanci/7.5.0">Hex Preview</a>
 
             </span>
 

@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.40.3">
-    <meta name="project" content="blizanci v7.2.0">
+    <meta name="project" content="blizanci v7.5.0">
 
 
-    <title>blizanci_tmpdir — blizanci v7.2.0</title>
+    <title>blizanci_tmpdir — blizanci v7.5.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
 
-    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="dist/sidebar_items-CF424743.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-Y2MUTVIN.js"></script>
 
@@ -37,7 +37,7 @@
 blizanci
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v7.2.0
+          v7.5.0
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@ blizanci
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">blizanci_tmpdir</span> 
-      <small class="app-vsn" translate="no">(blizanci v7.2.0)</small>
+      <small class="app-vsn" translate="no">(blizanci v7.5.0)</small>
 
     </h1>
 
@@ -103,6 +103,11 @@ blizanci
 
   </div>
 
+
+    <section id="moduledoc">
+<p>Temporary files for Titan uploads: fresh, exclusively created files in a
+work directory, and the means of finding those that have gone stale.</p>
+    </section>
 
 </div>
 
@@ -150,55 +155,7 @@ blizanci
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#create/2" data-no-tooltip="" translate="no">create(Dir, NameFun)</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#create_test_/0" data-no-tooltip="" translate="no">create_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#older_than_test_/0" data-no-tooltip="" translate="no">older_than_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
         <a href="#stale/2" data-no-tooltip="" translate="no">stale(Dir, MaxAge)</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#stale_test_/0" data-no-tooltip="" translate="no">stale_test_()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#tmp_file_name/0" data-no-tooltip="" translate="no">tmp_file_name()</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#tmp_file_name_test/0" data-no-tooltip="" translate="no">tmp_file_name_test()</a>
 
       </div>
 
@@ -304,70 +261,6 @@ blizanci
 
   </section>
 </section>
-<section class="detail" id="create/2">
-
-  <div class="detail-header">
-    <a href="#create/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">create(Dir, NameFun)</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-      <div class="specs">
-
-          <pre translate="no"><span class="attribute">-spec</span> create(Dir, NameFun) -> Result
-                when
-                    Dir :: <a href="#t:filepath/0">filepath</a>(),
-                    NameFun :: <a href="#t:name_fun/0">name_fun</a>(),
-                    Result :: {ok, <a href="https://www.erlang.org/doc/apps/kernel/file.html#t:io_device/0">file:io_device</a>(), <a href="#t:filepath/0">filepath</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
-
-      </div>
-
-
-  </section>
-</section>
-<section class="detail" id="create_test_/0">
-
-  <div class="detail-header">
-    <a href="#create_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">create_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="older_than_test_/0">
-
-  <div class="detail-header">
-    <a href="#older_than_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">older_than_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
 <section class="detail" id="stale/2">
 
   <div class="detail-header">
@@ -392,66 +285,6 @@ blizanci
 
   </section>
 </section>
-<section class="detail" id="stale_test_/0">
-
-  <div class="detail-header">
-    <a href="#stale_test_/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">stale_test_()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="tmp_file_name/0">
-
-  <div class="detail-header">
-    <a href="#tmp_file_name/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">tmp_file_name()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-      <div class="specs">
-
-          <pre translate="no"><span class="attribute">-spec</span> tmp_file_name() -> Name when Name :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>().</pre>
-
-      </div>
-
-
-  </section>
-</section>
-<section class="detail" id="tmp_file_name_test/0">
-
-  <div class="detail-header">
-    <a href="#tmp_file_name_test/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">tmp_file_name_test()</h1>
-
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
 
     </div>
   </section>
@@ -461,9 +294,9 @@ blizanci
         <p>
 
             <span class="line">
-              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+              <a href="https://hex.pm/packages/blizanci/7.5.0">Hex Package</a>
 
-              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+              <a href="https://preview.hex.pm/preview/blizanci/7.5.0">Hex Preview</a>
 
             </span>
 

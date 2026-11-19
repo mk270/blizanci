@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.40.3">
-    <meta name="project" content="blizanci v7.2.0">
+    <meta name="project" content="blizanci v7.5.0">
 
 
-    <title>Servlets — blizanci v7.2.0</title>
+    <title>Servlets — blizanci v7.5.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-KCHZLXSC.css" />
 
-    <script defer src="dist/sidebar_items-8A011CE9.js"></script>
+    <script defer src="dist/sidebar_items-CF424743.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-Y2MUTVIN.js"></script>
 
@@ -37,7 +37,7 @@
 blizanci
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v7.2.0
+          v7.5.0
         </div>
       </div>
     </div>
@@ -105,7 +105,7 @@ blizanci
 </span><span class="ss">start</span><span class="p">/</span><span class="mi">0</span><span class="w">               </span><span class="mi">1</span><span class="w"> </span><span class="ss">module</span><span class="w"> </span><span class="ss">blizanci_servlets</span><span class="w">        </span><span class="ss">start</span><span class="p">,</span><span class="w"> </span><span class="nb">apply</span><span class="w">
 </span><span class="ss">stop</span><span class="p">/</span><span class="mi">0</span><span class="w">                </span><span class="mi">1</span><span class="w"> </span><span class="ss">module</span><span class="w"> </span><span class="ss">blizanci_servlets</span><span class="w">        </span><span class="ss">stop</span><span class="p">,</span><span class="w"> </span><span class="nb">apply</span><span class="w">
 </span><span class="ss">request</span><span class="p">/</span><span class="mi">4</span><span class="w">             </span><span class="mi">1</span><span class="w"> </span><span class="ss">module</span><span class="w"> </span><span class="ss">connection</span><span class="w">               </span><span class="ss">each</span><span class="w"> </span><span class="ss">request</span><span class="w">
-</span><span class="ss">serve</span><span class="p">/</span><span class="mi">4</span><span class="w">               </span><span class="mi">2</span><span class="w"> </span><span class="ss">proc</span><span class="w">   </span><span class="nf">container</span><span class="w"> </span><span class="p" data-group-id="5437194850-1">(</span><span class="ss">new</span><span class="p">,</span><span class="w"> </span><span class="ss">linked</span><span class="p" data-group-id="5437194850-1">)</span><span class="w">  </span><span class="k">after</span><span class="w"> </span><span class="ss">defer</span><span class="w">
+</span><span class="ss">serve</span><span class="p">/</span><span class="mi">4</span><span class="w">               </span><span class="mi">2</span><span class="w"> </span><span class="ss">proc</span><span class="w">   </span><span class="nf">container</span><span class="w"> </span><span class="p" data-group-id="2729139840-1">(</span><span class="ss">new</span><span class="p">,</span><span class="w"> </span><span class="ss">linked</span><span class="p" data-group-id="2729139840-1">)</span><span class="w">  </span><span class="k">after</span><span class="w"> </span><span class="ss">defer</span><span class="w">
 </span><span class="ss">handle_client_data</span><span class="p">/</span><span class="mi">2</span><span class="w">  </span><span class="mi">3</span><span class="w"> </span><span class="ss">gway</span><span class="w">   </span><span class="ss">container</span><span class="w">                </span><span class="ss">later</span><span class="w"> </span><span class="ss">input</span><span class="w">
 </span><span class="ss">cancel</span><span class="p">/</span><span class="mi">1</span><span class="w">              </span><span class="mi">3</span><span class="w"> </span><span class="ss">gway</span><span class="w">   </span><span class="ss">container</span><span class="w">                </span><span class="ss">conn</span><span class="w"> </span><span class="ss">closing</span></code></pre><h2 id="known-limits" class="section-heading"><a href="#known-limits" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Known limits</span></h2><p>This section describes the current behaviour, which may change.</p><p>There are two reply paths, as the code stands. CGI-style workers (blizanci_cgi) report with gateway_exit/2, and handle_client_data/2 returns none. blizanci_titan never calls gateway_exit/2: it answers its client through the return value of handle_client_data/2, which is none while more data is awaited and the response once the upload is over.</p><p>Not every gateway_result() is valid on every path. The container has no case clause for some, and would crash (the client getting an internal error). Invalid on the serve/4 path (part 2): {gateway_output, Binary}. Invalid as the argument of gateway_exit/2: {gateway_finished, Response} and {gateway_started, Pid}; only {gateway_output, Binary} and {gateway_error, Reason} are valid there. These are documented as invalid, not endorsed: the gateway_result() type is wider than either use.</p><h2 id="the-container-for-one-request" class="section-heading"><a href="#the-container-for-one-request" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">The container, for one request</span></h2><p>The module blizanci_servlet_container is the process side of the contract above: a servlet module's request/4 is called here, and, if it defers, a container process is started to run its serve/4. This is the servlet process contract (part 2), and, once serve/4 has started a worker, the container's side of the gateway contract (part 3). What goes on, for one request:</p><ul><li>blizanci_router calls blizanci_servlet_container:request/5 in the connection process (blizanci_connection). This calls Module:request/4 there. An {immediate, Response} is returned as it stands.</li><li>On defer, defer_request/5 makes the connection trap exits and starts a new, linked container process with proc_lib:start_link/4 (two seconds allowed to start), returning {init_servlet, Pid}, after which the connection remembers Pid as its servlet process. (If the process did not start, the result is an internal-server-error code.) This sets things up for the results of the request to be notified back to the caller of request/5, which is a ranch handler for the Gemini protocol.</li><li>The container acknowledges at once, then calls Module:serve/4 in its own process. gateway_finished and gateway_error end the container here, with an exit reason {shutdown, {gateway_complete, Pid, Response}} or {shutdown, {gateway_init_error, Pid, Reason}}, which the connection, trapping exits, answers the client from. gateway_started turns the process into a gen_server (gen_server:enter_loop/3) whose state names the worker and the module.</li><li>The gen_server then handles three things. Client data: the connection calls handle_client_data/2, which calls Module:handle_client_data/2 with the worker's pid and returns what it returns. The worker's report: the worker calls gateway_exit/2 (a cast), and the container passes the result on to the connection by a gen_server:cast of {servlet_result, Result} (so the container never blocks on a connection which may itself be waiting on the container), where Result is {servlet_complete, Output :: binary()} or {servlet_failed, ErrorCode :: atom()}. Cancellation: when the connection ends it calls cancel/1, which casts servlet_quit; the container calls Module:cancel/1 with the worker's pid and stops.</li></ul>
 
@@ -142,11 +142,11 @@ CGI
         <p>
 
             <span class="line">
-              <a href="https://hex.pm/packages/blizanci/7.2.0">Hex Package</a>
+              <a href="https://hex.pm/packages/blizanci/7.5.0">Hex Package</a>
 
-              <a href="https://preview.hex.pm/preview/blizanci/7.2.0">Hex Preview</a>
+              <a href="https://preview.hex.pm/preview/blizanci/7.5.0">Hex Preview</a>
 
-                (<a href="https://preview.hex.pm/preview/blizanci/7.2.0/show/doc/manual/md/servlets.md">current file</a>)
+                (<a href="https://preview.hex.pm/preview/blizanci/7.5.0/show/doc/manual/md/servlets.md">current file</a>)
 
             </span>
 
