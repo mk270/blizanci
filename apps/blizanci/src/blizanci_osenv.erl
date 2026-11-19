@@ -41,17 +41,38 @@ sanitise(Env) ->
 % We leave strings as strings
 %
 % Other inputs for 'Value' will lead to a nomatch
+%
+% An empty value is handed to erlexec as the empty BINARY <<"">>, never as
+% an empty string.  erlexec's port program (c_src/ei++.hpp, decodeString;
+% present in 2.4.0 and, by reading the source, in 2.6.0) mishandles an
+% empty string: "" is the same term as [] (NIL on the wire), and
+% decodeString takes its etNil branch, which reports success without
+% consuming the NIL byte it peeked at.  The next decode then takes that
+% leftover byte for the env list's real terminator, so everything after it
+% is read one byte out of place and exec:run/2 fails with an error that
+% looks unrelated:
+%
+%   exec:run("env", [stdout, {env, [{"X", ""}]}])
+%   => {error, "badarg: option must be {Cmd, Opt} or {Cmd, Opt, Args} or
+%               atom (got tp=j, arity=0)"}      % j is the NIL tag
+%
+% A binary has its own wire tag even at zero length, so {"X", <<"">>} is
+% fine.  This matters here because the CGI environment always has
+% genuinely empty values (PATH_INFO, QUERY_STRING).  By the source the same
+% decoder reads other string options (cd, executable, kill command), so an
+% empty string there would probably misbehave the same way.  Not reported
+% upstream (saleyn/erlexec) as of 2026-11-19; the fix there looks like
+% consuming the NIL byte in the etNil branch.
 -spec sanitise_kv(Key, Value) -> Result
               when Key    :: string(),
                    Value  :: term(),
                    Result :: {string(), string() | binary()}.
 
 sanitise_kv(Key, <<"">>) when is_list(Key) ->
-    {Key, <<"">>}; % workaround exec:run apparently objecting
-                   % to null-strings as lists
+    {Key, <<"">>}; % an empty value stays a binary (see above)
 
 sanitise_kv(Key, "") when is_list(Key) ->
-    {Key, <<"">>}; % ditto, for a plain empty string value
+    {Key, <<"">>}; % an empty string becomes one
 
 sanitise_kv(Key, Value) when is_binary(Value) and is_list(Key) ->
     {Key, binary_to_list(Value)};
