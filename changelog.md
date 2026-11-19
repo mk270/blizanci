@@ -1,5 +1,16 @@
 # Blizanci Changelog
 
+## 7.2.1
+
+- Manual: a Titan work_dir must be absolute, whereas docroot and cgiroot
+  may be relative; document that a client certificate which cannot be
+  decoded fails a CGI request with status 62, even on a public route
+- Module docs for blizanci_status and blizanci_tmpdir; the servlet
+  behaviour's callbacks are now documented with -doc, so they appear in
+  the generated documentation; blizanci_test_support is hidden from it
+- README: update the Documentation section and drop the sentence about
+  no new features
+
 ## 7.2.0
 
 - Add a manual in gemtext under doc/manual/ (configuration, routing,
