@@ -46,7 +46,14 @@ See the manual chapter [Request handling](request-handling.md).
 
 % How long a client has to complete the whole exchange, in milliseconds,
 % before connection_timeout fires and the connection is answered and
-% closed.
+% closed.  The timer is set once, in init/1, and never reset: it is a
+% fixed deadline for the connection's whole life, servlet work included,
+% not a rolling idle timeout, which a client defeats by trickling just
+% enough data to keep resetting it.  So a slow client can only spend its
+% own share of the budget, and a separate timeout for a servlet's
+% completion would only give it a second budget.  terminate/2 always
+% cancels the servlet, however the connection ends; for CGI that kills
+% the script.
 -define(TIMEOUT_MS, 30000).
 
 % The most bytes buffered while waiting for the CRLF that ends the

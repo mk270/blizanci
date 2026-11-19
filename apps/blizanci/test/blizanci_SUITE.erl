@@ -9,12 +9,15 @@
 %%
 %% Run with:  rebar3 ct
 %%
-%% FUTURE CASE (deliberately not written yet, the supervision tree is
-%% being restructured): kill blizanci_conf_serv and check what recovers,
-%% i.e. that the listener keeps serving, that the live configuration
-%% (blizanci_config:apply/1 since start) survives, and that the CGI and
-%% Titan pools are not killed along with it. See issues.md, "TODO:
-%% housekeeping and supervision audit", D.1.
+%% NOT YET WRITTEN: a case that kills blizanci_conf_serv and checks what
+%% recovers. The tree is rest_for_one (blizanci_conf_serv, then
+%% blizanci_servlets, then the listener), so a kill restarts all three and
+%% the table is rebuilt from its start-up arguments: configuration applied
+%% with blizanci_config:apply/1 since start is lost. Whether to accept
+%% that or keep the applied configuration is undecided, so the case waits.
+%% Worth checking in it: the listener serves again, and the CGI and Titan
+%% pools, which live under ppool's supervisor, are not killed along with
+%% the table owner.
 -module(blizanci_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
